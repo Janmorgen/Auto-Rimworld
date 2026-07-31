@@ -280,7 +280,7 @@ namespace AutoColony.Modules
             int wanted = ctx.GeneInt(Genes.DefenseTurretCount);
             int affordable = (int)(ctx.state.wealthTotal * budgetFraction / 300f);
             if (wanted > affordable) wanted = affordable;
-            if (wanted <= ctx.state.turrets) return;
+            if (wanted <= ctx.state.poweredTurrets) return;
 
             if (!CanAfford(ctx, turretDef)) return;
 

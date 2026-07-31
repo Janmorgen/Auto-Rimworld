@@ -25,6 +25,7 @@ namespace AutoColony
                 new ResearchModule(),
                 new DefenseModule(),
                 new EquipmentModule(),
+                new PowerModule(),
                 new ColonistPolicyModule(),
                 new IncidentModule()
             };

@@ -264,7 +264,8 @@ namespace AutoColony.Goals
 
         public override bool Satisfied(DirectorContext ctx)
         {
-            return ctx.state.turrets >= ctx.GeneInt(Genes.DefenseTurretCount);
+            // Only turrets that can actually fire count towards being fortified.
+            return ctx.state.poweredTurrets >= ctx.GeneInt(Genes.DefenseTurretCount);
         }
 
         public override float Urgency(DirectorContext ctx)
@@ -281,7 +282,10 @@ namespace AutoColony.Goals
 
         public override string Explain(DirectorContext ctx)
         {
-            return ctx.state.turrets + " turrets, wealth " + ctx.state.wealthTotal.ToString("N0");
+            int dead = ctx.state.turrets - ctx.state.poweredTurrets;
+            return ctx.state.poweredTurrets + " working turrets" +
+                   (dead > 0 ? " (" + dead + " unpowered)" : "") +
+                   ", wealth " + ctx.state.wealthTotal.ToString("N0");
         }
 
         static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }

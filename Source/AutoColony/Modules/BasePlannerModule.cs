@@ -63,6 +63,24 @@ namespace AutoColony.Modules
                 }
             }
 
+            // Furniture that has been destroyed is never noticed otherwise. A kitchen whose
+            // stove burned down is still "a kitchen" by room, so the colony keeps starving next
+            // to a room that cannot cook -- observed as a standing "need meal source" alert on
+            // a colony with a kitchen.
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var room = layout.rooms[i];
+                if (!room.furnitureQueued) continue;
+                if (!KeyFurnitureMissing(ctx, room)) continue;
+                if (HasPendingConstructionIn(ctx.map, room)) continue;
+
+                room.furnitureQueued = false;
+                Chronicle.Record(ChronicleCategory.Build,
+                    room.role + " room is missing its key furniture — re-queuing it");
+                Note("re-queuing lost furniture in " + room.role + " room");
+                return;
+            }
+
             for (int i = 0; i < layout.rooms.Count; i++)
             {
                 var room = layout.rooms[i];
@@ -440,6 +458,47 @@ namespace AutoColony.Modules
                     return;
                 }
             }
+        }
+
+        /// <summary>
+        /// The one thing a room exists for, so its loss can be detected. A bedroom without a
+        /// bed is not a bedroom; a kitchen without a stove cannot feed anyone.
+        /// </summary>
+        static ThingDef KeyFurnitureFor(RoomRole role)
+        {
+            switch (role)
+            {
+                case RoomRole.Bedroom:
+                case RoomRole.Hospital:
+                case RoomRole.Prison: return AcDefs.Bed;
+                case RoomRole.Kitchen: return AcDefs.ElectricStove ?? AcDefs.FueledStove ?? AcDefs.Campfire;
+                case RoomRole.Research: return AcDefs.ResearchBench;
+                case RoomRole.Workshop: return AcDefs.StonecuttersTable;
+                case RoomRole.Freezer: return AcDefs.Cooler;
+                default: return null;   // storage and dining have nothing essential
+            }
+        }
+
+        static bool KeyFurnitureMissing(DirectorContext ctx, PlannedRoom room)
+        {
+            var def = KeyFurnitureFor(room.role);
+            if (def == null) return false;
+
+            foreach (var cell in room.Rect)
+            {
+                if (!cell.InBounds(ctx.map)) continue;
+                var things = cell.GetThingList(ctx.map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var thing = things[i];
+                    if (thing == null) continue;
+                    // A campfire counts for a kitchen even if a stove was the original plan.
+                    if (thing.def == def) return false;
+                    if (room.role == RoomRole.Kitchen && thing.def != null &&
+                        thing.def.IsWorkTable) return false;
+                }
+            }
+            return true;
         }
 
         void PlaceOne(DirectorContext ctx, PlannedRoom room, ThingDef def)

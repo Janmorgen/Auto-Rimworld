@@ -46,7 +46,15 @@ namespace AutoColony
         public float wealthTotal;
         public float wealthBuildings;
         public int colonistBeds;
+        /// <summary>Turrets that exist, whether or not they can actually shoot.</summary>
         public int turrets;
+
+        /// <summary>
+        /// Turrets with power. The distinction matters: an unpowered turret is a wall
+        /// decoration that the defence model was previously counting as a working gun, so a
+        /// colony could look defended while owning nothing that fires.
+        /// </summary>
+        public int poweredTurrets;
         public int workTables;
         public int pendingBlueprints;
         public int pendingFrames;
@@ -255,7 +263,12 @@ namespace AutoColony
                 }
                 foreach (var t in lister.AllBuildingsColonistOfClass<Building_Turret>())
                 {
-                    if (t != null) s.turrets++;
+                    if (t == null) continue;
+                    s.turrets++;
+
+                    // No power component at all means it needs none (a trap or mortar).
+                    var power = t.TryGetComp<CompPowerTrader>();
+                    if (power == null || power.PowerOn) s.poweredTurrets++;
                 }
                 foreach (var wt in lister.AllBuildingsColonistOfClass<Building_WorkTable>())
                 {
@@ -313,7 +326,7 @@ namespace AutoColony
             m.daysOfFood = daysOfFood;
             m.wealthTotal = wealthTotal;
             m.colonistBeds = colonistBeds;
-            m.turrets = turrets;
+            m.turrets = poweredTurrets;
             m.fires = fires;
             m.researchFinished = researchFinished;
 
