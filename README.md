@@ -19,6 +19,7 @@ The director is a perceive–decide–act loop wrapped in a learning loop.
 | Resource gathering | Chopping, mining and hunting designations against stock targets |
 | Research | Keeps a project selected at all times |
 | Defense | Builds turrets in peacetime, drafts and rallies colonists under threat |
+| Equipment | Matches weapons to how each colonist actually fights |
 | Colonist policy | Medical care level, self-tending, hostility response, prisoner handling |
 | Incidents | Answers the quest, refugee and trade decisions the game raises |
 
@@ -205,6 +206,26 @@ it to actually improve on them in reasonable wall-clock time.
   Drawing from RimWorld's global stream would advance it by an amount depending on how many
   mutations happened to occur, perturbing every later world roll relative to an unmodded game
   and making two runs from the same save incomparable — which the trial harness depends on.
+
+## Assessing a fight
+
+Whether something can be fought is not a property of the thing being fought. Six armed
+colonists take a thrumbo comfortably; two with knives do not. So rather than a fixed danger
+ceiling, the director values *these* colonists — their skills, health, and crucially the
+weapon in their hands — against that particular threat.
+
+Two consequences follow. A colonist's worth is decided largely before the fight starts, which
+is why weapons are assigned by how each person fights: shooters get guns, brawlers and melee
+specialists get blades, and nobody who could be armed stays empty-handed. And the advantage
+insisted upon slides with desperation — a comfortable colony demands 2:1 before picking a
+fight, a starving one accepts far worse, because refusing is not the safe option when the
+alternative is starving.
+
+Hunting considers targets safest-first, so easy game is taken while it lasts and dangerous
+game is only reached for once nothing else remains. Threats that come to you are not elective
+at all: a fire or a raid is answered whether or not anyone suitable exists, and the question
+becomes who goes rather than whether. If the colony is out of food and every animal on the map
+is one it would rather avoid, it takes the least dangerous of them anyway.
 
 ## The event record
 

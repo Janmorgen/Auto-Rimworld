@@ -119,14 +119,15 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
-        /// Hunts when food is short, and hunts harder the shorter it gets.
+        /// Hunts when food is short, choosing targets the colony can actually beat.
         ///
-        /// A fixed radius and a fixed risk tolerance are wrong at both ends. Observed in-game:
-        /// a desert colony with crops planted but weeks from harvest sat on a starvation alert
-        /// while this designated zero animals two passes running — everything nearby was either
-        /// out of range or filtered out as dangerous. A colony with a full larder can afford to
-        /// be picky about muffalo; a starving one cannot, and walking further is free by
-        /// comparison to not eating.
+        /// Targets are considered safest-first, so easy game is taken while it lasts and
+        /// dangerous game is only reached for once nothing else is left. Whether a given animal
+        /// is worth fighting is a judgement about these colonists — their skills, health and
+        /// weapons — against that animal, eased by how close the colony is to starving. A
+        /// well-armed group will take a thrumbo; a comfortable one will not bother; a starving
+        /// one with nothing else on the map will try regardless, because starving quietly is
+        /// not the safer choice.
         /// </summary>
         int MaybeHunt(DirectorContext ctx, IntVec3 origin)
         {
@@ -141,20 +142,23 @@ namespace AutoColony.Modules
             float effective = Clamp01(aggression + urgency * 0.5f);
             if (effective < 0.15f) return 0;
 
-            // Range the colony will walk for a meal, widening as the situation worsens.
+            // Desperation is mostly about how empty the larder is, nudged by how bold the
+            // strategy is in general.
+            float desperation = Clamp01(urgency * 0.8f + aggression * 0.2f);
+            float strength = CombatAssessment.ColonyStrength(ctx.state);
+
             int radius = GatherRadius + (int)(urgency * 60f);
             int radiusSq = radius * radius;
 
             var map = ctx.map;
             var des = DesignationDefOf.Hunt;
             int budget = (int)(8 * effective) + 1;
-            int done = 0;
 
-            taken.Clear();
-            declined.Clear();
-
+            // Gather candidates first so they can be taken in order of danger rather than in
+            // whatever order the map happens to list them.
+            candidates.Clear();
             var pawns = map.mapPawns.AllPawnsSpawned;
-            for (int i = 0; i < pawns.Count && done < budget; i++)
+            for (int i = 0; i < pawns.Count; i++)
             {
                 var animal = pawns[i];
                 if (animal == null || animal.Dead || !animal.RaceProps.Animal) continue;
@@ -162,7 +166,22 @@ namespace AutoColony.Modules
                 if (animal.RaceProps.foodType == FoodTypeFlags.None) continue;
                 if (map.designationManager.DesignationOn(animal, des) != null) continue;
                 if ((animal.Position - origin).LengthHorizontalSquared > radiusSq) continue;
-                if (TooDangerousToHunt(animal, ctx, effective))
+                candidates.Add(animal);
+            }
+
+            candidates.Sort((a, b) => ThreatOf(a).CompareTo(ThreatOf(b)));
+
+            taken.Clear();
+            declined.Clear();
+            largestDeclined = 0f;
+            int done = 0;
+
+            for (int i = 0; i < candidates.Count && done < budget; i++)
+            {
+                var animal = candidates[i];
+                float threat = FightsBack(animal) ? CombatAssessment.ThreatValue(animal) : 0f;
+
+                if (!CombatAssessment.ShouldEngage(strength, threat, desperation))
                 {
                     Tally(declined, animal);
                     continue;
@@ -173,28 +192,64 @@ namespace AutoColony.Modules
                 done++;
             }
 
+            // Last resort. If the colony is out of food and every animal on the map is one it
+            // would rather not fight, it fights anyway: refusing is not survival, it is just a
+            // slower way to lose. The least dangerous target is taken, since that is the fight
+            // most likely to be survived.
+            if (done == 0 && desperation > 0.85f && candidates.Count > 0)
+            {
+                var lastResort = candidates[0];
+                map.designationManager.AddDesignation(new Designation(lastResort, des));
+                done++;
+                Chronicle.Record(ChronicleCategory.Hunt, string.Format(
+                    "LAST RESORT: nothing safe to hunt and {0:0.0} days of food left, so taking on {1} " +
+                    "(threat {2:0}) with strength {3:0}",
+                    daysOfFood, lastResort.LabelShortCap, ThreatOf(lastResort), strength));
+                return done;
+            }
+
             // One line per pass rather than one per animal. The same elephant gets refused on
             // every sweep, and a log that repeats itself is a log nobody can read.
             if (taken.Count > 0 || declined.Count > 0)
             {
                 Chronicle.Record(ChronicleCategory.Hunt, string.Format(
-                    "{0:0.0} days of food — hunting {1}{2}",
+                    "{0:0.0} days of food — hunting {1}{2} [{3}]",
                     daysOfFood,
                     taken.Count > 0 ? Describe(taken) : "nothing",
-                    declined.Count > 0 ? "; too dangerous: " + Describe(declined) : ""));
+                    declined.Count > 0 ? "; passed over " + Describe(declined) : "",
+                    CombatAssessment.Explain(strength, LargestDeclined(), desperation)));
             }
 
             return done;
         }
 
+        readonly List<Pawn> candidates = new List<Pawn>();
         readonly Dictionary<string, int> taken = new Dictionary<string, int>();
         readonly Dictionary<string, int> declined = new Dictionary<string, int>();
+        float largestDeclined;
 
-        static void Tally(Dictionary<string, int> into, Pawn animal)
+        static bool FightsBack(Pawn animal)
         {
-            string key = animal.kindDef != null
-                ? animal.LabelShortCap + " (" + animal.kindDef.combatPower.ToString("0") + ")"
-                : animal.LabelShortCap;
+            var race = animal.RaceProps;
+            return race.predator || race.manhunterOnDamageChance > 0.05f;
+        }
+
+        static float ThreatOf(Pawn animal)
+        {
+            return FightsBack(animal) ? CombatAssessment.ThreatValue(animal) : 0f;
+        }
+
+        float LargestDeclined()
+        {
+            return largestDeclined;
+        }
+
+        void Tally(Dictionary<string, int> into, Pawn animal)
+        {
+            float power = animal.kindDef != null ? animal.kindDef.combatPower : 0f;
+            if (into == declined && power > largestDeclined) largestDeclined = power;
+
+            string key = animal.LabelShortCap + " (" + power.ToString("0") + ")";
             int n;
             into.TryGetValue(key, out n);
             into[key] = n + 1;
@@ -211,45 +266,6 @@ namespace AutoColony.Modules
             }
             return sb.ToString();
         }
-
-        /// <summary>
-        /// Whether an animal would win the fight.
-        ///
-        /// Judging danger by manhunter chance alone is not enough and got colonists killed: a
-        /// thrumbo reads much like a deer by that measure, then kills whoever shot it. Combat
-        /// power is what actually separates a rabbit from something that fights back and wins,
-        /// and it has to be weighed against how many colonists are standing — a starving pair
-        /// must not answer their hunger by picking a fight they cannot survive.
-        /// </summary>
-        static bool TooDangerousToHunt(Pawn animal, DirectorContext ctx, float aggression)
-        {
-            var race = animal.RaceProps;
-            bool fightsBack = race.predator || race.manhunterOnDamageChance > 0.05f;
-            if (!fightsBack) return false;
-
-            float animalPower = animal.kindDef != null ? animal.kindDef.combatPower : 0f;
-            if (animalPower <= 0f) return false;
-
-            // Rough strength of everyone who could actually shoot back.
-            int shooters = 0;
-            for (int i = 0; i < ctx.state.ableColonists.Count; i++)
-                if (!ctx.state.ableColonists[i].WorkTagIsDisabled(WorkTags.Violent)) shooters++;
-
-            float colonyPower = shooters * PowerPerColonist;
-            float allowed = colonyPower * (0.20f + 0.30f * aggression);
-
-            // Nothing above this is ever worth it, however desperate things get; the animals
-            // that clear it are the ones that end colonies rather than feeding them.
-            if (animalPower > HardDangerCeiling) return true;
-
-            return animalPower > allowed;
-        }
-
-        /// <summary>Nominal combat power of one armed colonist, for comparison purposes.</summary>
-        const float PowerPerColonist = 60f;
-
-        /// <summary>Combat power past which an animal is never a hunting target.</summary>
-        const float HardDangerCeiling = 250f;
 
         static float Clamp01(float v)
         {

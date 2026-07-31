@@ -81,6 +81,20 @@ namespace AutoColony.Modules
             return ctx.state.danger == StoryDanger.High || HostilesNearBase(ctx);
         }
 
+        /// <summary>Combined strength of everything hostile currently on the map.</summary>
+        static float HostileStrength(DirectorContext ctx)
+        {
+            float total = 0f;
+            var pawns = ctx.map.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                var p = pawns[i];
+                if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
+                total += CombatAssessment.ThreatValue(p);
+            }
+            return total;
+        }
+
         static bool HostilesNearBase(DirectorContext ctx)
         {
             var origin = ctx.layout != null && ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
@@ -152,11 +166,14 @@ namespace AutoColony.Modules
             float retreatAt = ctx.Gene(Genes.DefenseRetreatHealth);
             int mobilised = 0;
 
-            for (int i = 0; i < ctx.state.ableColonists.Count; i++)
+            // Best fighters first. A raid is not elective — it is happening regardless of
+            // whether anyone suitable exists — so the question is who goes, not whether.
+            var fighters = CombatAssessment.RankFighters(ctx.state.ableColonists);
+
+            for (int i = 0; i < fighters.Count; i++)
             {
-                var pawn = ctx.state.ableColonists[i];
+                var pawn = fighters[i];
                 if (pawn.drafter == null) continue;
-                if (pawn.WorkTagIsDisabled(WorkTags.Violent)) continue;
 
                 float health = pawn.health != null && pawn.health.summaryHealth != null
                     ? pawn.health.summaryHealth.SummaryHealthPercent
@@ -184,8 +201,10 @@ namespace AutoColony.Modules
             {
                 Note("drafted " + mobilised + " colonists against a threat");
                 Chronicle.Record(ChronicleCategory.Threat, string.Format(
-                    "{0} hostiles present (danger {1}); drafted {2} colonists to {3}",
-                    ctx.state.hostilePawns, ctx.state.danger, mobilised, rally));
+                    "{0} hostiles (danger {1}); drafted {2} to {3} — {4}",
+                    ctx.state.hostilePawns, ctx.state.danger, mobilised, rally,
+                    CombatAssessment.Explain(CombatAssessment.ColonyStrength(ctx.state),
+                                             HostileStrength(ctx), 1f)));
             }
         }
 
