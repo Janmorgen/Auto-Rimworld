@@ -68,9 +68,12 @@ namespace AutoColony.Modules
 
             Need("Construction", s.pendingBlueprints + s.pendingFrames > 0 ? 2.2f : 0.8f);
 
-            Need("Mining", 1f + Shortfall(s.steel, ctx.Gene(Genes.SteelTarget)) * 1.5f
+            // Against the plan's target as well as the genome's, the same way the resource
+            // module designates against both. Otherwise the colony digs and chops for what the
+            // goal needs while nobody is especially assigned to do it.
+            Need("Mining", 1f + Shortfall(s.steel, Target(ctx, Genes.SteelTarget, "Steel")) * 1.5f
                               * (0.5f + ctx.Gene(Genes.MiningAggression)));
-            Need("PlantCutting", 1f + Shortfall(s.wood, ctx.Gene(Genes.WoodTarget)) * 1.5f
+            Need("PlantCutting", 1f + Shortfall(s.wood, Target(ctx, Genes.WoodTarget, "WoodLog")) * 1.5f
                                    * (0.5f + ctx.Gene(Genes.ChopAggression)));
 
             Need("Research", s.hasResearchBench ? 1.2f : 0.3f);
@@ -98,6 +101,16 @@ namespace AutoColony.Modules
         {
             float v;
             return needs.TryGetValue(defName, out v) ? v : 1f;
+        }
+
+        /// <summary>The larger of the genome's standing target and what the plan is short of.</summary>
+        static float Target(DirectorContext ctx, string gene, string thingDefName)
+        {
+            float target = ctx.Gene(gene);
+            if (ctx.plan == null) return target;
+
+            float wanted = ctx.plan.Needs.For(thingDefName);
+            return wanted > target ? wanted : target;
         }
 
         static float Shortfall(int have, float target)
