@@ -30,15 +30,26 @@ namespace AutoColony.Tests
         [Fact]
         public void ClimbsTowardTheOptimumOnANoiselessLandscape()
         {
+            // Averaged over several seeds: a single run of a stochastic search is sensitive
+            // enough to seed luck that it would flap whenever the gene count changes.
             var target = TargetAt(0.75f);
-            var engine = new EvolutionEngine();
+            const int runs = 8;
 
-            float startDistance = engine.Incumbent.DistanceTo(target);
+            float startDistance = new EvolutionEngine().Incumbent.DistanceTo(target);
+            float endTotal = 0f;
 
-            for (int epoch = 0; epoch < 400; epoch++)
-                engine.OnEpochComplete(Fitness(engine.Active, target), epoch);
+            for (int run = 0; run < runs; run++)
+            {
+                var engine = new EvolutionEngine();
+                engine.Rng.Reseed((ulong)(5000 + run));
 
-            float endDistance = engine.Incumbent.DistanceTo(target);
+                for (int epoch = 0; epoch < 400; epoch++)
+                    engine.OnEpochComplete(Fitness(engine.Active, target), epoch);
+
+                endTotal += engine.Incumbent.DistanceTo(target);
+            }
+
+            float endDistance = endTotal / runs;
 
             Assert.True(endDistance < startDistance * 0.5f,
                 "expected the search to at least halve the distance to the optimum; " +

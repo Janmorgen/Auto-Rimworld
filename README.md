@@ -181,9 +181,20 @@ it to actually improve on them in reasonable wall-clock time.
 
 ## Status
 
-The mod compiles cleanly against RimWorld 1.6.4871 reference assemblies, every API call was
-verified against those assemblies rather than written from memory, and 56 offline tests cover
-the learning layer. It has **not** been run inside RimWorld — there is no game install on the
-machine it was written on — so treat the first playthrough as a shakedown and check the log for
-`[AutoColony]` warnings. Training mode in particular drives the game's save/load path
-programmatically and deserves a throwaway colony first.
+Runs in RimWorld 1.6.4871. 56 offline tests cover the learning layer, and the mod has been
+exercised in-game on a generated test colony with no exceptions logged.
+
+Confirmed working in-game:
+
+- Loads and initialises (`Strategy space: 52 genes (20 work types)`), and the **auto-colony**
+  tab appears in the bottom bar.
+- Base siting, work priorities, colonist policy, research selection, zone creation and resource
+  designations all execute against a live map.
+- Epochs close and score (0.566 on a fresh desert colony), and the evolution engine advances.
+- **Training mode completes a full round**: snapshot → trial → reload → trial → pick winner →
+  reload. The static session state survives the `Game` teardown a reload causes, and both
+  trials ran from identical state. Two rounds ran back to back.
+
+Not yet exercised in-game: production bills (needs work tables built), defense (needs a raid),
+and incident answering (needs a choice letter). Long-horizon behaviour — whether the colony is
+still healthy after a few in-game years — is untested and is the obvious next thing to watch.

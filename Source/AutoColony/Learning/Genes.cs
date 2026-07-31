@@ -81,6 +81,7 @@ namespace AutoColony.Learning
 
         // ---- research ---------------------------------------------------------------
         public const string ResearchCheapBias = "research.cheapBias";
+        public const string ResearchUnlockBias = "research.unlockBias";
         public const string ResearchExplore = "research.explore";
 
         // ---- defense ----------------------------------------------------------------
@@ -137,6 +138,9 @@ namespace AutoColony.Learning
             Add(HuntAggression, 0f, 1f, 0.5f, "Gathering", "Hunting aggression");
 
             Add(ResearchCheapBias, 0f, 2f, 1f, "Research", "Bias toward cheap projects");
+            // Cheapness alone opens with whatever costs least, which in vanilla is a cosmetic
+            // dead end. Favouring projects that unlock others pushes toward foundational tech.
+            Add(ResearchUnlockBias, 0f, 2f, 1.2f, "Research", "Bias toward tech that unlocks more");
             Add(ResearchExplore, 0.1f, 2f, 0.7f, "Research", "Bandit exploration constant");
 
             Add(DefenseWealthRatio, 0f, 0.2f, 0.05f, "Defense", "Defense spend vs wealth");
