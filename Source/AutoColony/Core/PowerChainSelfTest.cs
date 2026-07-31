@@ -47,7 +47,7 @@ namespace AutoColony
             if (map == null) return;
 
             if (!granted) granted = TryGrant(map);
-            if (granted && !probed) { probed = true; RunProbes(map); }
+            if (granted && !probed) { probed = true; RunProbes(map); RunWiringProbe(map); }
             if (probed && !cleared) cleared = TryClearShortTerm(map);
 
             int tick = Find.TickManager.TicksGame;
@@ -298,6 +298,76 @@ namespace AutoColony
                 plan.Focus != null ? plan.Focus.Name : "none",
                 plan.Wanted != null ? plan.Wanted.Name : "none",
                 plan.ResearchWanted ?? "none"));
+        }
+
+        // ---------------------------------------------------------------- wiring probe
+
+        /// <summary>
+        /// Verifies the physical half of the chain without needing the colony to build it.
+        ///
+        /// Whether a generator produces once fuelled, whether `PowerModule` runs conduit to a
+        /// stranded consumer, and whether that consumer ends up on a grid are three questions a
+        /// colony answers only after surviving several days of raids — and the test colonies
+        /// kept arriving here with two colonists and no time to build. So this stands a fuelled
+        /// generator and a stranded consumer on the map directly and lets the module do the rest.
+        /// The wiring itself is not faked; that is the part under test.
+        /// </summary>
+        static void RunWiringProbe(Map map)
+        {
+            var generatorDef = AcDefs.WoodFiredGenerator;
+            var consumerDef = AcDefs.ElectricStove;
+            if (generatorDef == null || consumerDef == null) return;
+
+            var origin = map.mapPawns.FreeColonists.Count > 0
+                ? map.mapPawns.FreeColonists[0].Position
+                : map.Center;
+
+            var generator = PlaceWorking(map, generatorDef, origin, 6, 14);
+            var consumer = PlaceWorking(map, consumerDef, origin, 18, 26);
+
+            if (generator == null || consumer == null)
+            {
+                Chronicle.Record(ChronicleCategory.System, string.Format(
+                    "SELFTEST wiring probe: could not place {0}{1} — skipped",
+                    generator == null ? "generator " : "", consumer == null ? "consumer" : ""));
+                return;
+            }
+
+            // A wood-fired generator with an empty hopper produces nothing, which is the same
+            // failure as a roofed solar panel. Fill it, so what is being measured is the wiring.
+            var refuelable = generator.TryGetComp<CompRefuelable>();
+            if (refuelable != null) refuelable.Refuel(refuelable.Props.fuelCapacity);
+
+            var generatorPower = generator.TryGetComp<CompPowerTrader>();
+            var consumerPower = consumer.TryGetComp<CompPowerTrader>();
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SELFTEST wiring probe: generator at {0} ({1:0}W, fuel {2:0}), consumer at {3} " +
+                "{4} cells away, on a grid: {5}",
+                generator.Position,
+                generatorPower != null ? generatorPower.PowerOutput : 0f,
+                refuelable != null ? refuelable.Fuel : 0f,
+                consumer.Position,
+                (consumer.Position - generator.Position).LengthHorizontal.ToString("0"),
+                consumerPower != null && consumerPower.PowerNet != null));
+        }
+
+        /// <summary>Stands a finished, player-owned building on the first spot that will take it.</summary>
+        static Thing PlaceWorking(Map map, ThingDef def, IntVec3 origin, int minDist, int maxDist)
+        {
+            foreach (var cell in GenRadial.RadialCellsAround(origin, maxDist, true))
+            {
+                if ((cell - origin).LengthHorizontal < minDist) continue;
+                if (!cell.InBounds(map)) continue;
+                if (!GenSpawn.CanSpawnAt(def, cell, map, Rot4.North)) continue;
+                if (cell.Roofed(map)) continue;
+
+                var thing = ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
+                GenSpawn.Spawn(thing, cell, map, Rot4.North);
+                thing.SetFaction(Faction.OfPlayer);
+                return thing;
+            }
+            return null;
         }
 
         // ---------------------------------------------------------------- commentary

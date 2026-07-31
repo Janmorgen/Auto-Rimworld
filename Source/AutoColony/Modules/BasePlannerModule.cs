@@ -447,7 +447,7 @@ namespace AutoColony.Modules
                     PlaceMany(ctx, room, AcDefs.Bed, Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4));
                     break;
                 case RoomRole.Kitchen:
-                    PlaceOne(ctx, room, AcDefs.ElectricStove ?? AcDefs.FueledStove ?? AcDefs.Campfire);
+                    PlaceOne(ctx, room, StoveFor(ctx));
                     PlaceOne(ctx, room, AcDefs.ButcherTable);
                     break;
                 case RoomRole.Research:
@@ -522,17 +522,44 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
+        /// The best cooking station the colony can build and actually run today.
+        ///
+        /// This was `ElectricStove ?? FueledStove ?? Campfire`, which reads like a fallback chain
+        /// and is not one: `??` gives way only on null, and every one of these defs resolves in
+        /// any vanilla install whatever the colony has researched. So the electric stove was
+        /// chosen always, and the other two were unreachable.
+        ///
+        /// The cost of that is a colony waiting on Electricity, a generator and conduit before it
+        /// can cook, when a fuelled stove needs no research at all and burns wood it already has.
+        /// A `-quicktest` colony hides it completely, because those start with Electricity done.
+        ///
+        /// A def resolving is not a building the colony can use — the same distinction the power
+        /// goals draw, one level further down.
+        /// </summary>
+        static ThingDef StoveFor(DirectorContext ctx)
+        {
+            var electric = AcDefs.ElectricStove;
+            if (electric != null && electric.IsResearchFinished && ctx.state.workingGenerators > 0)
+                return electric;
+
+            var fueled = AcDefs.FueledStove;
+            if (fueled != null && fueled.IsResearchFinished) return fueled;
+
+            return AcDefs.Campfire;
+        }
+
+        /// <summary>
         /// The one thing a room exists for, so its loss can be detected. A bedroom without a
         /// bed is not a bedroom; a kitchen without a stove cannot feed anyone.
         /// </summary>
-        static ThingDef KeyFurnitureFor(RoomRole role)
+        static ThingDef KeyFurnitureFor(DirectorContext ctx, RoomRole role)
         {
             switch (role)
             {
                 case RoomRole.Bedroom:
                 case RoomRole.Hospital:
                 case RoomRole.Prison: return AcDefs.Bed;
-                case RoomRole.Kitchen: return AcDefs.ElectricStove ?? AcDefs.FueledStove ?? AcDefs.Campfire;
+                case RoomRole.Kitchen: return StoveFor(ctx);
                 case RoomRole.Research: return AcDefs.ResearchBench;
                 case RoomRole.Workshop: return AcDefs.StonecuttersTable;
                 case RoomRole.Freezer: return AcDefs.Cooler;
@@ -543,7 +570,7 @@ namespace AutoColony.Modules
 
         static bool KeyFurnitureMissing(DirectorContext ctx, PlannedRoom room)
         {
-            var def = KeyFurnitureFor(room.role);
+            var def = KeyFurnitureFor(ctx, room.role);
             if (def == null) return false;
 
             // Nothing counts as missing that the colony could not have built in the first place.
