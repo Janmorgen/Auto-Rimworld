@@ -53,6 +53,8 @@ namespace AutoColony
         public static ThingDef StonecuttersTable { get { return Thing("TableStonecutter"); } }
         public static ThingDef Torch { get { return Thing("TorchLamp"); } }
         public static ThingDef PsychiteTea { get { return Thing("PsychiteTea"); } }
+        public static ThingDef Cooler { get { return Thing("Cooler"); } }
+        public static ThingDef PowerConduit { get { return Thing("PowerConduit"); } }
 
         /// <summary>Stuff candidates for walls/furniture, cheapest and most available first.</summary>
         public static readonly string[] WoodyStuff = { "WoodLog" };

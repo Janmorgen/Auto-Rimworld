@@ -178,6 +178,18 @@ namespace AutoColony.Modules
             var s = ctx.state;
             role = RoomRole.Storage;
 
+            // The plan already worked out what the colony is short of, including the chain of
+            // prerequisites behind it. Building anything else first would be second-guessing it.
+            if (ctx.plan != null && ctx.plan.Focus != null)
+            {
+                var wanted = ctx.plan.Focus.WantsRoom;
+                if (wanted.HasValue && !layout.HasRoom(wanted.Value))
+                {
+                    role = wanted.Value;
+                    return true;
+                }
+            }
+
             if (!layout.HasRoom(RoomRole.Storage)) return true;
 
             int bedsPerRoom = Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4);
@@ -380,10 +392,54 @@ namespace AutoColony.Modules
                 case RoomRole.Prison:
                     PlaceMany(ctx, room, AcDefs.Bed, 1);
                     break;
+                case RoomRole.Power:
+                    // Solar needs no fuel and no hauling; a wood generator is the fallback
+                    // where the sun is unreliable. A battery carries the colony through night.
+                    PlaceOne(ctx, room, AcDefs.SolarGenerator ?? AcDefs.WoodFiredGenerator);
+                    PlaceMany(ctx, room, AcDefs.Battery, 2);
+                    break;
+                case RoomRole.Freezer:
+                    // The cooler goes in a wall, not the floor: it moves heat from one side to
+                    // the other, so it has to span inside and outside.
+                    PlaceCoolerInWall(ctx, room);
+                    break;
             }
 
             // A light in every room; unlit rooms tank mood and slow work.
             PlaceOne(ctx, room, AcDefs.Torch);
+        }
+
+        /// <summary>
+        /// Puts a cooler on the room's wall, facing outward. Placed on an edge cell rather than
+        /// inside, because a cooler spans the wall by design.
+        /// </summary>
+        void PlaceCoolerInWall(DirectorContext ctx, PlannedRoom room)
+        {
+            var cooler = AcDefs.Cooler;
+            if (cooler == null) return;
+
+            var map = ctx.map;
+            var door = room.Door;
+
+            foreach (var cell in room.Rect.EdgeCells)
+            {
+                if (cell.x == door.x && cell.z == door.z) continue;
+                // Corners have no clean inside/outside, so skip them.
+                bool corner = (cell.x == room.minX || cell.x == room.minX + room.width - 1)
+                           && (cell.z == room.minZ || cell.z == room.minZ + room.height - 1);
+                if (corner) continue;
+
+                var facing = cell.z == room.minZ ? Rot4.South
+                           : cell.z == room.minZ + room.height - 1 ? Rot4.North
+                           : cell.x == room.minX ? Rot4.West : Rot4.East;
+
+                if (PlacementUtil.TryPlace(map, cooler, cell, facing, null))
+                {
+                    placedThisPass++;
+                    Chronicle.Record(ChronicleCategory.Build, "cooler queued in the freezer wall at " + cell);
+                    return;
+                }
+            }
         }
 
         void PlaceOne(DirectorContext ctx, PlannedRoom room, ThingDef def)

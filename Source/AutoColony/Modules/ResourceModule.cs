@@ -33,7 +33,8 @@ namespace AutoColony.Modules
             // Something is burning or shooting at the colony. Sending people out to fell trees
             // or chase animals now spends the exact labour needed at home, and walks it out of
             // range of the emergency. Gathering waits.
-            if (ctx.state.EmergencyAtHome)
+            if (ctx.state.EmergencyAtHome || (ctx.plan != null && ctx.plan.EmergencyActive
+                                              && ctx.state.daysOfFood >= 2f))
             {
                 if (!yieldedToEmergency)
                 {
@@ -87,9 +88,18 @@ namespace AutoColony.Modules
 
         int MaybeMine(DirectorContext ctx, IntVec3 origin)
         {
+            // The plan's requirements raise the bar: wanting power means wanting the steel and
+            // components power is made of, which is what turns a long-term goal into digging.
             float target = ctx.Gene(Genes.SteelTarget);
+            float componentTarget = ctx.Gene(Genes.ComponentsTarget);
+            if (ctx.plan != null)
+            {
+                target = Max(target, ctx.plan.Needs.For("Steel"));
+                componentTarget = Max(componentTarget, ctx.plan.Needs.For("ComponentIndustrial"));
+            }
+
             bool needSteel = ctx.state.steel < target;
-            bool needComponents = ctx.state.components < ctx.Gene(Genes.ComponentsTarget);
+            bool needComponents = ctx.state.components < componentTarget;
             if (!needSteel && !needComponents) return 0;
 
             float aggression = ctx.Gene(Genes.MiningAggression);
@@ -284,6 +294,8 @@ namespace AutoColony.Modules
             }
             return sb.ToString();
         }
+
+        static float Max(float a, float b) { return a > b ? a : b; }
 
         static float Clamp01(float v)
         {

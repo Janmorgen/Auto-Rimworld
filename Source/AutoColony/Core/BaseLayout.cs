@@ -12,7 +12,9 @@ namespace AutoColony
         Workshop = 4,
         Research = 5,
         Hospital = 6,
-        Prison = 7
+        Prison = 7,
+        Power = 8,
+        Freezer = 9
     }
 
     /// <summary>A room the planner has reserved, and how far construction has got.</summary>

@@ -207,6 +207,30 @@ it to actually improve on them in reasonable wall-clock time.
   mutations happened to occur, perturbing every later world roll relative to an unmodded game
   and making two runs from the same save incomparable — which the trial harness depends on.
 
+## Goals, and the order things happen in
+
+The subsystems are individually sensible and collectively aimless. Each knows how to build a
+room or mine a rock; none knows that a freezer needs power, that power needs components, that
+components need mining, and that none of it matters while the kitchen is on fire.
+
+So a planner sits above them holding goals with three horizons — **immediate** (fire, a raid,
+an empty larder), **short term** (beds, food stocks, roofed storage) and **long term** (power,
+refrigeration, real defences). Two rules do most of the work. Nearer horizons pre-empt further
+ones outright, so nothing discretionary happens while the colony burns. And a goal whose
+prerequisites are unmet hands over to whichever prerequisite *is* actionable, so wanting a
+freezer resolves by itself into wanting power, then into wanting steel and components, then
+into mining.
+
+The planner does not act. It publishes a focus and the modules aim at it — the base planner
+builds the room it wants, gathering raises its targets to the materials it needs — which keeps
+arbitration in one readable place instead of scattered across eleven subsystems each with its
+own opinion about what matters. Every change of focus is logged with its reasoning.
+
+This is also how a whole class of bug becomes visible. A colony was hunting successfully and
+starving anyway: game comes back as corpses, and a corpse is not food until something butchers
+it. Stating that food depends on a kitchen fixed it — the kitchen now gets built first, and the
+same colony goes from a flat 0.0 days of food to feeding itself.
+
 ## Assessing a fight
 
 Whether something can be fought is not a property of the thing being fought. Six armed

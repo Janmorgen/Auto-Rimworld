@@ -13,6 +13,12 @@ namespace AutoColony
         public AutoColonyDirector director;
         public BaseLayout layout;
 
+        /// <summary>
+        /// What the colony is working towards this pass. Modules aim at it rather than each
+        /// forming its own opinion about what matters.
+        /// </summary>
+        public Goals.ColonyPlan plan;
+
         public float Gene(string key)
         {
             return genome != null ? genome.Get(key) : 0f;

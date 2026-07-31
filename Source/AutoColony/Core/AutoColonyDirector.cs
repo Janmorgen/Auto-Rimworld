@@ -71,6 +71,8 @@ namespace AutoColony
         readonly Dictionary<string, string> colonistVitals = new Dictionary<string, string>();
         List<ScoreTerm> lastBreakdown = new List<ScoreTerm>();
         readonly DirectorContext ctx = new DirectorContext();
+        readonly Goals.GoalPlanner planner = new Goals.GoalPlanner();
+        string lastPlanDescription = "";
 
         public AutoColonyDirector(Game game) { }
 
@@ -259,6 +261,16 @@ namespace AutoColony
             if (nextEpochTick < 0) BeginEpoch(tick);
 
             ctx.genome = ActiveGenome;
+            ctx.plan = planner.Plan(ctx);
+
+            // Only when the answer changes, otherwise this would say the same thing forever.
+            var description = ctx.plan.Describe();
+            if (description != lastPlanDescription)
+            {
+                lastPlanDescription = description;
+                Chronicle.Record(ChronicleCategory.Economy, "working towards — " + description +
+                    (ctx.plan.Focus != null ? "  [" + ctx.plan.Focus.Explain(ctx) + "]" : ""));
+            }
 
             RunNextDueModule(tick, settings);
 
