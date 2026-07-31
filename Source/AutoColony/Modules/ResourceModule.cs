@@ -18,6 +18,8 @@ namespace AutoColony.Modules
         public override string Name { get { return "Resource gathering"; } }
         public override int IntervalTicks { get { return 12500; } }
 
+        bool yieldedToEmergency;
+
         /// <summary>Designations added per pass, per activity.</summary>
         const int MaxPerPass = 25;
 
@@ -27,6 +29,22 @@ namespace AutoColony.Modules
         protected override void Act(DirectorContext ctx)
         {
             var origin = ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
+
+            // Something is burning or shooting at the colony. Sending people out to fell trees
+            // or chase animals now spends the exact labour needed at home, and walks it out of
+            // range of the emergency. Gathering waits.
+            if (ctx.state.EmergencyAtHome)
+            {
+                if (!yieldedToEmergency)
+                {
+                    yieldedToEmergency = true;
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "holding off gathering: {0} fires and {1} hostiles at the colony",
+                        ctx.state.firesNearBase, ctx.state.hostilesNearBase));
+                }
+                return;
+            }
+            yieldedToEmergency = false;
 
             int chopped = MaybeChopWood(ctx, origin);
             int mined = MaybeMine(ctx, origin);

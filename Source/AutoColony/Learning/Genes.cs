@@ -89,6 +89,7 @@ namespace AutoColony.Learning
         public const string DefenseDraftDanger = "defense.draftDanger";
         public const string DefenseRetreatHealth = "defense.retreatHealth";
         public const string DefenseTurretCount = "defense.turretCount";
+        public const string FireResponseRadius = "defense.fireRadius";
 
         // ---- colonist policy --------------------------------------------------------
         public const string ColonistRecruitBias = "colonist.recruitBias";
@@ -151,6 +152,9 @@ namespace AutoColony.Learning
             Add(DefenseDraftDanger, 0f, 2f, 1f, "Defense", "Danger level that triggers drafting");
             Add(DefenseRetreatHealth, 0.1f, 0.9f, 0.45f, "Defense", "Health fraction to retreat at");
             Add(DefenseTurretCount, 0f, 12f, 3f, "Defense", "Target turret count");
+            // How far out a fire is still worth walking to. Too small and a fire creeps in;
+            // too large and colonists cross the map for a blaze that was never coming.
+            Add(FireResponseRadius, 10f, 120f, 45f, "Defense", "Range fires are fought within");
 
             Add(ColonistRecruitBias, 0f, 1f, 0.6f, "Colonists", "Willingness to recruit prisoners");
             Add(ColonistMedCare, 0f, 4f, 3f, "Colonists", "Default medical care level");

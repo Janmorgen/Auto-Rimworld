@@ -62,6 +62,71 @@ namespace AutoColony
 
         public bool Valid { get { return map != null && colonists > 0; } }
 
+        // --- proximity, filled in by the director once the base location is known ---
+
+        /// <summary>Fires close enough to the colony to matter.</summary>
+        public int firesNearBase;
+
+        /// <summary>Distance from the base to the closest fire, or -1 if none burning.</summary>
+        public float nearestFireDistance = -1f;
+
+        /// <summary>Hostiles close enough to the colony to matter.</summary>
+        public int hostilesNearBase;
+
+        /// <summary>
+        /// True when something is happening at the colony itself that colonists should be
+        /// dealing with rather than walking away from.
+        /// </summary>
+        public bool EmergencyAtHome { get { return firesNearBase > 0 || hostilesNearBase > 0; } }
+
+        /// <summary>
+        /// Works out what is close enough to matter.
+        ///
+        /// Distance is what separates a threat from a curiosity. A fire on the far side of the
+        /// map will never reach the colony and is not worth a single work-hour; the same fire
+        /// against a wall is an emergency. Nothing else in the snapshot can tell them apart,
+        /// because only the director knows where the base is.
+        /// </summary>
+        public void AnnotateProximity(IntVec3 origin, float radius)
+        {
+            if (map == null) return;
+            float radiusSq = radius * radius;
+
+            var fireDef = AcDefs.Fire;
+            if (fireDef != null && map.listerThings != null)
+            {
+                var burning = map.listerThings.ThingsOfDef(fireDef);
+                var home = map.areaManager != null ? map.areaManager.Home : null;
+
+                for (int i = 0; i < burning.Count; i++)
+                {
+                    var fire = burning[i];
+                    if (fire == null || !fire.Spawned) continue;
+
+                    float distSq = (fire.Position - origin).LengthHorizontalSquared;
+                    float dist = Mathf_Sqrt(distSq);
+                    if (nearestFireDistance < 0f || dist < nearestFireDistance) nearestFireDistance = dist;
+
+                    // Anything inside the home area counts however far out the area reaches.
+                    bool inHome = home != null && home[fire.Position];
+                    if (inHome || distSq <= radiusSq) firesNearBase++;
+                }
+            }
+
+            var pawns = map.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                var p = pawns[i];
+                if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
+                if ((p.Position - origin).LengthHorizontalSquared <= radiusSq) hostilesNearBase++;
+            }
+        }
+
+        static float Mathf_Sqrt(float v)
+        {
+            return (float)System.Math.Sqrt(v);
+        }
+
         /// <summary>Colonists able to take orders: alive, not downed, not in a mental break.</summary>
         public List<Pawn> ableColonists = new List<Pawn>();
         /// <summary>Every free colonist on the map, including downed ones.</summary>

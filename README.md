@@ -221,6 +221,12 @@ insisted upon slides with desperation — a comfortable colony demands 2:1 befor
 fight, a starving one accepts far worse, because refusing is not the safe option when the
 alternative is starving.
 
+Distance is part of the same judgement. A fire on the far side of the map will never reach the
+colony and is not worth a single work-hour; the same fire against a wall is an emergency. Only
+fires within a learnable radius, or already inside the home area, are fought — and while
+anything is burning or shooting at the colony, gathering stops rather than walking the exact
+labour needed at home out of range of it.
+
 Hunting considers targets safest-first, so easy game is taken while it lasts and dangerous
 game is only reached for once nothing else remains. Threats that come to you are not elective
 at all: a fire or a raid is answered whether or not anyone suitable exists, and the question

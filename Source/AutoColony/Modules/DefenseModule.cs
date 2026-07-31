@@ -37,7 +37,8 @@ namespace AutoColony.Modules
             // Fire first, and before anything else. It spreads far faster than the work
             // scheduler reconsiders priorities, and an unattended fire will take a base apart
             // while the director is still deciding who should be hauling.
-            if (ctx.state.fires > 0) HandleFires(ctx);
+            if (ctx.state.firesNearBase > 0) HandleFires(ctx);
+            else if (ctx.state.fires > 0) NoteDistantFire(ctx);
 
             if (ThreatActive(ctx))
             {
@@ -46,10 +47,11 @@ namespace AutoColony.Modules
             }
 
             StandDown(ctx);
-            if (ctx.state.fires == 0 && firefightingUnderway)
+            if (ctx.state.firesNearBase == 0 && firefightingUnderway)
             {
                 firefightingUnderway = false;
-                Chronicle.Record(ChronicleCategory.Fire, "fires are out");
+                distantFireNoted = false;
+                Chronicle.Record(ChronicleCategory.Fire, "fires near the colony are out");
             }
 
             if (++quietPasses >= FortifyEveryNPasses)
@@ -131,12 +133,21 @@ namespace AutoColony.Modules
 
             var home = map.areaManager.Home;
             var fires = map.listerThings.ThingsOfDef(fireDef);
+            var origin = ctx.layout != null && ctx.layout.established ? ctx.layout.origin : map.Center;
+            float radius = ctx.Gene(Genes.FireResponseRadius);
+            float radiusSq = radius * radius;
             int claimed = 0;
 
             for (int i = 0; i < fires.Count && claimed < 200; i++)
             {
                 var fire = fires[i];
                 if (fire == null || !fire.Spawned) continue;
+
+                // Only the fires that could actually reach the colony. Claiming a distant
+                // wildfire sends colonists across the map to fight something that was never
+                // coming, while whatever is burning at home goes unattended.
+                bool inHome = home != null && home[fire.Position];
+                if (!inHome && (fire.Position - origin).LengthHorizontalSquared > radiusSq) continue;
 
                 // Claim the fire and a ring around it, so the whole burning front is inside
                 // the area colonists are willing to work in.
@@ -156,6 +167,18 @@ namespace AutoColony.Modules
                     "{0} fires burning; claimed {1} cells into the home area and forced a work re-prioritisation",
                     ctx.state.fires, claimed));
             }
+        }
+
+        bool distantFireNoted;
+
+        /// <summary>Records a fire being deliberately left alone, so the log explains inaction.</summary>
+        void NoteDistantFire(DirectorContext ctx)
+        {
+            if (distantFireNoted) return;
+            distantFireNoted = true;
+            Chronicle.Record(ChronicleCategory.Fire, string.Format(
+                "{0} fires burning but none within {1:0} of the colony (nearest {2:0}) — leaving them",
+                ctx.state.fires, ctx.Gene(Genes.FireResponseRadius), ctx.state.nearestFireDistance));
         }
 
         // ------------------------------------------------------------ combat

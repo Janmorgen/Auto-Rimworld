@@ -55,7 +55,9 @@ namespace AutoColony.Modules
             float foodShortfall = foodTarget > 0f ? Clamp01(1f - s.daysOfFood / foodTarget) : 0f;
 
             // Emergencies first: fire and untreated casualties outrank everything.
-            Need("Firefighter", s.fires > 0 ? 6f : 1f);
+            // Only fires that could reach the colony justify dropping everything; a distant
+            // wildfire is not worth a work-hour.
+            Need("Firefighter", s.firesNearBase > 0 ? 6f : 1f);
             Need("Patient", 1f);
             Need("PatientBedRest", 1f);
             Need("Doctor", s.colonistsDowned > 0 ? 4f : (s.avgHealth < 0.9f ? 2f : 1f));
