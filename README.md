@@ -221,6 +221,18 @@ insisted upon slides with desperation — a comfortable colony demands 2:1 befor
 fight, a starving one accepts far worse, because refusing is not the safe option when the
 alternative is starving.
 
+Fire is priced rather than avoided. Wood is the right material most of the time — it is
+everywhere, it is cheap, and it goes up fast — so refusing it on principle costs a colony its
+early game. What matters is the environment, read from the game's own dryness model and
+adjusted for rain, heat, raiders and anything already burning. A damp forest forgives a wooden
+base; an arid one in high summer does not. Storage leans harder toward stone than the rest,
+because it is where the colony's value ends up.
+
+The same reading drives hauling. Items outdoors deteriorate where they lie and are the easiest
+thing on the map to lose to a fire, so as conditions dry out, getting them under a roof
+outranks ordinary hauling — the preventative answer is not to leave them out but to get them
+into something that will not catch.
+
 Distance is part of the same judgement. A fire on the far side of the map will never reach the
 colony and is not worth a single work-hour; the same fire against a wall is an emergency. Only
 fires within a learnable radius, or already inside the home area, are fought — and while
