@@ -49,6 +49,9 @@ namespace AutoColony
         public string contextKey = StrategyArchive.GlobalKey;
         public int nextEpochTick = -1;
         public bool seeded;
+
+        /// <summary>Set once a wipe has been scored, so it is recorded exactly once.</summary>
+        public bool colonyLost;
         public float lastScore = float.NaN;
 
         // --- runtime only, rebuilt after load ---
@@ -182,7 +185,24 @@ namespace AutoColony
                 if (settings.masterEnabled) accumulator.Observe(lastMetrics);
             }
 
-            if (lastState == null || !lastState.Valid) return;
+            if (lastState == null) return;
+
+            // Total colony failure is the most informative outcome the search will ever get,
+            // and it used to be dropped silently: with nobody left alive there is no module to
+            // run, so this method returned before the epoch could be scored. The strategy that
+            // lost the colony was never penalised, here or in the cross-save archive, which is
+            // precisely backwards — a wipe is the one result worth learning from most.
+            if (!lastState.Valid)
+            {
+                if (settings.masterEnabled && !colonyLost && nextEpochTick >= 0)
+                {
+                    colonyLost = true;
+                    HandleColonyLoss(tick);
+                }
+                return;
+            }
+
+            colonyLost = false;
 
             ctx.map = map;
             ctx.state = lastState;
@@ -293,6 +313,39 @@ namespace AutoColony
             }
 
             BeginEpoch(tick);
+        }
+
+        /// <summary>
+        /// Scores the epoch that ended in the colony dying. Runs the ordinary evaluation,
+        /// which bottoms out at zero once there are no colonists, and feeds it everywhere a
+        /// normal epoch score would go so the failure actually costs the strategy something.
+        /// </summary>
+        void HandleColonyLoss(int tick)
+        {
+            List<ScoreTerm> breakdown;
+            float score = ColonyEvaluator.Evaluate(epochStart, lastMetrics, accumulator, out breakdown);
+
+            lastScore = score;
+            lastBreakdown = breakdown;
+
+            for (int i = 0; i < pendingCredits.Count; i++)
+            {
+                var pc = pendingCredits[i];
+                BanditFor(pc.banditId).Update(pc.arm, score);
+            }
+            pendingCredits.Clear();
+
+            AcLog.Message("Colony lost on day " + lastMetrics.day + ". Strategy scored " +
+                          score.ToString("0.000") + "; recorded so the search learns from it.");
+
+            if (TrainingSession.Active)
+            {
+                CloseTrainingTrial(score, tick);
+                return;
+            }
+
+            evolution.OnEpochComplete(score, lastMetrics.day);
+            ContributeToArchive();
         }
 
         /// <summary>
@@ -454,6 +507,7 @@ namespace AutoColony
             Scribe_Values.Look(ref contextKey, "contextKey", StrategyArchive.GlobalKey);
             Scribe_Values.Look(ref nextEpochTick, "nextEpochTick", -1);
             Scribe_Values.Look(ref seeded, "seeded", false);
+            Scribe_Values.Look(ref colonyLost, "colonyLost", false);
             Scribe_Values.Look(ref lastScore, "lastScore", float.NaN);
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
