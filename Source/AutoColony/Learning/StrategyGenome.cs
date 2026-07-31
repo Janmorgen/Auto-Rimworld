@@ -124,17 +124,42 @@ namespace AutoColony.Learning
 
         // ---- standalone XML, used by the cross-save archive -------------------------
 
+        /// <summary>
+        /// Serialises every known gene explicitly, including ones still sitting at their
+        /// default.
+        ///
+        /// Writing only the genes that were explicitly Set() would archive an unmutated
+        /// incumbent as an empty element — observed in a real colony, where eight epochs
+        /// passed without a challenger being accepted and the stored strategy came out with
+        /// zero genes in it. That reloads correctly only for as long as the defaults never
+        /// change; the moment one does, every archived strategy silently becomes a different
+        /// strategy. An archive is long-lived, so it has to say what it actually means.
+        /// </summary>
         public XElement ToXml(string elementName)
         {
             var el = new XElement(elementName,
                 new XAttribute("lineage", lineage ?? "default"),
                 new XAttribute("generation", generation));
+
+            var specs = Genes.All;
+            for (int i = 0; i < specs.Count; i++)
+            {
+                var key = specs[i].Key;
+                el.Add(new XElement("g",
+                    new XAttribute("k", key),
+                    new XAttribute("v", Get(key).ToString("R", CultureInfo.InvariantCulture))));
+            }
+
+            // Anything held that is no longer a registered gene (a mod was removed) is kept
+            // verbatim, so re-adding that mod later restores its tuning rather than losing it.
             foreach (var kv in values)
             {
+                if (Genes.Spec(kv.Key) != null) continue;
                 el.Add(new XElement("g",
                     new XAttribute("k", kv.Key),
                     new XAttribute("v", kv.Value.ToString("R", CultureInfo.InvariantCulture))));
             }
+
             return el;
         }
 

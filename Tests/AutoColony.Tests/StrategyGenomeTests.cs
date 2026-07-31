@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Xml.Linq;
 using AutoColony.Learning;
 using Xunit;
@@ -100,6 +101,46 @@ namespace AutoColony.Tests
             Assert.Equal(0f, restored.DistanceTo(original), 6);
             Assert.Equal(original.generation, restored.generation);
             Assert.Equal(original.lineage, restored.lineage);
+        }
+
+        [Fact]
+        public void AnUnmutatedGenomeStillSerialisesEveryGene()
+        {
+            // Regression: a genome nobody had Set() anything on archived as an empty element,
+            // because only explicitly-set values were written. It reloaded correctly only
+            // because the defaults happened to match — a trap the first time a default moves.
+            var xml = StrategyGenome.Default().ToXml("genome");
+
+            Assert.Equal(Genes.All.Count, xml.Elements("g").Count());
+        }
+
+        [Fact]
+        public void ArchivedGenomeSurvivesADefaultChanging()
+        {
+            // Simulates a future version shipping a different default: the archived value must
+            // win, because it is what the strategy was actually measured with.
+            var original = StrategyGenome.Default();
+            var spec = Genes.Spec(Genes.WoodTarget);
+            original.Set(Genes.WoodTarget, spec.Default);
+
+            var restored = StrategyGenome.FromXml(original.ToXml("genome"));
+
+            Assert.Equal(spec.Default, restored.Get(Genes.WoodTarget), 3);
+            Assert.Contains(restored.ToXml("g").Elements("g"),
+                e => e.Attribute("k").Value == Genes.WoodTarget);
+        }
+
+        [Fact]
+        public void GenesFromAnUnloadedModAreKeptRatherThanDropped()
+        {
+            // A work type belonging to a mod that is currently disabled has no spec, but its
+            // tuning should survive so re-enabling the mod restores it.
+            var genome = new StrategyGenome();
+            genome.Set("work.w.SomeModdedWork", 2.5f);
+
+            var restored = StrategyGenome.FromXml(genome.ToXml("genome"));
+
+            Assert.Equal(2.5f, restored.Get("work.w.SomeModdedWork"), 3);
         }
 
         [Fact]
