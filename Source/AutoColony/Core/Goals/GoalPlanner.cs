@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
+using RimWorld;
+using Verse;
 
 namespace AutoColony.Goals
 {
@@ -23,6 +25,12 @@ namespace AutoColony.Goals
         /// <summary>True while something immediate is happening, which halts discretionary work.</summary>
         public bool EmergencyActive;
 
+        /// <summary>
+        /// The research project the focus is waiting on, already walked back to something that
+        /// can be started today. Null when the focus needs nothing researched, or already has it.
+        /// </summary>
+        public string ResearchWanted;
+
         public string Describe()
         {
             if (Focus == null) return "nothing outstanding";
@@ -30,6 +38,7 @@ namespace AutoColony.Goals
             sb.Append(Horizon).Append(": ").Append(Focus.Name);
             if (Wanted != null && Wanted != Focus) sb.Append(" (towards ").Append(Wanted.Name).Append(')');
             if (Needs.Any) sb.Append(" — needs ").Append(Needs);
+            if (ResearchWanted != null) sb.Append(" — needs research ").Append(ResearchWanted);
             return sb.ToString();
         }
     }
@@ -102,8 +111,57 @@ namespace AutoColony.Goals
             plan.Focus = Actionable(best, ctx, 0);
             plan.Horizon = plan.Focus.Horizon;
             plan.Focus.DeclareNeeds(ctx, plan.Needs);
+            plan.ResearchWanted = ResearchFor(plan.Focus);
 
             return plan;
+        }
+
+        /// <summary>
+        /// What the focus needs researched, walked back to a project that can be started now.
+        ///
+        /// Every building in the power chain is gated: conduits, the wood-fired generator and
+        /// the electric stove need Electricity, batteries need Batteries, coolers need Air
+        /// Conditioning. Without this the plan could sit on "Power" indefinitely while research
+        /// was chosen on cheapness alone.
+        /// </summary>
+        static string ResearchFor(ColonyGoal goal)
+        {
+            var wanted = goal.RequiresResearch;
+            if (wanted == null || wanted.Length == 0) return null;
+
+            try
+            {
+                return ResearchChain.FirstStartableOf(wanted, PrerequisitesOf, IsFinished);
+            }
+            catch (System.Exception)
+            {
+                return null;    // a broken lookup must not stop the rest of the plan
+            }
+        }
+
+        static IList<string> PrerequisitesOf(string defName)
+        {
+            var project = DefDatabase<ResearchProjectDef>.GetNamedSilentFail(defName);
+            if (project == null || project.prerequisites == null) return null;
+
+            var names = new List<string>(project.prerequisites.Count);
+            for (int i = 0; i < project.prerequisites.Count; i++)
+            {
+                var prerequisite = project.prerequisites[i];
+                if (prerequisite != null) names.Add(prerequisite.defName);
+            }
+            return names;
+        }
+
+        /// <summary>
+        /// A project the database has never heard of counts as finished, so a goal naming
+        /// research from a DLC or mod that is not installed degrades to "nothing to research"
+        /// rather than becoming a prerequisite that can never be met.
+        /// </summary>
+        static bool IsFinished(string defName)
+        {
+            var project = DefDatabase<ResearchProjectDef>.GetNamedSilentFail(defName);
+            return project == null || project.IsFinished;
         }
 
         /// <summary>

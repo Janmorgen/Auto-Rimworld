@@ -163,6 +163,8 @@ namespace AutoColony.Goals
         public override string Name { get { return Id; } }
         public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
         public override RoomRole? WantsRoom { get { return RoomRole.Workshop; } }
+        public override string[] RequiresResearch { get { return Research; } }
+        static readonly string[] Research = { "Stonecutting" };
 
         public override bool Satisfied(DirectorContext ctx)
         {
@@ -189,10 +191,20 @@ namespace AutoColony.Goals
         public override string Name { get { return Id; } }
         public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
         public override RoomRole? WantsRoom { get { return RoomRole.Power; } }
+        public override string[] RequiresResearch { get { return Research; } }
+        static readonly string[] Research = { "Electricity" };
 
+        /// <summary>
+        /// A generator that is actually producing, not a room with the word Power on it.
+        ///
+        /// This previously read <c>layout.HasRoom(RoomRole.Power)</c>, which was true the instant
+        /// the room was *reserved* — before a wall existed, let alone a generator. Power stopped
+        /// being the focus immediately, and refrigeration and fortification both unblocked against
+        /// a colony with no electricity at all.
+        /// </summary>
         public override bool Satisfied(DirectorContext ctx)
         {
-            return ctx.layout != null && ctx.layout.HasRoom(RoomRole.Power);
+            return ctx.state.workingGenerators > 0;
         }
 
         public override float Urgency(DirectorContext ctx) { return 0.5f; }
@@ -206,7 +218,10 @@ namespace AutoColony.Goals
 
         public override string Explain(DirectorContext ctx)
         {
-            return "steel " + ctx.state.steel + "/220, components " + ctx.state.components + "/6";
+            int idle = ctx.state.generators - ctx.state.workingGenerators;
+            return ctx.state.workingGenerators + " generators running" +
+                   (idle > 0 ? " (" + idle + " built but producing nothing)" : "") +
+                   ", steel " + ctx.state.steel + "/220, components " + ctx.state.components + "/6";
         }
     }
 
@@ -222,10 +237,16 @@ namespace AutoColony.Goals
         public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
         public override RoomRole? WantsRoom { get { return RoomRole.Freezer; } }
         public override string[] Requires { get { return new[] { PowerGoal.Id }; } }
+        public override string[] RequiresResearch { get { return Research; } }
+        static readonly string[] Research = { "AirConditioning" };
 
+        /// <summary>
+        /// A cooler with power. A freezer room whose cooler is unpowered is a warm room, and
+        /// the food in it spoils exactly as fast as it did outside.
+        /// </summary>
         public override bool Satisfied(DirectorContext ctx)
         {
-            return ctx.layout != null && ctx.layout.HasRoom(RoomRole.Freezer);
+            return ctx.state.workingCoolers > 0;
         }
 
         public override float Urgency(DirectorContext ctx)
@@ -261,6 +282,8 @@ namespace AutoColony.Goals
         public override string Name { get { return Id; } }
         public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
         public override string[] Requires { get { return new[] { PowerGoal.Id }; } }
+        public override string[] RequiresResearch { get { return Research; } }
+        static readonly string[] Research = { "GunTurrets" };
 
         public override bool Satisfied(DirectorContext ctx)
         {

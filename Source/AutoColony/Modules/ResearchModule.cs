@@ -72,6 +72,26 @@ namespace AutoColony.Modules
             if (rm == null) return;
 
             var current = rm.GetProject();
+
+            // What the plan is waiting on beats what the bandit finds interesting. Every
+            // building in the power chain is research-gated, so a colony could hold "Power" as
+            // its focus for an entire game while research worked down the cheap end of the tree
+            // and the generator was never buildable.
+            var directed = DirectedProject(ctx);
+            if (directed != null)
+            {
+                if (current == directed) return;
+
+                rm.SetCurrentProject(directed);
+                ctx.Credit(BanditId, directed.defName);
+                Chronicle.Record(ChronicleCategory.Research, string.Format(
+                    "researching {0} because the plan needs it for {1}",
+                    directed.defName,
+                    ctx.plan != null && ctx.plan.Focus != null ? ctx.plan.Focus.Name : "the current goal"));
+                Note("directed research to '" + directed.defName + "'");
+                return;
+            }
+
             if (current != null && !current.IsFinished && current.CanStartNow) return;
 
             var pick = ChooseProject(ctx);
@@ -80,6 +100,22 @@ namespace AutoColony.Modules
             rm.SetCurrentProject(pick);
             ctx.Credit(BanditId, pick.defName);
             Note("started research '" + pick.defName + "'");
+        }
+
+        /// <summary>
+        /// The project the plan is blocked on, if it is one the colony can start right now.
+        /// The planner has already walked the tree back for us, so anything it names should be
+        /// startable — the check is here because a mod could still make it not be.
+        /// </summary>
+        static ResearchProjectDef DirectedProject(DirectorContext ctx)
+        {
+            if (ctx.plan == null || string.IsNullOrEmpty(ctx.plan.ResearchWanted)) return null;
+
+            var project = DefDatabase<ResearchProjectDef>.GetNamedSilentFail(ctx.plan.ResearchWanted);
+            if (project == null || project.IsFinished || !project.CanStartNow) return null;
+            if (project.knowledgeCategory != null) return null;
+
+            return project;
         }
 
         ResearchProjectDef ChooseProject(DirectorContext ctx)

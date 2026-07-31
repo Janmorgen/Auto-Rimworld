@@ -222,9 +222,19 @@ freezer resolves by itself into wanting power, then into wanting steel and compo
 into mining.
 
 The planner does not act. It publishes a focus and the modules aim at it — the base planner
-builds the room it wants, gathering raises its targets to the materials it needs — which keeps
-arbitration in one readable place instead of scattered across eleven subsystems each with its
-own opinion about what matters. Every change of focus is logged with its reasoning.
+builds the room it wants, gathering raises its targets to the materials it needs, research
+studies what it is blocked on — which keeps arbitration in one readable place instead of
+scattered across eleven subsystems each with its own opinion about what matters. Every change
+of focus is logged with its reasoning.
+
+Research is part of the same dependency chain rather than a separate opinion. A goal names the
+projects without which it cannot be built at all, and the planner walks that tree back the same
+way it walks goals: wanting refrigeration asks for air conditioning, which asks for electricity,
+which is what the colony actually starts studying. This matters more than it sounds, because
+every single building in the power chain is gated — conduits, the generator and the electric
+stove behind Electricity, batteries behind Batteries, coolers behind Air Conditioning. Before
+the two layers were connected the plan could hold "Power" as its focus for an entire game while
+research worked down the cheap end of the tree, and nothing anywhere said so.
 
 This is also how a whole class of bug becomes visible. A colony was hunting successfully and
 starving anyway: game comes back as corpses, and a corpse is not food until something butchers
@@ -298,8 +308,12 @@ in the auto-colony tab.
   step, and tuning the mutation rate is measurably *not* — 0.3 is already near-optimal.
 - **Seed locking decays.** Trials start identical, but once colonies diverge they consume RNG
   draws at different rates and the worlds drift apart. Early epoch time is the comparable part.
-- **No power grid and no freezer.** The planner places an electric stove but never generators,
-  batteries or conduits, and food spoils without cooling. Probably the largest gameplay gap.
+- **No answer to cold.** No warm clothes are crafted or assigned and no heaters are built. A
+  cold snap has killed a colony already; this is now the largest survival gap. Heaters need
+  Electricity, so it hangs off the power chain that just landed.
+- **The power chain is proven at the decision layer, not yet over a long run.** The planner
+  reaches it, researches for it and builds it, but no colony has been carried far enough to say
+  how it behaves across seasons.
 - Untouched: caravans and trade, animal taming, apparel/weapon assignment, surgery scheduling,
   multi-map colonies, defensive geometry.
 

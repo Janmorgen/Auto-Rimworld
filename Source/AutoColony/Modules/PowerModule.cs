@@ -32,6 +32,7 @@ namespace AutoColony.Modules
             var map = ctx.map;
             var conduitDef = AcDefs.PowerConduit;
             if (conduitDef == null) return;
+            if (!PlacementUtil.ResearchDone(conduitDef)) return;
 
             CollectPowerThings(map);
             if (sources.Count == 0)
@@ -89,7 +90,12 @@ namespace AutoColony.Modules
                     continue;
                 }
 
-                if (building.TryGetComp<CompPowerBattery>() != null) sources.Add(building);
+                // A battery is not a source — it stores what a generator made. Counting one as a
+                // source meant consumers got wired to a battery nothing charged, and because they
+                // then had a PowerNet they stopped reading as orphans: permanently connected,
+                // permanently dead. An unwired battery is one more thing that needs a conduit.
+                var battery = building.TryGetComp<CompPowerBattery>();
+                if (battery != null && battery.PowerNet == null) orphans.Add(building);
             }
         }
 

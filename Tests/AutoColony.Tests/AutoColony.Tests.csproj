@@ -32,6 +32,7 @@
     <Compile Include="../../Source/AutoColony/Core/AcLog.cs" Link="Production/AcLog.cs" />
     <Compile Include="../../Source/AutoColony/Core/ColonyMetrics.cs" Link="Production/ColonyMetrics.cs" />
     <Compile Include="../../Source/AutoColony/Core/ColonyEvaluator.cs" Link="Production/ColonyEvaluator.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Goals/ResearchChain.cs" Link="Production/ResearchChain.cs" />
   </ItemGroup>
 
 </Project>

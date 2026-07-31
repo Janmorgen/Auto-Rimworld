@@ -411,9 +411,13 @@ namespace AutoColony.Modules
                     PlaceMany(ctx, room, AcDefs.Bed, 1);
                     break;
                 case RoomRole.Power:
-                    // Solar needs no fuel and no hauling; a wood generator is the fallback
-                    // where the sun is unreliable. A battery carries the colony through night.
-                    PlaceOne(ctx, room, AcDefs.SolarGenerator ?? AcDefs.WoodFiredGenerator);
+                    // A wood-fired generator, not a solar panel, because this room gets roofed
+                    // like every other one and a roofed solar panel produces nothing — the game
+                    // scales its output by CompPowerPlantSolar.RoofedPowerOutputFactor. It also
+                    // fits: 2x2 against the panel's 4x4, in an interior that can be as small as
+                    // three cells. Wood costs hauling, but a generator that runs beats one that
+                    // is merely built. A battery carries the colony through the night.
+                    PlaceOne(ctx, room, AcDefs.WoodFiredGenerator);
                     PlaceMany(ctx, room, AcDefs.Battery, 2);
                     break;
                 case RoomRole.Freezer:
@@ -475,6 +479,7 @@ namespace AutoColony.Modules
                 case RoomRole.Research: return AcDefs.ResearchBench;
                 case RoomRole.Workshop: return AcDefs.StonecuttersTable;
                 case RoomRole.Freezer: return AcDefs.Cooler;
+                case RoomRole.Power: return AcDefs.WoodFiredGenerator;
                 default: return null;   // storage and dining have nothing essential
             }
         }
@@ -483,6 +488,12 @@ namespace AutoColony.Modules
         {
             var def = KeyFurnitureFor(room.role);
             if (def == null) return false;
+
+            // Nothing counts as missing that the colony could not have built in the first place.
+            // A stonecutter's table before Stonecutting, or a cooler before Air Conditioning,
+            // would otherwise be re-queued on every single pass — and because that path returns
+            // early, it would starve the rest of the base of any construction at all.
+            if (!def.IsResearchFinished) return false;
 
             foreach (var cell in room.Rect)
             {

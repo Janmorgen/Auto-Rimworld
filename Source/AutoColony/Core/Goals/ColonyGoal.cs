@@ -72,6 +72,15 @@ namespace AutoColony.Goals
         /// <summary>Names of goals that must be satisfied before this one can be attempted.</summary>
         public virtual string[] Requires { get { return NoPrerequisites; } }
 
+        /// <summary>
+        /// Research projects without which this goal cannot be built at all.
+        ///
+        /// Stated here rather than in whichever module does the building, for the same reason
+        /// goal prerequisites are: a colony that wants a freezer needs air conditioning, and
+        /// nothing else in the director was in a position to know that.
+        /// </summary>
+        public virtual string[] RequiresResearch { get { return NoPrerequisites; } }
+
         protected static readonly string[] NoPrerequisites = new string[0];
 
         /// <summary>Whether the colony already has this.</summary>

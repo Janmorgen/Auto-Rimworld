@@ -60,6 +60,26 @@ namespace AutoColony
         public int pendingFrames;
         public int fires;
 
+        // --- power ---
+        // Split the same way turrets are, and for the same reason: a generator that was built
+        // is not a generator that is producing. A solar panel under a roof, or a wood-fired
+        // generator nobody has fuelled, is a building the colony paid for and gets nothing from.
+
+        /// <summary>Generators that exist, whether or not they are producing anything.</summary>
+        public int generators;
+
+        /// <summary>Generators actually putting power onto a grid right now.</summary>
+        public int workingGenerators;
+
+        /// <summary>Total watts being generated.</summary>
+        public float powerOutput;
+
+        /// <summary>Coolers with power. A freezer whose cooler is dead is just a room.</summary>
+        public int workingCoolers;
+
+        /// <summary>Buildings that want power and are connected to no grid at all.</summary>
+        public int unpoweredBuildings;
+
         /// <summary>
         /// Haulable items sitting under open sky. They deteriorate where they are, and in a
         /// dry climate they are also the easiest thing on the map to lose to a fire.
@@ -279,6 +299,8 @@ namespace AutoColony
                 {
                     if (rb != null) { s.hasResearchBench = true; break; }
                 }
+
+                CapturePower(s, lister);
             }
 
             var things = map.listerThings;
@@ -299,6 +321,45 @@ namespace AutoColony
                     if (roofs != null && roofs.Roofed(thing.Position)) continue;
                     s.itemsOutdoors++;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Splits the colony's electrical buildings into what generates, what is producing, and
+        /// what wants power but is on no grid.
+        ///
+        /// The distinction between the first two is the whole point. <c>PowerOn</c> alone is not
+        /// enough for a generator: a roofed solar panel reports on and produces nothing, which is
+        /// exactly the failure this was written to make visible.
+        /// </summary>
+        static void CapturePower(ColonyState s, ListerBuildings lister)
+        {
+            var coolerDef = AcDefs.Cooler;
+            var buildings = lister.allBuildingsColonist;
+
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                var building = buildings[i];
+                if (building == null || !building.Spawned) continue;
+
+                var trader = building.TryGetComp<CompPowerTrader>();
+                if (trader == null) continue;
+
+                // Negative base consumption is how the game marks something as a source.
+                bool generates = trader.Props != null && trader.Props.PowerConsumption < 0f;
+                if (generates)
+                {
+                    s.generators++;
+                    if (trader.PowerOn && trader.PowerOutput > 0f)
+                    {
+                        s.workingGenerators++;
+                        s.powerOutput += trader.PowerOutput;
+                    }
+                    continue;
+                }
+
+                if (trader.PowerNet == null) s.unpoweredBuildings++;
+                if (coolerDef != null && building.def == coolerDef && trader.PowerOn) s.workingCoolers++;
             }
         }
 

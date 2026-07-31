@@ -50,6 +50,7 @@ namespace AutoColony
         public static bool TryPlace(Map map, ThingDef def, IntVec3 cell, Rot4 rot, ThingDef stuff)
         {
             if (map == null || def == null) return false;
+            if (!ResearchDone(def)) return false;
             if (!cell.InBounds(map)) return false;
             if (HasConstructionAt(map, cell, def)) return false;
             if (HasAnyConstructionAt(map, cell)) return false;
@@ -62,6 +63,19 @@ namespace AutoColony
 
             GenConstruct.PlaceBlueprintForBuild(def, cell, map, rot, Faction.OfPlayer, stuff);
             return true;
+        }
+
+        /// <summary>
+        /// Whether the colony has unlocked this building.
+        ///
+        /// <c>GenConstruct.CanPlaceBlueprintAt</c> does not check research — the tech tree is
+        /// enforced by the build menu, which the director does not go through. Without this the
+        /// planner queues conduits and coolers a colony has no business owning yet, and the fact
+        /// that it needs the research first never surfaces anywhere.
+        /// </summary>
+        public static bool ResearchDone(BuildableDef def)
+        {
+            return def != null && def.IsResearchFinished;
         }
 
         /// <summary>
