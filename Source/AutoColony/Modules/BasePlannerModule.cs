@@ -108,6 +108,16 @@ namespace AutoColony.Modules
                 return;
             }
 
+            // Finish the room the plan actually asked for before opening another.
+            //
+            // Reserving a room aims at the focus, but only at the moment of reserving. After
+            // that the planner would happily reserve a hospital while the power room it asked
+            // for stood half-built — and since each reservation adds another shell to the
+            // queue, a small colony spreads itself across all of them and completes none.
+            // Observed with two colonists and seven outstanding shells, the power room among
+            // them, at a standstill.
+            if (FocusRoomUnfinished(ctx)) return;
+
             // Everything reserved is done; decide what the colony needs next. A null answer
             // means the base is complete for the current population — the planner then stops
             // rather than tiling bedrooms across the map forever.
@@ -120,6 +130,30 @@ namespace AutoColony.Modules
                 ctx.Credit(BanditId, role.ToString());
                 Note("reserved a new " + role + " room");
             }
+        }
+
+        /// <summary>
+        /// True when the plan wants a room the colony has reserved but not yet finished. Walls
+        /// up and furniture queued is the bar — the colonists' own job system takes it from
+        /// there, and waiting for every last blueprint to be built would stall the base whenever
+        /// one item was unreachable.
+        /// </summary>
+        static bool FocusRoomUnfinished(DirectorContext ctx)
+        {
+            if (ctx.plan == null || ctx.plan.Focus == null) return false;
+
+            var wanted = ctx.plan.Focus.WantsRoom;
+            if (!wanted.HasValue) return false;
+
+            var rooms = ctx.layout.rooms;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (room.role != wanted.Value) continue;
+                if (room.furnitureQueued && ShellComplete(ctx.map, room)) return false;
+                return true;
+            }
+            return false;   // not reserved yet, which is what reserving one is for
         }
 
         // ------------------------------------------------------------ siting
