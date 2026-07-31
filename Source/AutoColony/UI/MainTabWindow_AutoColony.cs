@@ -82,6 +82,15 @@ namespace AutoColony.UI
                 return;
             }
 
+            if (settings.controlTime)
+            {
+                Text.Font = GameFont.Tiny;
+                listing.Label("Time control: " + TimeControl.LastAction +
+                              "  ·  " + TimeControl.ResumesPerformed + " pauses undone, " +
+                              TimeControl.DialogsDismissed + " popups dismissed");
+                Text.Font = GameFont.Small;
+            }
+
             if (TrainingSession.Active)
             {
                 GUI.color = AcceptedColor;

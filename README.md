@@ -80,6 +80,28 @@ four evaluations, so with clean scores it *loses* to plain sequential search. It
 when noise is what is holding the search back. The game visibly reloads between trials, so it
 is off by default and refuses to run in permadeath.
 
+## Keeping the game running
+
+RimWorld pauses for events it thinks you should see — a research project finishing, a raid
+landing. A paused game issues no ticks, so an autonomous director stalls there indefinitely.
+
+This is subtler than it looks. `GameComponentTick` does not run while paused, so a director
+that only acted on ticks *could never unpause itself*. Time control therefore runs on
+`GameComponentUpdate`, which fires every frame regardless — the only place a pause can be
+both observed and undone.
+
+Two different things stall the game and need different handling. A time speed of `Paused` is
+fixed by setting it back. A modal popup sets `TickManager.ForcePaused`, where setting the
+speed does nothing at all until the window is closed.
+
+Both are undone after a short delay rather than instantly, so letters stay readable. Only
+event popups are ever closed, and while the options screen or any mod's settings are open the
+mod does not touch anything — that is taken as a sign you are driving.
+
+It deliberately does **not** change `Prefs.AutomaticPauseMode` or `Prefs.PauseOnLoad`. Those
+are persistent player settings; a mod that rewrites them leaves your game altered if it is
+ever removed. Correcting the speed after the fact leaves nothing behind.
+
 **Learning from you.** While automation is off, the mod watches how you run the colony — how
 widely and how urgently you assign each work type, what stock levels you hold, how many beds
 you put in a room, what you grow and research — and fits a strategy to it. Hand the colony

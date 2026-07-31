@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AutoColony.Learning;
 using RimWorld;
 using UnityEngine;
@@ -41,6 +42,41 @@ namespace AutoColony
             listing.CheckboxLabeled("Carry learning between colonies", ref Settings.shareAcrossSaves,
                 "Stores the best strategy found in a file alongside your saves, and seeds new " +
                 "colonies from it. This is what lets the mod improve over many playthroughs.");
+
+            listing.Gap(10f);
+            listing.Label("Time");
+            Text.Font = GameFont.Tiny;
+            listing.Label(
+                "RimWorld pauses for events it thinks you should see — a finished research " +
+                "project, a raid arriving. A paused game stops ticking, so the director stalls " +
+                "until something unpauses it.");
+            Text.Font = GameFont.Small;
+
+            listing.CheckboxLabeled("Keep the game running", ref Settings.controlTime,
+                "Undoes event pauses after a short delay so the colony keeps going unattended.");
+
+            if (Settings.controlTime)
+            {
+                string[] speedNames = { "Normal", "Fast", "Superfast", "Ultrafast (dev mode)" };
+                int speed = Mathf.Clamp(Settings.maxSpeed, 0, 3);
+                if (listing.ButtonTextLabeled("Run at", speedNames[speed]))
+                {
+                    var options = new List<FloatMenuOption>();
+                    for (int i = 0; i < speedNames.Length; i++)
+                    {
+                        int choice = i;
+                        options.Add(new FloatMenuOption(speedNames[i], () => Settings.maxSpeed = choice));
+                    }
+                    Find.WindowStack.Add(new FloatMenu(options));
+                }
+
+                listing.CheckboxLabeled("Dismiss event popups", ref Settings.dismissPauseDialogs,
+                    "A popup blocks the game entirely, so speed alone cannot get past one. " +
+                    "Only event popups are closed — the options and mod settings screens are " +
+                    "left alone, and while either is open nothing is touched at all.");
+            }
+
+            listing.Gap(10f);
 
             listing.CheckboxLabeled("Learn from how you play", ref Settings.learnFromPlayer,
                 "While automation is off, watches how you assign work, what you stockpile and " +

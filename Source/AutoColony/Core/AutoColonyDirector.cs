@@ -118,6 +118,7 @@ namespace AutoColony
         public override void LoadedGame()
         {
             EnsureModules();
+            TimeControl.Reset();
             // A load may be the game coming back up mid-training round; re-apply the seed so
             // this trial sees the same world as its siblings.
             TrainingSession.OnGameLoaded();
@@ -129,6 +130,16 @@ namespace AutoColony
         }
 
         // ---------------------------------------------------------------- main loop
+
+        /// <summary>
+        /// Runs every frame, including while the game is paused — which is precisely why time
+        /// control lives here. A paused game issues no ticks, so a director that only acted in
+        /// <see cref="GameComponentTick"/> could never undo a pause it did not choose.
+        /// </summary>
+        public override void GameComponentUpdate()
+        {
+            TimeControl.Update();
+        }
 
         public override void GameComponentTick()
         {
