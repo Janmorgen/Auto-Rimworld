@@ -61,6 +61,14 @@ namespace AutoColony
         ColonyState lastState;
         ColonyMetrics lastMetrics = ColonyMetrics.Neutral();
         int lastStateTick = -999999;
+        int lastVitalsTick = -999999;
+
+        /// <summary>
+        /// Last known condition of each colonist, so a disappearance can be reported with what
+        /// they looked like just before it. "X died" is far less useful than "X died at 14%
+        /// health while a fire was burning".
+        /// </summary>
+        readonly Dictionary<string, string> colonistVitals = new Dictionary<string, string>();
         List<ScoreTerm> lastBreakdown = new List<ScoreTerm>();
         readonly DirectorContext ctx = new DirectorContext();
 
@@ -79,6 +87,22 @@ namespace AutoColony
             {
                 var candidate = TrainingSession.CurrentCandidate;
                 return candidate ?? evolution.Active;
+            }
+        }
+
+        /// <summary>
+        /// Makes a module run on the next tick instead of waiting out its interval. For
+        /// emergencies that cannot wait for the round-robin to come around — a fire will not
+        /// pause while work priorities are three in-game hours from being reconsidered.
+        /// </summary>
+        public void ForceModuleDue(string moduleName)
+        {
+            EnsureModules();
+            for (int i = 0; i < modules.Count; i++)
+            {
+                if (modules[i].Name != moduleName) continue;
+                modules[i].lastRunTick = -999999;
+                return;
             }
         }
 
@@ -117,11 +141,13 @@ namespace AutoColony
         {
             EnsureModules();
             seeded = false;
+            Chronicle.BeginSession(ColonyName());
         }
 
         public override void LoadedGame()
         {
             EnsureModules();
+            Chronicle.BeginSession(ColonyName());
             TimeControl.NotifyGameLoaded();
             // A load may be the game coming back up mid-training round; re-apply the seed so
             // this trial sees the same world as its siblings.
@@ -183,6 +209,13 @@ namespace AutoColony
                 lastState = ColonyState.Capture(map);
                 lastMetrics = lastState.ToMetrics();
                 if (settings.masterEnabled) accumulator.Observe(lastMetrics);
+
+                TrackColonists(lastState);
+                if (tick - lastVitalsTick >= VitalsInterval)
+                {
+                    lastVitalsTick = tick;
+                    Chronicle.RecordVitals(lastMetrics);
+                }
             }
 
             if (lastState == null) return;
@@ -301,6 +334,10 @@ namespace AutoColony
                 evolution.epochIndex - 1, score, phaseBefore,
                 evolution.incumbentScore, evolution.sigma, evolution.Incumbent.generation));
 
+            Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                "epoch {0} scored {1:0.000} ({2}) — {3}",
+                evolution.epochIndex - 1, score, phaseBefore, DescribeBreakdown(breakdown)));
+
             ContributeToArchive();
 
             // With training on, the cycle alternates: one epoch played live so the colony
@@ -313,6 +350,86 @@ namespace AutoColony
             }
 
             BeginEpoch(tick);
+        }
+
+        static string ColonyName()
+        {
+            try
+            {
+                return Find.World != null && Find.World.info != null ? Find.World.info.name : "unknown";
+            }
+            catch (Exception) { return "unknown"; }
+        }
+
+        /// <summary>Renders the weakest scoring terms, which is what explains a bad epoch.</summary>
+        static string DescribeBreakdown(List<ScoreTerm> breakdown)
+        {
+            if (breakdown == null || breakdown.Count == 0) return "no breakdown";
+            var sorted = new List<ScoreTerm>(breakdown);
+            sorted.Sort((a, b) => a.raw.CompareTo(b.raw));
+
+            var sb = new System.Text.StringBuilder("weakest: ");
+            int n = Math.Min(3, sorted.Count);
+            for (int i = 0; i < n; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(sorted[i].name).Append(' ').Append(sorted[i].raw.ToString("0.00"));
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>Colony vitals are written to the chronicle every two in-game hours.</summary>
+        const int VitalsInterval = GenDate.TicksPerHour * 2;
+
+        /// <summary>
+        /// Notices colonists arriving and, more importantly, leaving.
+        ///
+        /// A name vanishing from the roster is a death or a departure, and the chronicle wants
+        /// it with the condition that preceded it — recorded here because by the time anyone
+        /// reads the log the pawn is long gone and unqueryable.
+        /// </summary>
+        void TrackColonists(ColonyState state)
+        {
+            var seen = new HashSet<string>();
+
+            for (int i = 0; i < state.allColonists.Count; i++)
+            {
+                var pawn = state.allColonists[i];
+                if (pawn == null) continue;
+
+                string id = pawn.ThingID;
+                seen.Add(id);
+
+                float health = pawn.health != null && pawn.health.summaryHealth != null
+                    ? pawn.health.summaryHealth.SummaryHealthPercent
+                    : 1f;
+                float mood = pawn.needs != null && pawn.needs.mood != null ? pawn.needs.mood.CurLevel : -1f;
+
+                string summary = string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "{0} (health {1:0.00}{2}{3})",
+                    pawn.LabelShort, health,
+                    mood >= 0f ? ", mood " + mood.ToString("0.00") : "",
+                    pawn.Downed ? ", downed" : "");
+
+                if (!colonistVitals.ContainsKey(id))
+                    Chronicle.Record(ChronicleCategory.Health, "joined: " + summary);
+
+                colonistVitals[id] = summary;
+            }
+
+            if (colonistVitals.Count == seen.Count) return;
+
+            var gone = new List<string>();
+            foreach (var kv in colonistVitals)
+                if (!seen.Contains(kv.Key)) gone.Add(kv.Key);
+
+            for (int i = 0; i < gone.Count; i++)
+            {
+                Chronicle.Record(ChronicleCategory.Death,
+                    "lost from roster — last seen as " + colonistVitals[gone[i]]);
+                colonistVitals.Remove(gone[i]);
+            }
         }
 
         /// <summary>
@@ -337,6 +454,9 @@ namespace AutoColony
 
             AcLog.Message("Colony lost on day " + lastMetrics.day + ". Strategy scored " +
                           score.ToString("0.000") + "; recorded so the search learns from it.");
+            Chronicle.Record(ChronicleCategory.Death, "COLONY LOST — no colonists remain. Final score " +
+                             score.ToString("0.000") + " — " + DescribeBreakdown(breakdown));
+            Chronicle.Flush();
 
             if (TrainingSession.Active)
             {
@@ -497,6 +617,8 @@ namespace AutoColony
 
         public override void ExposeData()
         {
+            if (Scribe.mode == LoadSaveMode.Saving) Chronicle.Flush();
+
             Scribe_Deep.Look(ref evolution, "evolution");
             Scribe_Deep.Look(ref accumulator, "accumulator");
             Scribe_Deep.Look(ref epochStart, "epochStart");

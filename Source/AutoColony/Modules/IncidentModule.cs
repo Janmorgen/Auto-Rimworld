@@ -109,6 +109,8 @@ namespace AutoColony.Modules
                 if (chosen.action != null) chosen.action();
                 Find.LetterStack.RemoveLetter(letter);
                 AcLog.Verbose("Answered '" + letter.Label + "' with '" + OptionText(chosen) + "'");
+                Chronicle.Record(ChronicleCategory.Incident,
+                    "answered '" + letter.Label + "' with '" + OptionText(chosen) + "'");
                 return true;
             }
             catch (Exception e)

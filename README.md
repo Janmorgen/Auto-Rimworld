@@ -206,6 +206,28 @@ it to actually improve on them in reasonable wall-clock time.
   mutations happened to occur, perturbing every later world roll relative to an unmodded game
   and making two runs from the same save incomparable — which the trial harness depends on.
 
+## The event record
+
+Colony failures are almost never one thing. A raider arrives, nobody is drafted, a fire
+starts, the fire is not fought, the survivors are short of food, and the response to being
+short of food kills the rest. Reading only the end state invites blaming whichever cause is
+most visible — a frozen corpse says "cold" and says nothing about the raider an hour earlier.
+
+So the director keeps a chronicle at `<save folder>/AutoColony/chronicle.log`: events in
+order, with colony vitals interleaved every two in-game hours, surviving the session. Reading
+backwards from a death gives the chain rather than the last link.
+
+```
+day 0 00h  HUNT     0.0 days of food - hunting Hare (33) x2, Emu (70) x2, Boomalope (80) x3;
+                    too dangerous: Rhinoceros (270), Cougar (120)
+day 0 02h  INCIDENT answered 'Inspired surgery: Rabbit' with 'close'
+day 0 08h  VITALS   colonists 3 (down 0, breaking 0)  mood 0.74  health 1.00  food 8.6d
+```
+
+Threats, fires and deaths are written through immediately rather than buffered, since those
+are exactly the entries a crash would otherwise take with it. The last entries are also shown
+in the auto-colony tab.
+
 ## Known limits
 
 - **The search is sample-starved.** ~50 genes against tens of epochs per playthrough. The

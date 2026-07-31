@@ -56,6 +56,9 @@ namespace AutoColony.UI
             listing.GapLine(12f);
 
             DrawStrategy(listing, director);
+            listing.GapLine(12f);
+
+            DrawChronicle(listing);
 
             listing.End();
             Widgets.EndScrollView();
@@ -303,6 +306,30 @@ namespace AutoColony.UI
             DrawTopArms(listing, director, Modules.ResearchModule.BanditId, "Best-rated research");
             DrawTopArms(listing, director, Modules.BasePlannerModule.BanditId, "Best-rated rooms");
             DrawTopArms(listing, director, Modules.ZoneModule.BanditId, "Best-rated crops");
+        }
+
+        /// <summary>
+        /// The tail of the event record. A colony failure is a chain, and the last dozen
+        /// entries are usually enough to see which link gave way.
+        /// </summary>
+        static void DrawChronicle(Listing_Standard listing)
+        {
+            Text.Font = GameFont.Medium;
+            listing.Label("Recent events");
+            Text.Font = GameFont.Small;
+
+            var entries = Chronicle.Recent;
+            if (entries == null || entries.Count == 0)
+            {
+                listing.Label("Nothing recorded yet.");
+                return;
+            }
+
+            Text.Font = GameFont.Tiny;
+            listing.Label(Chronicle.RenderRecent(18));
+            var path = Chronicle.FilePath;
+            if (!string.IsNullOrEmpty(path)) listing.Label("Full record: " + path);
+            Text.Font = GameFont.Small;
         }
 
         static void DrawTopArms(Listing_Standard listing, AutoColonyDirector director, string banditId, string title)

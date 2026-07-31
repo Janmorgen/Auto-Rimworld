@@ -38,6 +38,12 @@ namespace AutoColony
         /// <summary>Close event popups that hold the game paused (research completed, and similar).</summary>
         public bool dismissPauseDialogs = true;
 
+        /// <summary>
+        /// Keep a chronological record of events and colony vitals in a file, so a failure can
+        /// be traced afterwards. Colony deaths are usually a chain, not a single cause.
+        /// </summary>
+        public bool keepChronicle = true;
+
         public bool verboseLogging;
 
         /// <summary>Names of modules the player has switched off.</summary>
@@ -67,6 +73,7 @@ namespace AutoColony
             Scribe_Values.Look(ref controlTime, "controlTime", true);
             Scribe_Values.Look(ref maxSpeed, "maxSpeed", 2);
             Scribe_Values.Look(ref dismissPauseDialogs, "dismissPauseDialogs", true);
+            Scribe_Values.Look(ref keepChronicle, "keepChronicle", true);
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Collections.Look(ref disabledModules, "disabledModules", LookMode.Value);
             if (disabledModules == null) disabledModules = new List<string>();

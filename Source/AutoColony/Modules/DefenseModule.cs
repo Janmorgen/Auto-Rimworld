@@ -34,6 +34,11 @@ namespace AutoColony.Modules
 
         protected override void Act(DirectorContext ctx)
         {
+            // Fire first, and before anything else. It spreads far faster than the work
+            // scheduler reconsiders priorities, and an unattended fire will take a base apart
+            // while the director is still deciding who should be hauling.
+            if (ctx.state.fires > 0) HandleFires(ctx);
+
             if (ThreatActive(ctx))
             {
                 HandleThreat(ctx);
@@ -41,6 +46,11 @@ namespace AutoColony.Modules
             }
 
             StandDown(ctx);
+            if (ctx.state.fires == 0 && firefightingUnderway)
+            {
+                firefightingUnderway = false;
+                Chronicle.Record(ChronicleCategory.Fire, "fires are out");
+            }
 
             if (++quietPasses >= FortifyEveryNPasses)
             {
@@ -49,16 +59,89 @@ namespace AutoColony.Modules
             }
         }
 
+        /// <summary>
+        /// Whether to take manual control against hostiles on the map.
+        ///
+        /// A single raider registers as <see cref="StoryDanger.Low"/>, and this used to ignore
+        /// Low outright at the default setting. That is how a lone raider walked into a colony,
+        /// set it on fire and killed most of it while the director stood by: low danger to the
+        /// storyteller is not low danger to a wooden base. Any hostile now draws a response
+        /// unless the strategy has been tuned never to draft.
+        /// </summary>
         bool ThreatActive(DirectorContext ctx)
         {
-            var danger = ctx.state.danger;
-            if (danger == StoryDanger.None) return false;
+            if (ctx.state.hostilePawns <= 0) return false;
 
-            // 0 = never draft, 1 = only for serious raids, 2 = react to anything.
-            float threshold = ctx.Gene(Genes.DefenseDraftDanger);
-            if (threshold < 0.5f) return false;
-            if (danger == StoryDanger.Low && threshold < 1.5f) return false;
-            return ctx.state.hostilePawns > 0;
+            float willingness = ctx.Gene(Genes.DefenseDraftDanger);
+            if (willingness < 0.5f) return false;   // a strategy that never takes control
+            if (willingness >= 1.5f) return true;   // answer anything hostile, anywhere
+
+            // The middle band answers what the storyteller calls serious, and anything that
+            // has actually reached the colony — which is what matters for arson.
+            return ctx.state.danger == StoryDanger.High || HostilesNearBase(ctx);
+        }
+
+        static bool HostilesNearBase(DirectorContext ctx)
+        {
+            var origin = ctx.layout != null && ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
+            const int NearSq = 45 * 45;
+
+            var pawns = ctx.map.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                var p = pawns[i];
+                if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
+                if ((p.Position - origin).LengthHorizontalSquared <= NearSq) return true;
+            }
+            return false;
+        }
+
+        // ------------------------------------------------------------ fire
+
+        bool firefightingUnderway;
+
+        /// <summary>
+        /// Gets colonists onto a fire.
+        ///
+        /// Two things stop them by default. Colonists only fight fires inside the home area,
+        /// so a fire started at the edge of a base — or by a raider outside it — burns
+        /// unopposed; the home area is extended to cover it. And work priorities are only
+        /// reconsidered every few in-game hours, which is far too slow, so the work module is
+        /// pushed to re-run immediately rather than waiting for its turn.
+        /// </summary>
+        void HandleFires(DirectorContext ctx)
+        {
+            var map = ctx.map;
+            var fireDef = AcDefs.Fire;
+            if (fireDef == null) return;
+
+            var home = map.areaManager.Home;
+            var fires = map.listerThings.ThingsOfDef(fireDef);
+            int claimed = 0;
+
+            for (int i = 0; i < fires.Count && claimed < 200; i++)
+            {
+                var fire = fires[i];
+                if (fire == null || !fire.Spawned) continue;
+
+                // Claim the fire and a ring around it, so the whole burning front is inside
+                // the area colonists are willing to work in.
+                foreach (var cell in GenRadial.RadialCellsAround(fire.Position, 4f, true))
+                {
+                    if (!cell.InBounds(map)) continue;
+                    if (home != null && !home[cell]) { home[cell] = true; claimed++; }
+                }
+            }
+
+            if (!firefightingUnderway)
+            {
+                firefightingUnderway = true;
+                ctx.director.ForceModuleDue("Work priorities");
+                Note("fire detected — claimed " + claimed + " cells and re-prioritised work");
+                Chronicle.Record(ChronicleCategory.Fire, string.Format(
+                    "{0} fires burning; claimed {1} cells into the home area and forced a work re-prioritisation",
+                    ctx.state.fires, claimed));
+            }
         }
 
         // ------------------------------------------------------------ combat
@@ -97,7 +180,13 @@ namespace AutoColony.Modules
                 SendToRally(pawn, rally, ctx.map);
             }
 
-            if (mobilised > 0) Note("drafted " + mobilised + " colonists against a threat");
+            if (mobilised > 0)
+            {
+                Note("drafted " + mobilised + " colonists against a threat");
+                Chronicle.Record(ChronicleCategory.Threat, string.Format(
+                    "{0} hostiles present (danger {1}); drafted {2} colonists to {3}",
+                    ctx.state.hostilePawns, ctx.state.danger, mobilised, rally));
+            }
         }
 
         static void SendToRally(Pawn pawn, IntVec3 rally, Map map)
@@ -126,6 +215,7 @@ namespace AutoColony.Modules
             }
 
             Note("stood down " + drafted.Count + " colonists");
+            Chronicle.Record(ChronicleCategory.Threat, "threat over; stood down " + drafted.Count + " colonists");
             drafted.Clear();
         }
 

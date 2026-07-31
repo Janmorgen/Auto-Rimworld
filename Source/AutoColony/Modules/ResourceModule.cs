@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AutoColony.Learning;
 using RimWorld;
 using Verse;
@@ -149,6 +150,9 @@ namespace AutoColony.Modules
             int budget = (int)(8 * effective) + 1;
             int done = 0;
 
+            taken.Clear();
+            declined.Clear();
+
             var pawns = map.mapPawns.AllPawnsSpawned;
             for (int i = 0; i < pawns.Count && done < budget; i++)
             {
@@ -158,17 +162,94 @@ namespace AutoColony.Modules
                 if (animal.RaceProps.foodType == FoodTypeFlags.None) continue;
                 if (map.designationManager.DesignationOn(animal, des) != null) continue;
                 if ((animal.Position - origin).LengthHorizontalSquared > radiusSq) continue;
-
-                // Dangerous game is a last resort, not a permanent no.
-                bool dangerous = animal.RaceProps.manhunterOnDamageChance > 0.25f;
-                if (dangerous && effective < 0.7f) continue;
+                if (TooDangerousToHunt(animal, ctx, effective))
+                {
+                    Tally(declined, animal);
+                    continue;
+                }
 
                 map.designationManager.AddDesignation(new Designation(animal, des));
+                Tally(taken, animal);
                 done++;
+            }
+
+            // One line per pass rather than one per animal. The same elephant gets refused on
+            // every sweep, and a log that repeats itself is a log nobody can read.
+            if (taken.Count > 0 || declined.Count > 0)
+            {
+                Chronicle.Record(ChronicleCategory.Hunt, string.Format(
+                    "{0:0.0} days of food — hunting {1}{2}",
+                    daysOfFood,
+                    taken.Count > 0 ? Describe(taken) : "nothing",
+                    declined.Count > 0 ? "; too dangerous: " + Describe(declined) : ""));
             }
 
             return done;
         }
+
+        readonly Dictionary<string, int> taken = new Dictionary<string, int>();
+        readonly Dictionary<string, int> declined = new Dictionary<string, int>();
+
+        static void Tally(Dictionary<string, int> into, Pawn animal)
+        {
+            string key = animal.kindDef != null
+                ? animal.LabelShortCap + " (" + animal.kindDef.combatPower.ToString("0") + ")"
+                : animal.LabelShortCap;
+            int n;
+            into.TryGetValue(key, out n);
+            into[key] = n + 1;
+        }
+
+        static string Describe(Dictionary<string, int> tally)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var kv in tally)
+            {
+                if (sb.Length > 0) sb.Append(", ");
+                sb.Append(kv.Key);
+                if (kv.Value > 1) sb.Append(" x").Append(kv.Value);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Whether an animal would win the fight.
+        ///
+        /// Judging danger by manhunter chance alone is not enough and got colonists killed: a
+        /// thrumbo reads much like a deer by that measure, then kills whoever shot it. Combat
+        /// power is what actually separates a rabbit from something that fights back and wins,
+        /// and it has to be weighed against how many colonists are standing — a starving pair
+        /// must not answer their hunger by picking a fight they cannot survive.
+        /// </summary>
+        static bool TooDangerousToHunt(Pawn animal, DirectorContext ctx, float aggression)
+        {
+            var race = animal.RaceProps;
+            bool fightsBack = race.predator || race.manhunterOnDamageChance > 0.05f;
+            if (!fightsBack) return false;
+
+            float animalPower = animal.kindDef != null ? animal.kindDef.combatPower : 0f;
+            if (animalPower <= 0f) return false;
+
+            // Rough strength of everyone who could actually shoot back.
+            int shooters = 0;
+            for (int i = 0; i < ctx.state.ableColonists.Count; i++)
+                if (!ctx.state.ableColonists[i].WorkTagIsDisabled(WorkTags.Violent)) shooters++;
+
+            float colonyPower = shooters * PowerPerColonist;
+            float allowed = colonyPower * (0.20f + 0.30f * aggression);
+
+            // Nothing above this is ever worth it, however desperate things get; the animals
+            // that clear it are the ones that end colonies rather than feeding them.
+            if (animalPower > HardDangerCeiling) return true;
+
+            return animalPower > allowed;
+        }
+
+        /// <summary>Nominal combat power of one armed colonist, for comparison purposes.</summary>
+        const float PowerPerColonist = 60f;
+
+        /// <summary>Combat power past which an animal is never a hunting target.</summary>
+        const float HardDangerCeiling = 250f;
 
         static float Clamp01(float v)
         {
