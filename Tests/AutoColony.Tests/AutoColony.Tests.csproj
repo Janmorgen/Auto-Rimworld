@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>AutoColony.Tests</AssemblyName>
+    <RootNamespace>AutoColony.Tests</RootNamespace>
+    <!-- The mod sources target an older idiom; don't fail the test build over style. -->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <!--
+    Compile the real production sources rather than a copy. Only files whose sole game
+    dependency is the shimmed Verse surface can be listed here; anything touching Map,
+    Pawn or Def stays out of the test assembly by construction.
+  -->
+  <ItemGroup>
+    <Compile Include="../../Source/AutoColony/Learning/Genes.cs" Link="Production/Genes.cs" />
+    <Compile Include="../../Source/AutoColony/Learning/AcRandom.cs" Link="Production/AcRandom.cs" />
+    <Compile Include="../../Source/AutoColony/Learning/StrategyGenome.cs" Link="Production/StrategyGenome.cs" />
+    <Compile Include="../../Source/AutoColony/Learning/Bandit.cs" Link="Production/Bandit.cs" />
+    <Compile Include="../../Source/AutoColony/Learning/EvolutionEngine.cs" Link="Production/EvolutionEngine.cs" />
+    <Compile Include="../../Source/AutoColony/Learning/StrategyArchive.cs" Link="Production/StrategyArchive.cs" />
+    <Compile Include="../../Source/AutoColony/Learning/PlayerModel.cs" Link="Production/PlayerModel.cs" />
+    <Compile Include="../../Source/AutoColony/Core/AcLog.cs" Link="Production/AcLog.cs" />
+    <Compile Include="../../Source/AutoColony/Core/ColonyMetrics.cs" Link="Production/ColonyMetrics.cs" />
+    <Compile Include="../../Source/AutoColony/Core/ColonyEvaluator.cs" Link="Production/ColonyEvaluator.cs" />
+  </ItemGroup>
+
+</Project>

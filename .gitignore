@@ -10,3 +10,7 @@ Assemblies/*.pdb
 .vs/
 .idea/
 *.user
+
+# Test build output
+Tests/**/bin/
+Tests/**/obj/

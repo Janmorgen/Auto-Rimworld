@@ -65,18 +65,18 @@ namespace AutoColony.Learning
         /// (<paramref name="mutationRate"/>) so that a scored epoch reflects a small,
         /// attributable change rather than an entirely different strategy.
         /// </summary>
-        public StrategyGenome Mutate(float sigma, float mutationRate)
+        public StrategyGenome Mutate(AcRandom rng, float sigma, float mutationRate)
         {
             var child = Clone();
             var specs = Genes.All;
-            if (specs.Count == 0) return child;
+            if (specs.Count == 0 || rng == null) return child;
 
             bool mutatedAny = false;
             for (int i = 0; i < specs.Count; i++)
             {
-                if (Rand.Value > mutationRate) continue;
+                if (rng.Value > mutationRate) continue;
                 var spec = specs[i];
-                float delta = (float)Gaussian() * sigma * spec.Range;
+                float delta = (float)rng.Gaussian() * sigma * spec.Range;
                 child.Set(spec.Key, spec.Clamp(Get(spec.Key) + delta));
                 mutatedAny = true;
             }
@@ -84,22 +84,13 @@ namespace AutoColony.Learning
             // Guarantee the child actually differs, otherwise the epoch is wasted.
             if (!mutatedAny)
             {
-                var spec = specs[Rand.Range(0, specs.Count)];
-                child.Set(spec.Key, spec.Clamp(Get(spec.Key) + (float)Gaussian() * sigma * spec.Range));
+                var spec = specs[rng.Range(0, specs.Count)];
+                child.Set(spec.Key, spec.Clamp(Get(spec.Key) + (float)rng.Gaussian() * sigma * spec.Range));
             }
 
             child.generation = generation + 1;
             child.lineage = "mutant g" + child.generation;
             return child;
-        }
-
-        /// <summary>Standard normal sample via Box-Muller, driven by RimWorld's RNG.</summary>
-        static double Gaussian()
-        {
-            double u1 = 1.0 - Rand.Value;
-            double u2 = 1.0 - Rand.Value;
-            if (u1 < 1e-9) u1 = 1e-9;
-            return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
         }
 
         static int Mathf_RoundToInt(float f)

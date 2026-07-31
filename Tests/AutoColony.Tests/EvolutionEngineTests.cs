@@ -1,0 +1,226 @@
+using AutoColony.Learning;
+using Xunit;
+
+namespace AutoColony.Tests
+{
+    /// <summary>
+    /// Validates the search itself, independent of RimWorld.
+    ///
+    /// In-game an epoch costs roughly an hour of real time, so the optimiser can never be
+    /// meaningfully exercised there. Running it against a synthetic landscape with a known
+    /// optimum is what actually establishes that the search works — if it cannot climb a
+    /// noiseless hill in a few hundred epochs, no amount of colony data will save it.
+    /// </summary>
+    public class EvolutionEngineTests
+    {
+        /// <summary>Fitness = 1 at the target genome, falling off with mean gene distance.</summary>
+        static float Fitness(StrategyGenome candidate, StrategyGenome target)
+        {
+            return 1f - candidate.DistanceTo(target);
+        }
+
+        static StrategyGenome TargetAt(float fractionOfRange)
+        {
+            var target = new StrategyGenome();
+            foreach (var spec in Genes.All)
+                target.Set(spec.Key, spec.Min + spec.Range * fractionOfRange);
+            return target;
+        }
+
+        [Fact]
+        public void ClimbsTowardTheOptimumOnANoiselessLandscape()
+        {
+            var target = TargetAt(0.75f);
+            var engine = new EvolutionEngine();
+
+            float startDistance = engine.Incumbent.DistanceTo(target);
+
+            for (int epoch = 0; epoch < 400; epoch++)
+                engine.OnEpochComplete(Fitness(engine.Active, target), epoch);
+
+            float endDistance = engine.Incumbent.DistanceTo(target);
+
+            Assert.True(endDistance < startDistance * 0.5f,
+                "expected the search to at least halve the distance to the optimum; " +
+                "start=" + startDistance + " end=" + endDistance);
+        }
+
+        /// <summary>Mean final distance to the optimum over several independent sequential runs.</summary>
+        static float SequentialRun(float noiseSigma, int runs = 8, int epochs = 600)
+        {
+            float total = 0f;
+            for (int run = 0; run < runs; run++)
+            {
+                var target = TargetAt(0.25f);
+                var engine = new EvolutionEngine();
+                var noise = new AcRandom((ulong)(1000 + run));
+
+                for (int epoch = 0; epoch < epochs; epoch++)
+                {
+                    float noisy = Fitness(engine.Active, target) + (float)noise.Gaussian() * noiseSigma;
+                    engine.OnEpochComplete(noisy, epoch);
+                }
+                total += engine.Incumbent.DistanceTo(target);
+            }
+            return total / runs;
+        }
+
+        /// <summary>
+        /// Mean final distance using paired trials: every candidate in a round is scored
+        /// against an identical world, so the large shared component of the noise is the same
+        /// for all of them and cancels out of the comparison.
+        /// </summary>
+        static float PairedRun(float noiseSigma, int lambda, int runs = 8, int epochs = 600)
+        {
+            float total = 0f;
+            for (int run = 0; run < runs; run++)
+            {
+                var target = TargetAt(0.25f);
+                var engine = new EvolutionEngine();
+                var noise = new AcRandom((ulong)(2000 + run));
+
+                int used = 0;
+                while (used < epochs)
+                {
+                    var candidates = engine.SpawnCandidates(lambda);
+                    float shared = (float)noise.Gaussian() * noiseSigma;
+
+                    float bestScore = float.NegativeInfinity;
+                    StrategyGenome best = null;
+                    foreach (var c in candidates)
+                    {
+                        // Only the part of the noise that does not repeat on an identical seed.
+                        float residual = (float)noise.Gaussian() * noiseSigma * 0.15f;
+                        float score = Fitness(c, target) + shared + residual;
+                        if (score > bestScore) { bestScore = score; best = c; }
+                        used++;
+                    }
+                    engine.AdoptWinner(best, bestScore, used);
+                }
+                total += engine.Incumbent.DistanceTo(target);
+            }
+            return total / runs;
+        }
+
+        [Fact]
+        public void LearnsWhenNoiseIsSmallRelativeToSignal()
+        {
+            // The acceptance margin makes the sequential search conservative, but it must not
+            // block progress outright when the signal is genuinely visible.
+            var start = StartDistance();
+            float end = SequentialRun(0.001f);
+
+            Assert.True(end < start * 0.9f,
+                "sequential search should climb when noise is small; start=" + start + " end=" + end);
+        }
+
+        [Fact]
+        public void DoesNotDegradeWhenNoiseSwampsTheSignal()
+        {
+            // A single colony epoch is one noisy sample, and roughly half of all promotions
+            // would be luck. Without the acceptance margin the incumbent random-walks and
+            // actively drifts away from the optimum; this pins that it no longer does.
+            var start = StartDistance();
+            float end = SequentialRun(0.02f);
+
+            Assert.True(end <= start * 1.05f,
+                "search went backwards under noise; start=" + start + " end=" + end);
+        }
+
+        [Fact]
+        public void PairedTrialsBeatSequentialSearchUnderRealisticNoise()
+        {
+            // The justification for the trial harness. At the full production gene count the
+            // sequential search is flat at this noise level, while paired trials still make
+            // ground — they spend evaluations to cancel shared world luck out of the comparison.
+            var start = StartDistance();
+            float sequential = SequentialRun(0.02f);
+            float paired = PairedRun(0.02f, 4);
+
+            Assert.True(paired < start * 0.95f,
+                "paired trials should still improve at this noise level; start=" + start + " paired=" + paired);
+            Assert.True(paired < sequential * 0.95f,
+                "paired trials should beat sequential; paired=" + paired + " sequential=" + sequential);
+        }
+
+        [Fact]
+        public void PairedTrialsCostMoreThanTheyEarnWhenScoresAreClean()
+        {
+            // Worth pinning so nobody enables training mode expecting a free win: a round of
+            // four candidates buys one generation for four evaluations, which only pays off
+            // when noise is actually the thing holding the search back.
+            float sequential = SequentialRun(0f);
+            float paired = PairedRun(0f, 4);
+
+            Assert.True(sequential < paired,
+                "with no noise the extra evaluations are wasted; sequential=" + sequential + " paired=" + paired);
+        }
+
+        static float StartDistance()
+        {
+            return new EvolutionEngine().Incumbent.DistanceTo(TargetAt(0.25f));
+        }
+
+        [Fact]
+        public void StepSizeStaysWithinItsBounds()
+        {
+            var target = TargetAt(0.9f);
+            var engine = new EvolutionEngine();
+
+            for (int epoch = 0; epoch < 300; epoch++)
+            {
+                engine.OnEpochComplete(Fitness(engine.Active, target), epoch);
+                Assert.InRange(engine.sigma, 0.01f, 0.6f);
+            }
+        }
+
+        [Fact]
+        public void StepSizeContractsWhenNothingImproves()
+        {
+            var engine = new EvolutionEngine();
+            float initial = engine.sigma;
+
+            // A flat-zero landscape: no challenger can ever beat the incumbent.
+            for (int epoch = 0; epoch < 40; epoch++)
+                engine.OnEpochComplete(0f, epoch);
+
+            Assert.True(engine.sigma < initial,
+                "repeated failure should anneal the mutation step downward");
+        }
+
+        [Fact]
+        public void HistoryIsBounded()
+        {
+            var engine = new EvolutionEngine();
+            for (int epoch = 0; epoch < EvolutionEngine.MaxHistory * 3; epoch++)
+                engine.OnEpochComplete(0.5f, epoch);
+
+            Assert.True(engine.history.Count <= EvolutionEngine.MaxHistory);
+        }
+
+        [Fact]
+        public void SeedingMeasuresTheSeedBeforeMutatingAwayFromIt()
+        {
+            // A strategy loaded from the archive must be evaluated as-is first, otherwise its
+            // own untested mutant silently becomes the baseline.
+            var seed = TargetAt(0.6f);
+            var engine = new EvolutionEngine();
+
+            engine.SeedFrom(seed, float.NaN, 0.12f);
+
+            Assert.Equal(EpochPhase.IncumbentRecheck, engine.phase);
+            Assert.Equal(0f, engine.Active.DistanceTo(seed), 5);
+        }
+
+        [Fact]
+        public void FirstMeasurementBecomesTheBaseline()
+        {
+            var engine = new EvolutionEngine();
+            Assert.True(float.IsNaN(engine.incumbentScore));
+
+            engine.OnEpochComplete(0.42f, 0);
+
+            Assert.Equal(0.42f, engine.incumbentScore, 5);
+        }
+    }
+}

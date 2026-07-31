@@ -42,6 +42,37 @@ namespace AutoColony
                 "Stores the best strategy found in a file alongside your saves, and seeds new " +
                 "colonies from it. This is what lets the mod improve over many playthroughs.");
 
+            listing.CheckboxLabeled("Learn from how you play", ref Settings.learnFromPlayer,
+                "While automation is off, watches how you assign work, what you stockpile and " +
+                "how you build, and fits a starting strategy to it. When you hand the colony " +
+                "over it begins from your habits instead of from defaults.");
+
+            listing.Gap(10f);
+            listing.Label("Training mode");
+            Text.Font = GameFont.Tiny;
+            listing.Label(
+                "A colony score is far noisier than the difference between two decent strategies, " +
+                "so judging one strategy per epoch barely learns anything. Training mode snapshots " +
+                "the game and replays the same stretch of time once per candidate, so every " +
+                "candidate meets the same raids and weather and the comparison is about strategy " +
+                "rather than luck. The game visibly reloads between trials, and the colony only " +
+                "advances on alternate epochs.");
+            Text.Font = GameFont.Small;
+
+            listing.CheckboxLabeled("Run training rounds", ref Settings.trainingMode,
+                "Requires a non-permadeath save. Uses a dedicated save slot and never touches " +
+                "your own saves.");
+
+            if (Settings.trainingMode)
+            {
+                float candidates = Settings.trialCandidates;
+                candidates = listing.SliderLabeled(
+                    "Candidates per round: " + Settings.trialCandidates, candidates, 2f, 8f, 0.5f,
+                    "More candidates give a cleaner comparison but each round costs that many " +
+                    "replays of the same stretch of time.");
+                Settings.trialCandidates = Mathf.RoundToInt(candidates);
+            }
+
             listing.CheckboxLabeled("Verbose logging", ref Settings.verboseLogging,
                 "Logs every action the director takes. Useful for debugging, noisy otherwise.");
             AcLog.VerboseEnabled = Settings.verboseLogging;

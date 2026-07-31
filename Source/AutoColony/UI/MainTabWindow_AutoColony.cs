@@ -77,7 +77,17 @@ namespace AutoColony.UI
                 GUI.color = BadColor;
                 listing.Label("Paused — enable it in mod settings to hand the colony over.");
                 GUI.color = Color.white;
+
+                DrawObservationProgress(listing, director, settings);
                 return;
+            }
+
+            if (TrainingSession.Active)
+            {
+                GUI.color = AcceptedColor;
+                listing.Label("Training: " + TrainingSession.StatusLine +
+                              " — the game reloads between trials so every candidate faces the same world.");
+                GUI.color = Color.white;
             }
 
             var evo = director.evolution;
@@ -93,6 +103,43 @@ namespace AutoColony.UI
                     "Day {0} · {1} colonists · {2:0.0} days of food · wealth {3:N0} · {4}",
                     state.day, state.colonists, state.daysOfFood, state.wealthTotal,
                     state.danger == StoryDanger.None ? "no active threat" : state.danger + " danger"));
+            }
+        }
+
+        /// <summary>
+        /// Shown while automation is off: how far the mod has got towards a strategy fitted
+        /// to this player's own habits.
+        /// </summary>
+        static void DrawObservationProgress(Listing_Standard listing, AutoColonyDirector director,
+                                            AutoColonySettings settings)
+        {
+            if (settings == null || !settings.learnFromPlayer) return;
+
+            var model = director.playerModel;
+            if (model == null) return;
+
+            listing.Gap(8f);
+            listing.Label("Learning from how you play");
+
+            var row = listing.GetRect(22f);
+            Widgets.Label(new Rect(row.x, row.y, 130f, row.height), "Observations");
+            var bar = new Rect(row.x + 135f, row.y + 4f, row.width - 260f, 14f);
+            DrawBar(bar, model.Progress, model.IsUsable ? GoodColor : NeutralColor);
+
+            Text.Font = GameFont.Tiny;
+            Widgets.Label(new Rect(bar.xMax + 8f, row.y, 200f, row.height),
+                model.samples + " / " + PlayerModel.MinSamples);
+            Text.Font = GameFont.Small;
+
+            listing.Label(model.IsUsable
+                ? "Enough has been seen. Switching automation on will start from your habits rather than from defaults."
+                : "Still watching. One observation per in-game hour.");
+
+            if (model.IsUsable)
+            {
+                Text.Font = GameFont.Tiny;
+                listing.Label(model.ToGenome().Summarize(10));
+                Text.Font = GameFont.Small;
             }
         }
 
@@ -143,6 +190,15 @@ namespace AutoColony.UI
             listing.Label("Current best score: " + Fmt(evo.incumbentScore) +
                           "   (measured " + evo.incumbentSamples + "×)");
             listing.Label("Best ever: " + Fmt(evo.bestEverScore));
+
+            // How noisy the score is decides whether the search can see anything at all, so
+            // it is worth surfacing rather than hiding in the algorithm.
+            if (!float.IsNaN(evo.noiseEstimate))
+            {
+                listing.Label("Score noise: ±" + evo.noiseEstimate.ToString("0.000") +
+                              "   (a challenger must beat the incumbent by " +
+                              evo.AcceptanceMargin.ToString("0.000") + ")");
+            }
             listing.Label("Improvements accepted: " + evo.acceptedCount + " of " + evo.epochIndex + " epochs");
             listing.Label("Strategy generation: " + evo.Incumbent.generation);
 

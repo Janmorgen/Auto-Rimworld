@@ -63,12 +63,35 @@ namespace AutoColony.Learning
         public float mutationRate = 0.3f;
         public int recheckEvery = 3;
 
+        /// <summary>
+        /// Running estimate of how much a score varies between repeated measurements of the
+        /// *same* genome — i.e. pure noise. Measured from re-check epochs, which is the only
+        /// place two scores describe an identical strategy.
+        /// </summary>
+        public float noiseEstimate = float.NaN;
+
+        /// <summary>
+        /// How far a challenger must clear the incumbent, in units of estimated noise.
+        ///
+        /// Without this the search degrades rather than improves once noise approaches the
+        /// per-mutation signal: roughly half of all promotions are luck, so the incumbent
+        /// random-walks through gene space and drifts away from any optimum. Demanding a
+        /// margin trades a slower climb for not actively going backwards.
+        /// </summary>
+        public const float NoiseMarginFactor = 1.2f;
+
         public EpochPhase phase = EpochPhase.Challenger;
         public int epochIndex;
         public int epochsSinceRecheck;
         public int acceptedCount;
 
         public List<EpochRecord> history = new List<EpochRecord>();
+
+        // Own RNG rather than Verse.Rand: see AcRandom for why the learning layer must not
+        // draw from the game's global stream.
+        AcRandom rng = new AcRandom(0xC0FFEEUL);
+
+        public AcRandom Rng { get { return rng; } }
 
         const float SigmaMin = 0.01f;
         const float SigmaMax = 0.6f;
@@ -90,6 +113,52 @@ namespace AutoColony.Learning
         public StrategyGenome Incumbent { get { return incumbent; } }
         public StrategyGenome BestEver { get { return bestEver; } }
 
+        /// <summary>Score a challenger must exceed the incumbent by before it is promoted.</summary>
+        public float AcceptanceMargin
+        {
+            get { return float.IsNaN(noiseEstimate) ? 0f : noiseEstimate * NoiseMarginFactor; }
+        }
+
+        /// <summary>
+        /// Promotes a genome chosen by an external comparison — the paired trial harness,
+        /// where several candidates were scored against an identical world. Those scores are
+        /// directly comparable, so no noise margin applies.
+        /// </summary>
+        public void AdoptWinner(StrategyGenome winner, float score, int currentDay)
+        {
+            if (winner == null) return;
+
+            bool changed = winner.DistanceTo(incumbent) > 0f;
+            incumbent = winner.Clone();
+            incumbentScore = score;
+            incumbentSamples = 1;
+            if (changed) acceptedCount++;
+
+            if (float.IsNaN(bestEverScore) || score > bestEverScore)
+            {
+                bestEverScore = score;
+                bestEver = incumbent.Clone();
+            }
+
+            RecordHistory(score, changed, currentDay);
+            epochIndex++;
+
+            phase = EpochPhase.Challenger;
+            challenger = incumbent.Mutate(rng, sigma, mutationRate);
+        }
+
+        /// <summary>Produces a fresh batch of mutants for a paired trial round.</summary>
+        public List<StrategyGenome> SpawnCandidates(int count)
+        {
+            var list = new List<StrategyGenome>();
+            // The incumbent itself is always one candidate, so a round can never do worse
+            // than standing still.
+            list.Add(incumbent.Clone());
+            for (int i = 1; i < count; i++)
+                list.Add(incumbent.Mutate(rng, sigma, mutationRate));
+            return list;
+        }
+
         /// <summary>Seeds the search from a previously learned strategy (cross-save carryover).</summary>
         public void SeedFrom(StrategyGenome seed, float seedScore, float startSigma)
         {
@@ -101,7 +170,7 @@ namespace AutoColony.Learning
             // Prior scores came from a different colony; treat them as weak evidence.
             incumbentSamples = 1;
             sigma = AcMath.Clamp(startSigma, SigmaMin, SigmaMax);
-            challenger = incumbent.Mutate(sigma, mutationRate);
+            challenger = incumbent.Mutate(rng, sigma, mutationRate);
 
             // Measure the archived strategy itself before mutating away from it. Starting on a
             // challenger epoch would adopt that mutant as the baseline sight unseen and throw
@@ -127,7 +196,7 @@ namespace AutoColony.Learning
                     incumbentSamples = 1;
                     accepted = true;
                 }
-                else if (score > incumbentScore)
+                else if (score > incumbentScore + AcceptanceMargin)
                 {
                     incumbent = challenger.Clone();
                     incumbentScore = score;
@@ -143,6 +212,16 @@ namespace AutoColony.Learning
             }
             else
             {
+                // Two measurements of the same genome differ only by noise, so their gap is
+                // the cleanest estimate of noise available.
+                if (!float.IsNaN(incumbentScore))
+                {
+                    float deviation = Math.Abs(score - incumbentScore);
+                    noiseEstimate = float.IsNaN(noiseEstimate)
+                        ? deviation
+                        : noiseEstimate * 0.7f + deviation * 0.3f;
+                }
+
                 // Incumbent re-measured under current conditions: blend, don't replace outright.
                 incumbentSamples++;
                 float alpha = Math.Max(0.25f, 1f / incumbentSamples);
@@ -163,7 +242,14 @@ namespace AutoColony.Learning
             epochsSinceRecheck++;
 
             // Choose what to run next.
-            if (recheckEvery > 0 && epochsSinceRecheck >= recheckEvery)
+            //
+            // Always re-measure immediately after promoting a challenger. Its winning score is
+            // a single noisy observation, and a colony score is noisy enough that a lucky draw
+            // routinely beats a genuinely better strategy. Enshrining that inflated number as
+            // the bar is a ratchet: nothing can clear it afterwards, so the search freezes on
+            // whichever genome got lucky. A fresh measurement pulls the estimate back toward
+            // truth before the next challenger is judged against it.
+            if (accepted || (recheckEvery > 0 && epochsSinceRecheck >= recheckEvery))
             {
                 phase = EpochPhase.IncumbentRecheck;
                 epochsSinceRecheck = 0;
@@ -171,7 +257,7 @@ namespace AutoColony.Learning
             else
             {
                 phase = EpochPhase.Challenger;
-                challenger = incumbent.Mutate(sigma, mutationRate);
+                challenger = incumbent.Mutate(rng, sigma, mutationRate);
             }
         }
 
@@ -212,6 +298,7 @@ namespace AutoColony.Learning
             Scribe_Values.Look(ref bestEverScore, "bestEverScore", float.NaN);
             Scribe_Values.Look(ref incumbentSamples, "incumbentSamples", 0);
             Scribe_Values.Look(ref sigma, "sigma", 0.15f);
+            Scribe_Values.Look(ref noiseEstimate, "noiseEstimate", float.NaN);
             Scribe_Values.Look(ref mutationRate, "mutationRate", 0.3f);
             Scribe_Values.Look(ref recheckEvery, "recheckEvery", 3);
             Scribe_Values.Look(ref phase, "phase", EpochPhase.Challenger);
@@ -219,11 +306,13 @@ namespace AutoColony.Learning
             Scribe_Values.Look(ref epochsSinceRecheck, "epochsSinceRecheck", 0);
             Scribe_Values.Look(ref acceptedCount, "acceptedCount", 0);
             Scribe_Collections.Look(ref history, "history", LookMode.Deep);
+            Scribe_Deep.Look(ref rng, "rng");
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
             {
+                if (rng == null) rng = new AcRandom(0xC0FFEEUL);
                 if (incumbent == null) incumbent = StrategyGenome.Default();
-                if (challenger == null) challenger = incumbent.Mutate(sigma, mutationRate);
+                if (challenger == null) challenger = incumbent.Mutate(rng, sigma, mutationRate);
                 if (bestEver == null) bestEver = incumbent.Clone();
                 if (history == null) history = new List<EpochRecord>();
             }

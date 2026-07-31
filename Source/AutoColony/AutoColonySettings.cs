@@ -14,6 +14,18 @@ namespace AutoColony
         /// <summary>Carry learned strategies between colonies via the on-disk archive.</summary>
         public bool shareAcrossSaves = true;
 
+        /// <summary>
+        /// Repeatedly snapshot the game and replay the same stretch of time once per candidate
+        /// strategy. Learns far faster, but the game visibly reloads between trials.
+        /// </summary>
+        public bool trainingMode;
+
+        /// <summary>Candidate strategies per training round (the incumbent is always one).</summary>
+        public int trialCandidates = 4;
+
+        /// <summary>Fit a starting strategy by watching how the player runs the colony.</summary>
+        public bool learnFromPlayer = true;
+
         public bool verboseLogging;
 
         /// <summary>Names of modules the player has switched off.</summary>
@@ -37,6 +49,9 @@ namespace AutoColony
             Scribe_Values.Look(ref masterEnabled, "masterEnabled", true);
             Scribe_Values.Look(ref epochDays, "epochDays", 10);
             Scribe_Values.Look(ref shareAcrossSaves, "shareAcrossSaves", true);
+            Scribe_Values.Look(ref trainingMode, "trainingMode", false);
+            Scribe_Values.Look(ref trialCandidates, "trialCandidates", 4);
+            Scribe_Values.Look(ref learnFromPlayer, "learnFromPlayer", true);
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Collections.Look(ref disabledModules, "disabledModules", LookMode.Value);
             if (disabledModules == null) disabledModules = new List<string>();

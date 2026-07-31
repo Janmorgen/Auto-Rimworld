@@ -40,6 +40,10 @@ namespace AutoColony.Learning
         Dictionary<string, BanditArm> arms = new Dictionary<string, BanditArm>();
         float totalPulls;
 
+        // Own RNG rather than Verse.Rand: see AcRandom for why the learning layer must not
+        // draw from the game's global stream.
+        AcRandom rng = new AcRandom(0x5EEDB00CUL);
+
         public IEnumerable<BanditArm> Arms { get { return arms.Values; } }
 
         public BanditArm ArmFor(string key)
@@ -86,7 +90,7 @@ namespace AutoColony.Learning
                 {
                     // Reservoir tie-break so repeated equal scores don't always pick the first.
                     ties++;
-                    if (Rand.Range(0, ties) == 0) best = candidates[i];
+                    if (rng.Range(0, ties) == 0) best = candidates[i];
                 }
             }
             return best;
@@ -115,8 +119,11 @@ namespace AutoColony.Learning
         {
             Scribe_Collections.Look(ref arms, "arms", LookMode.Value, LookMode.Deep);
             Scribe_Values.Look(ref totalPulls, "totalPulls", 0f);
+            Scribe_Deep.Look(ref rng, "rng");
             if (Scribe.mode == LoadSaveMode.LoadingVars && arms == null)
                 arms = new Dictionary<string, BanditArm>();
+            if (Scribe.mode == LoadSaveMode.PostLoadInit && rng == null)
+                rng = new AcRandom(0x5EEDB00CUL);
         }
 
         public XElement ToXml(string name)

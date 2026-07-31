@@ -55,6 +55,38 @@ epoch re-measures that strategy under current conditions before mutating away fr
 is what makes the mod improve across playthroughs rather than relearning the same lessons in
 every colony.
 
+## The noise problem, and the two things that address it
+
+A colony's score is far noisier than the difference between two decent strategies. The
+offline tests measure this directly: at the production gene count the plain sequential search
+is already flat once score noise reaches ~0.02, and without a correction it actively
+*degrades* — roughly half of all promotions are luck, so the incumbent random-walks away from
+any optimum. Three mechanisms exist to deal with that.
+
+**An acceptance margin.** The engine estimates score noise from re-measurements of the same
+strategy — the only place two scores describe an identical genome — and requires a challenger
+to clear the incumbent by a multiple of it. This trades a slower climb for not going
+backwards.
+
+**Training mode (seed-locked paired trials).** Instead of averaging the noise away, remove it.
+Each round snapshots the game, then replays the same stretch of time once per candidate,
+reloading the snapshot and re-seeding RimWorld's RNG identically each time. Every candidate
+meets the same raids, weather and traders, so the shared luck that dominates a colony score
+cancels out of the comparison. Measured against the sequential search at the same noise level,
+this is the only lever that still makes ground.
+
+It is not free, and the tests pin that too: a round of four candidates buys one generation for
+four evaluations, so with clean scores it *loses* to plain sequential search. It pays off only
+when noise is what is holding the search back. The game visibly reloads between trials, so it
+is off by default and refuses to run in permadeath.
+
+**Learning from you.** While automation is off, the mod watches how you run the colony — how
+widely and how urgently you assign each work type, what stock levels you hold, how many beds
+you put in a room, what you grow and research — and fits a strategy to it. Hand the colony
+over and the search starts from your habits instead of from defaults, which matters because a
+colony only affords tens of epochs against ~50 genes. Work weights are normalised against
+their own mean, since the gene controls relative emphasis rather than an absolute level.
+
 ## Building
 
 Requires the .NET SDK. No RimWorld install is needed to compile — the build pulls public
@@ -65,8 +97,25 @@ cd Source/AutoColony
 dotnet build
 ```
 
-This writes `Assemblies/AutoColony.dll`. Then copy or symlink the repository root into your
-RimWorld `Mods` folder:
+This writes `Assemblies/AutoColony.dll`.
+
+The learning layer has no RimWorld dependencies beyond a handful of persistence interfaces,
+so it runs — and is tested — outside the game:
+
+```bash
+cd Tests/AutoColony.Tests
+dotnet test
+```
+
+Those tests compile the *real* production sources against a small `Verse` shim rather than a
+copy, so they exercise the shipped algorithms. They cover the search (convergence on a
+synthetic landscape, behaviour under noise, paired-trial gain), the bandits (regret and
+tracking a switch), the fitness function (monotonicity in deaths, food and mood), genome
+bounds and XML round-tripping, the archive, and the player model. This is the only place the
+optimiser can realistically be exercised at all — in-game an epoch costs about an hour of real
+time.
+
+Then copy or symlink the repository root into your RimWorld `Mods` folder:
 
 ```bash
 ln -s "$PWD" "$HOME/.steam/steam/steamapps/common/RimWorld/Mods/Auto-Rimworld"
@@ -76,10 +125,11 @@ The mod folder layout is the standard one:
 
 ```
 Auto-Rimworld/
-├── About/            About.xml, Manifest.xml, Preview.png
-├── Assemblies/       AutoColony.dll (build output)
-├── Defs/             MainButtonDef for the status tab
-└── Source/AutoColony Source and .csproj
+├── About/             About.xml, Manifest.xml, Preview.png
+├── Assemblies/        AutoColony.dll (build output)
+├── Defs/              MainButtonDef for the status tab
+├── Source/AutoColony  Source and .csproj
+└── Tests/             Offline tests (not shipped to RimWorld)
 ```
 
 ## Using it
@@ -89,8 +139,16 @@ bottom bar shows the current epoch score and its breakdown, the search state (be
 mutation step, generation, how many improvements have been accepted), a per-epoch score
 history, what each subsystem last did, and which genes have moved away from their defaults.
 
-Mod settings let you set epoch length, turn cross-colony learning off, switch individual
-subsystems off to keep that part of the game for yourself, and erase the archive.
+While automation is off the tab instead shows how far the mod has got towards a strategy
+fitted to your own play, and what it has inferred so far.
+
+Mod settings let you set epoch length, turn cross-colony learning and learning-from-you on or
+off, enable training rounds and set their candidate count, switch individual subsystems off to
+keep that part of the game for yourself, and erase the archive.
+
+A reasonable way to use it: play normally for a week or two of game time so the mod can watch
+you, then switch automation on — it starts from your habits. Turn on training mode if you want
+it to actually improve on them in reasonable wall-clock time.
 
 ## Design notes
 
@@ -104,10 +162,28 @@ subsystems off to keep that part of the game for yourself, and erase the archive
   wrote by hand is never edited or deleted.
 - **No Harmony.** Nothing needed patching — incidents are answered through the public letter
   stack API — so there are no patch conflicts with other mods.
+- **The learning layer never touches `Verse.Rand`.** It carries its own splitmix64 PRNG.
+  Drawing from RimWorld's global stream would advance it by an amount depending on how many
+  mutations happened to occur, perturbing every later world roll relative to an unmodded game
+  and making two runs from the same save incomparable — which the trial harness depends on.
+
+## Known limits
+
+- **The search is sample-starved.** ~50 genes against tens of epochs per playthrough. The
+  measurements behind this live in the test suite; dimensionality reduction is the obvious next
+  step, and tuning the mutation rate is measurably *not* — 0.3 is already near-optimal.
+- **Seed locking decays.** Trials start identical, but once colonies diverge they consume RNG
+  draws at different rates and the worlds drift apart. Early epoch time is the comparable part.
+- **No power grid and no freezer.** The planner places an electric stove but never generators,
+  batteries or conduits, and food spoils without cooling. Probably the largest gameplay gap.
+- Untouched: caravans and trade, animal taming, apparel/weapon assignment, surgery scheduling,
+  multi-map colonies, defensive geometry.
 
 ## Status
 
-The mod compiles cleanly against RimWorld 1.6.4871 reference assemblies, and every API call
-was verified against those assemblies rather than written from memory. It has **not** been
-run inside RimWorld yet — there is no game install on the machine it was written on — so
-treat the first playthrough as a shakedown and check the log for `[AutoColony]` warnings.
+The mod compiles cleanly against RimWorld 1.6.4871 reference assemblies, every API call was
+verified against those assemblies rather than written from memory, and 56 offline tests cover
+the learning layer. It has **not** been run inside RimWorld — there is no game install on the
+machine it was written on — so treat the first playthrough as a shakedown and check the log for
+`[AutoColony]` warnings. Training mode in particular drives the game's save/load path
+programmatically and deserves a throwaway colony first.

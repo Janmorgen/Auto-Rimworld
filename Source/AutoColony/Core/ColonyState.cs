@@ -214,6 +214,36 @@ namespace AutoColony
                 if (all[i].IsFinished) s.researchFinished++;
         }
 
+        /// <summary>
+        /// Projects this snapshot down to the plain numbers the scoring layer works on.
+        /// The global counters come from the game's own stats record, which already tracks
+        /// deaths and raids for the whole run.
+        /// </summary>
+        public ColonyMetrics ToMetrics()
+        {
+            var m = new ColonyMetrics();
+            m.day = day;
+            m.colonists = colonists;
+            m.colonistsDowned = colonistsDowned;
+            m.colonistsInMentalState = colonistsInMentalState;
+            m.avgMood = avgMood;
+            m.avgHealth = avgHealth;
+            m.daysOfFood = daysOfFood;
+            m.wealthTotal = wealthTotal;
+            m.colonistBeds = colonistBeds;
+            m.turrets = turrets;
+            m.fires = fires;
+            m.researchFinished = researchFinished;
+
+            var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
+            if (stats != null)
+            {
+                m.cumulativeDeaths = stats.colonistsKilled;
+                m.cumulativeRaids = stats.numRaidsEnemy;
+            }
+            return m;
+        }
+
         /// <summary>Fraction of a stock target currently held, clamped to [0,2].</summary>
         public float StockRatio(int have, float target)
         {

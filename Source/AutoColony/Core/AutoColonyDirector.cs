@@ -41,6 +41,7 @@ namespace AutoColony
         public EpochStart epochStart = new EpochStart();
         public BaseLayout layout = new BaseLayout();
         public List<PendingCredit> pendingCredits = new List<PendingCredit>();
+        public PlayerModel playerModel = new PlayerModel();
 
         Dictionary<string, Bandit> bandits = new Dictionary<string, Bandit>();
 
@@ -51,8 +52,10 @@ namespace AutoColony
 
         // --- runtime only, rebuilt after load ---
         List<DirectorModule> modules;
+        readonly PlayerObservationModule observer = new PlayerObservationModule();
         int moduleCursor;
         ColonyState lastState;
+        ColonyMetrics lastMetrics = ColonyMetrics.Neutral();
         int lastStateTick = -999999;
         List<ScoreTerm> lastBreakdown = new List<ScoreTerm>();
         readonly DirectorContext ctx = new DirectorContext();
@@ -62,7 +65,18 @@ namespace AutoColony
         public ColonyState LastState { get { return lastState; } }
         public List<ScoreTerm> LastBreakdown { get { return lastBreakdown; } }
         public List<DirectorModule> Modules { get { EnsureModules(); return modules; } }
-        public StrategyGenome ActiveGenome { get { return evolution.Active; } }
+        /// <summary>
+        /// The strategy currently being played. During a training round that is the trial's
+        /// candidate rather than whatever the evolution engine would otherwise be testing.
+        /// </summary>
+        public StrategyGenome ActiveGenome
+        {
+            get
+            {
+                var candidate = TrainingSession.CurrentCandidate;
+                return candidate ?? evolution.Active;
+            }
+        }
 
         public Bandit BanditFor(string id)
         {
@@ -104,6 +118,9 @@ namespace AutoColony
         public override void LoadedGame()
         {
             EnsureModules();
+            // A load may be the game coming back up mid-training round; re-apply the seed so
+            // this trial sees the same world as its siblings.
+            TrainingSession.OnGameLoaded();
         }
 
         void EnsureModules()
@@ -116,7 +133,13 @@ namespace AutoColony
         public override void GameComponentTick()
         {
             var settings = AutoColonyMod.Settings;
-            if (settings == null || !settings.masterEnabled) return;
+            if (settings == null) return;
+
+            // Nothing to do at all unless we are either playing or watching.
+            if (!settings.masterEnabled && !settings.learnFromPlayer) return;
+
+            // A reload is queued; the game is about to be torn down under us.
+            if (TrainingSession.ReloadPending) return;
 
             var map = TargetMap();
             if (map == null) return;
@@ -127,19 +150,29 @@ namespace AutoColony
             {
                 lastStateTick = tick;
                 lastState = ColonyState.Capture(map);
-                accumulator.Observe(lastState);
+                lastMetrics = lastState.ToMetrics();
+                if (settings.masterEnabled) accumulator.Observe(lastMetrics);
             }
 
             if (lastState == null || !lastState.Valid) return;
 
+            ctx.map = map;
+            ctx.state = lastState;
+            ctx.director = this;
+            ctx.layout = layout;
+
+            // Automation off: watch and learn, but never act.
+            if (!settings.masterEnabled)
+            {
+                ctx.genome = evolution.Active;
+                if (observer.ShouldRun(tick)) observer.Run(ctx, tick);
+                return;
+            }
+
             if (!seeded) SeedFromArchive(map);
             if (nextEpochTick < 0) BeginEpoch(tick);
 
-            ctx.map = map;
-            ctx.state = lastState;
-            ctx.genome = evolution.Active;
-            ctx.director = this;
-            ctx.layout = layout;
+            ctx.genome = ActiveGenome;
 
             RunNextDueModule(tick, settings);
 
@@ -179,8 +212,8 @@ namespace AutoColony
 
         void BeginEpoch(int tick)
         {
-            epochStart = EpochStart.From(lastState);
-            accumulator.ResetFor(lastState);
+            epochStart = EpochStart.From(lastMetrics);
+            accumulator.ResetFor(lastMetrics);
             pendingCredits.Clear();
 
             int lengthTicks = Math.Max(1, AutoColonyMod.Settings.epochDays) * GenDate.TicksPerDay;
@@ -193,7 +226,7 @@ namespace AutoColony
         void CloseEpoch(int tick)
         {
             List<ScoreTerm> breakdown;
-            float score = ColonyEvaluator.Evaluate(epochStart, lastState, accumulator, out breakdown);
+            float score = ColonyEvaluator.Evaluate(epochStart, lastMetrics, accumulator, out breakdown);
 
             lastScore = score;
             lastBreakdown = breakdown;
@@ -206,8 +239,14 @@ namespace AutoColony
             }
             pendingCredits.Clear();
 
+            if (TrainingSession.Active)
+            {
+                CloseTrainingTrial(score, tick);
+                return;
+            }
+
             var phaseBefore = evolution.phase;
-            evolution.OnEpochComplete(score, lastState.day);
+            evolution.OnEpochComplete(score, lastMetrics.day);
 
             AcLog.Message(string.Format(
                 "Epoch {0} closed: score {1:0.000} ({2}). Incumbent {3:0.000}, sigma {4:0.000}, gen {5}.",
@@ -215,7 +254,46 @@ namespace AutoColony
                 evolution.incumbentScore, evolution.sigma, evolution.Incumbent.generation));
 
             ContributeToArchive();
+
+            // With training on, the cycle alternates: one epoch played live so the colony
+            // actually advances, then a round of trials replayed over the next stretch.
+            if (AutoColonyMod.Settings.trainingMode &&
+                TrainingSession.BeginRound(evolution, AutoColonyMod.Settings.trialCandidates))
+            {
+                BeginEpoch(tick);
+                return;
+            }
+
             BeginEpoch(tick);
+        }
+
+        /// <summary>
+        /// Ends one trial of a training round: either roll back and run the next candidate,
+        /// or adopt the round's winner and return to live play.
+        /// </summary>
+        void CloseTrainingTrial(float score, int tick)
+        {
+            StrategyGenome winner;
+            float winnerScore;
+            bool roundComplete = TrainingSession.RecordTrialAndAdvance(score, out winner, out winnerScore);
+
+            if (!roundComplete)
+            {
+                // Roll the world back so the next candidate faces exactly the same situation.
+                TrainingSession.QueueBaselineReload();
+                return;
+            }
+
+            if (winner != null)
+            {
+                // Candidates were judged against an identical world, so these scores are
+                // directly comparable and need no noise margin.
+                evolution.AdoptWinner(winner, winnerScore, lastMetrics.day);
+                ContributeToArchive();
+            }
+
+            TrainingSession.End();
+            TrainingSession.QueueBaselineReload();
         }
 
         void ContributeToArchive()
@@ -250,8 +328,20 @@ namespace AutoColony
             seeded = true;
             contextKey = BuildContextKey(map);
 
-            if (!AutoColonyMod.Settings.shareAcrossSaves) return;
             if (evolution.epochIndex > 0) return;   // an in-progress search already has its own state
+
+            // What this player demonstrated in this colony beats a strategy learned in someone
+            // else's, so an observed model takes precedence over the archive.
+            if (AutoColonyMod.Settings.learnFromPlayer && playerModel != null && playerModel.IsUsable)
+            {
+                evolution.SeedFrom(playerModel.ToGenome(), float.NaN, 0.12f);
+                SeedBanditsFromPlayer();
+                AcLog.Message("Seeded strategy from " + playerModel.samples +
+                              " observations of your own play.");
+                return;
+            }
+
+            if (!AutoColonyMod.Settings.shareAcrossSaves) return;
 
             try
             {
@@ -277,6 +367,19 @@ namespace AutoColony
             {
                 AcLog.Warning("Could not seed from archive: " + e.Message);
             }
+        }
+
+        /// <summary>
+        /// Gives the player's observed crop and research picks a positive prior, so the
+        /// bandits start by trying what the player favoured rather than sampling blindly.
+        /// </summary>
+        void SeedBanditsFromPlayer()
+        {
+            var crop = playerModel.FavouriteCrop;
+            if (!string.IsNullOrEmpty(crop)) BanditFor(ZoneModule.BanditId).Update(crop, 0.7f);
+
+            var research = playerModel.FavouriteResearch;
+            if (!string.IsNullOrEmpty(research)) BanditFor(ResearchModule.BanditId).Update(research, 0.7f);
         }
 
         static string BuildContextKey(Map map)
@@ -317,6 +420,7 @@ namespace AutoColony
             Scribe_Deep.Look(ref accumulator, "accumulator");
             Scribe_Deep.Look(ref epochStart, "epochStart");
             Scribe_Deep.Look(ref layout, "layout");
+            Scribe_Deep.Look(ref playerModel, "playerModel");
             Scribe_Collections.Look(ref bandits, "bandits", LookMode.Value, LookMode.Deep);
             Scribe_Collections.Look(ref pendingCredits, "pendingCredits", LookMode.Deep);
             Scribe_Values.Look(ref contextKey, "contextKey", StrategyArchive.GlobalKey);
@@ -330,6 +434,7 @@ namespace AutoColony
                 if (accumulator == null) accumulator = new EpochAccumulator();
                 if (epochStart == null) epochStart = new EpochStart();
                 if (layout == null) layout = new BaseLayout();
+                if (playerModel == null) playerModel = new PlayerModel();
                 if (bandits == null) bandits = new Dictionary<string, Bandit>();
                 if (pendingCredits == null) pendingCredits = new List<PendingCredit>();
                 if (lastBreakdown == null) lastBreakdown = new List<ScoreTerm>();

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using RimWorld;
 using Verse;
 
 namespace AutoColony
@@ -23,23 +22,22 @@ namespace AutoColony
 
     /// <summary>
     /// The few colony figures an epoch is scored against. Kept separate from the full
-    /// <see cref="ColonyState"/> so the baseline survives a save/load in the middle of an epoch.
+    /// <see cref="ColonyState"/> so the baseline survives a save/load mid-epoch.
     /// </summary>
     public class EpochStart : IExposable
     {
         public int colonists = 1;
         public float wealthTotal;
         public int researchFinished;
-        public int tick;
+        public int day;
 
-        public static EpochStart From(ColonyState s)
+        public static EpochStart From(ColonyMetrics m)
         {
             var e = new EpochStart();
-            if (s == null) return e;
-            e.colonists = s.colonists;
-            e.wealthTotal = s.wealthTotal;
-            e.researchFinished = s.researchFinished;
-            e.tick = s.tick;
+            e.colonists = m.colonists;
+            e.wealthTotal = m.wealthTotal;
+            e.researchFinished = m.researchFinished;
+            e.day = m.day;
             return e;
         }
 
@@ -48,7 +46,7 @@ namespace AutoColony
             Scribe_Values.Look(ref colonists, "colonists", 1);
             Scribe_Values.Look(ref wealthTotal, "wealthTotal", 0f);
             Scribe_Values.Look(ref researchFinished, "researchFinished", 0);
-            Scribe_Values.Look(ref tick, "tick", 0);
+            Scribe_Values.Look(ref day, "day", 0);
         }
     }
 
@@ -69,12 +67,14 @@ namespace AutoColony
         public int fireSamples;
         public int downedSamples;
 
-        // Snapshot of global counters at epoch start, so deltas can be derived.
-        public int startColonistsKilled;
+        // Cumulative counters captured at epoch start, so deltas can be derived without
+        // reaching back into the game for global statistics.
+        public int startDeaths;
         public int startRaids;
-        public int startResearchFinished;
+        public int latestDeaths;
+        public int latestRaids;
 
-        public void ResetFor(ColonyState start)
+        public void ResetFor(ColonyMetrics m)
         {
             samples = 0;
             moodSum = 0f;
@@ -84,22 +84,25 @@ namespace AutoColony
             fireSamples = 0;
             downedSamples = 0;
 
-            var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
-            startColonistsKilled = stats != null ? stats.colonistsKilled : 0;
-            startRaids = stats != null ? stats.numRaidsEnemy : 0;
-            startResearchFinished = start != null ? start.researchFinished : 0;
+            startDeaths = m.cumulativeDeaths;
+            startRaids = m.cumulativeRaids;
+            latestDeaths = m.cumulativeDeaths;
+            latestRaids = m.cumulativeRaids;
         }
 
-        public void Observe(ColonyState s)
+        public void Observe(ColonyMetrics m)
         {
-            if (s == null || !s.Valid) return;
+            if (!m.Valid) return;
             samples++;
-            moodSum += s.avgMood;
-            healthSum += s.avgHealth;
-            if (s.daysOfFood < minDaysOfFood) minDaysOfFood = s.daysOfFood;
-            if (s.colonistsInMentalState > 0) mentalBreakSamples++;
-            if (s.fires > 0) fireSamples++;
-            if (s.colonistsDowned > 0) downedSamples++;
+            moodSum += m.avgMood;
+            healthSum += m.avgHealth;
+            if (m.daysOfFood < minDaysOfFood) minDaysOfFood = m.daysOfFood;
+            if (m.colonistsInMentalState > 0) mentalBreakSamples++;
+            if (m.fires > 0) fireSamples++;
+            if (m.colonistsDowned > 0) downedSamples++;
+
+            latestDeaths = m.cumulativeDeaths;
+            latestRaids = m.cumulativeRaids;
         }
 
         public float AvgMood { get { return samples > 0 ? moodSum / samples : 0.5f; } }
@@ -108,23 +111,8 @@ namespace AutoColony
         public float FireFraction { get { return samples > 0 ? (float)fireSamples / samples : 0f; } }
         public float DownedFraction { get { return samples > 0 ? (float)downedSamples / samples : 0f; } }
 
-        public int DeathsThisEpoch
-        {
-            get
-            {
-                var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
-                return stats != null ? Math.Max(0, stats.colonistsKilled - startColonistsKilled) : 0;
-            }
-        }
-
-        public int RaidsThisEpoch
-        {
-            get
-            {
-                var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
-                return stats != null ? Math.Max(0, stats.numRaidsEnemy - startRaids) : 0;
-            }
-        }
+        public int DeathsThisEpoch { get { return Math.Max(0, latestDeaths - startDeaths); } }
+        public int RaidsThisEpoch { get { return Math.Max(0, latestRaids - startRaids); } }
 
         public void ExposeData()
         {
@@ -135,9 +123,10 @@ namespace AutoColony
             Scribe_Values.Look(ref mentalBreakSamples, "mentalBreakSamples", 0);
             Scribe_Values.Look(ref fireSamples, "fireSamples", 0);
             Scribe_Values.Look(ref downedSamples, "downedSamples", 0);
-            Scribe_Values.Look(ref startColonistsKilled, "startColonistsKilled", 0);
+            Scribe_Values.Look(ref startDeaths, "startDeaths", 0);
             Scribe_Values.Look(ref startRaids, "startRaids", 0);
-            Scribe_Values.Look(ref startResearchFinished, "startResearchFinished", 0);
+            Scribe_Values.Look(ref latestDeaths, "latestDeaths", 0);
+            Scribe_Values.Look(ref latestRaids, "latestRaids", 0);
         }
     }
 
@@ -166,11 +155,11 @@ namespace AutoColony
         /// <summary>Days of stored food that counts as fully secure.</summary>
         const float FoodSecureDays = 12f;
 
-        public static float Evaluate(EpochStart start, ColonyState end, EpochAccumulator acc,
+        public static float Evaluate(EpochStart start, ColonyMetrics end, EpochAccumulator acc,
                                      out List<ScoreTerm> breakdown)
         {
             breakdown = new List<ScoreTerm>();
-            if (end == null || start == null || acc == null) return 0f;
+            if (start == null || acc == null) return 0f;
 
             int startPop = Math.Max(1, start.colonists);
 
@@ -207,7 +196,7 @@ namespace AutoColony
             breakdown.Add(new ScoreTerm("Health", health, WHealth));
 
             // --- research throughput ---
-            int projects = Math.Max(0, end.researchFinished - acc.startResearchFinished);
+            int projects = Math.Max(0, end.researchFinished - start.researchFinished);
             float research = Clamp01(projects / 2f);
             breakdown.Add(new ScoreTerm("Research", research, WResearch));
 
@@ -224,7 +213,7 @@ namespace AutoColony
             float score = 0f;
             for (int i = 0; i < breakdown.Count; i++) score += breakdown[i].Contribution;
 
-            // Hard failure states the weighted sum would otherwise soften too much.
+            // Hard failure state the weighted sum would otherwise soften too much.
             if (end.colonists == 0) score = 0f;
 
             return Clamp01(score);
