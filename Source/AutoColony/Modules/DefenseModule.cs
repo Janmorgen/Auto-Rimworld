@@ -285,7 +285,8 @@ namespace AutoColony.Modules
             if (!CanAfford(ctx, turretDef)) return;
 
             var origin = ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
-            var stuff = PlacementUtil.ChooseStuff(ctx.map, turretDef, 0f);
+            var stuff = PlacementUtil.ChooseStuff(ctx.map, turretDef,
+                FireRisk.StonePreference(ctx, FireRisk.Assess(ctx.map, ctx.state)));
 
             foreach (var cell in GenRadial.RadialCellsAround(origin, 14, true))
             {

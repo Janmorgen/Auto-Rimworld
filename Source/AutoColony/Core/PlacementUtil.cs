@@ -71,6 +71,21 @@ namespace AutoColony
         /// </summary>
         public static ThingDef ChooseStuff(Map map, ThingDef def, float stonePreference)
         {
+            bool ignored;
+            return ChooseStuff(map, def, stonePreference, out ignored);
+        }
+
+        /// <summary>
+        /// As above, reporting whether the preferred material was actually available.
+        ///
+        /// Worth surfacing: a colony on day one prefers stone and builds in wood because it has
+        /// no cut blocks yet, which is correct but looks like the preference being ignored. A
+        /// log that cannot tell those apart is a log that invites the wrong fix.
+        /// </summary>
+        public static ThingDef ChooseStuff(Map map, ThingDef def, float stonePreference,
+                                           out bool gotPreferred)
+        {
+            gotPreferred = true;
             if (def == null || !def.MadeFromStuff) return null;
 
             var order = new List<string>();
@@ -87,6 +102,7 @@ namespace AutoColony
             order.AddRange(AcDefs.MetalStuff);
 
             int needed = def.CostStuffCount > 0 ? def.CostStuffCount : 1;
+            bool preferStone = stonePreference >= 0.5f;
 
             for (int i = 0; i < order.Count; i++)
             {
@@ -94,13 +110,46 @@ namespace AutoColony
                 if (stuff == null || stuff.stuffProps == null) continue;
                 if (!SharesAny(def.stuffCategories, stuff.stuffProps.categories)) continue;
                 // Keep a reserve so building never consumes the last of a material.
-                if (map.resourceCounter.GetCount(stuff) < needed * 3) continue;
+                if (AvailableCount(map, stuff) < needed * 3) continue;
+
+                bool isStone = System.Array.IndexOf(AcDefs.StoneBlockStuff, stuff.defName) >= 0;
+                gotPreferred = isStone == preferStone;
                 return stuff;
             }
+
+            gotPreferred = false;
 
             // Nothing comfortably affordable; fall back to whatever the game would default to
             // so early colonies can still put up their first walls.
             return GenStuff.DefaultStuffFor(def);
+        }
+
+        /// <summary>
+        /// How much of a material the colony can actually build with.
+        ///
+        /// <c>ResourceCounter</c> only counts what is in a stockpile, which is nothing at all
+        /// on the first day — so material preference was being silently ignored for the first
+        /// few rooms and every choice fell through to the game's default. Colonists will haul
+        /// from anywhere, so loose stacks count too.
+        /// </summary>
+        public static int AvailableCount(Map map, ThingDef stuff)
+        {
+            if (map == null || stuff == null) return 0;
+
+            int total = map.resourceCounter != null ? map.resourceCounter.GetCount(stuff) : 0;
+            if (total > 0) return total;
+
+            var loose = map.listerThings != null ? map.listerThings.ThingsOfDef(stuff) : null;
+            if (loose == null) return total;
+
+            for (int i = 0; i < loose.Count; i++)
+            {
+                var thing = loose[i];
+                if (thing == null || !thing.Spawned) continue;
+                if (thing.IsForbidden(Faction.OfPlayer)) continue;
+                total += thing.stackCount;
+            }
+            return total;
         }
 
         /// <summary>Marks a cell as part of the home area so colonists will tend and clean it.</summary>

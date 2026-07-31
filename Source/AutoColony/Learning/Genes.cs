@@ -90,6 +90,7 @@ namespace AutoColony.Learning
         public const string DefenseRetreatHealth = "defense.retreatHealth";
         public const string DefenseTurretCount = "defense.turretCount";
         public const string FireResponseRadius = "defense.fireRadius";
+        public const string FireRiskAversion = "defense.fireAversion";
 
         // ---- colonist policy --------------------------------------------------------
         public const string ColonistRecruitBias = "colonist.recruitBias";
@@ -155,6 +156,9 @@ namespace AutoColony.Learning
             // How far out a fire is still worth walking to. Too small and a fire creeps in;
             // too large and colonists cross the map for a blaze that was never coming.
             Add(FireResponseRadius, 10f, 120f, 45f, "Defense", "Range fires are fought within");
+            // How hard fire risk pushes construction toward stone. Building everything in
+            // stone is slow and expensive; building everything in wood eventually burns.
+            Add(FireRiskAversion, 0f, 2f, 1f, "Defense", "How much fire risk favours stone");
 
             Add(ColonistRecruitBias, 0f, 1f, 0.6f, "Colonists", "Willingness to recruit prisoners");
             Add(ColonistMedCare, 0f, 4f, 3f, "Colonists", "Default medical care level");

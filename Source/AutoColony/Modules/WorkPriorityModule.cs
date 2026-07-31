@@ -77,7 +77,12 @@ namespace AutoColony.Modules
             Need("Warden", s.prisoners > 0 ? 2f : 0.2f);
             Need("Handling", 1f);
             Need("Cleaning", s.avgMood < 0.6f ? 1.6f : 0.9f);
-            Need("Hauling", 1.1f);
+            // Items outdoors deteriorate wherever they are, and in a dry climate they are also
+            // the easiest thing on the map to lose. Getting them into storage is preventative
+            // rather than tidy, so it outranks ordinary hauling as the map dries out.
+            float fireRisk = FireRisk.Assess(ctx.map, s);
+            float outdoorPressure = s.itemsOutdoors > 0 ? Clamp01(s.itemsOutdoors / 40f) : 0f;
+            Need("Hauling", 1.1f + fireRisk * outdoorPressure * 2f);
             Need("Smithing", 1f);
             Need("Tailoring", 1f + Shortfall(s.textiles, ctx.Gene(Genes.TextilesTarget)) * 0.5f);
             Need("Crafting", 1f);

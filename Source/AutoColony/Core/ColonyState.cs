@@ -52,6 +52,12 @@ namespace AutoColony
         public int pendingFrames;
         public int fires;
 
+        /// <summary>
+        /// Haulable items sitting under open sky. They deteriorate where they are, and in a
+        /// dry climate they are also the easiest thing on the map to lose to a fire.
+        /// </summary>
+        public int itemsOutdoors;
+
         // --- research ---
         public int researchFinished;
         public bool hasResearchBench;
@@ -269,6 +275,17 @@ namespace AutoColony
                 s.pendingFrames = things.ThingsInGroup(ThingRequestGroup.BuildingFrame).Count;
                 var fireDef = AcDefs.Fire;
                 if (fireDef != null) s.fires = things.ThingsOfDef(fireDef).Count;
+
+                var haulable = things.ThingsInGroup(ThingRequestGroup.HaulableEver);
+                var roofs = map.roofGrid;
+                for (int i = 0; i < haulable.Count; i++)
+                {
+                    var thing = haulable[i];
+                    if (thing == null || !thing.Spawned) continue;
+                    if (thing.def.category != ThingCategory.Item) continue;
+                    if (roofs != null && roofs.Roofed(thing.Position)) continue;
+                    s.itemsOutdoors++;
+                }
             }
         }
 

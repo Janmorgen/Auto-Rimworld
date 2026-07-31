@@ -277,13 +277,21 @@ namespace AutoColony.Modules
         void QueueShell(DirectorContext ctx, PlannedRoom room)
         {
             var map = ctx.map;
-            float stonePref = ctx.Gene(Genes.BaseStonePreference);
+
+            // Material is a reading of the conditions, not a fixed taste. Storage leans harder
+            // toward stone than the rest: it is where the colony's value ends up, so a fire
+            // there is not an inconvenience but the loss of everything worth hauling indoors.
+            float risk = FireRisk.Assess(map, ctx.state);
+            float stonePref = room.role == RoomRole.Storage
+                ? FireRisk.StorageStonePreference(ctx, risk)
+                : FireRisk.StonePreference(ctx, risk);
 
             var wallDef = AcDefs.Wall;
             var doorDef = AcDefs.Door;
             if (wallDef == null) return;
 
-            var wallStuff = PlacementUtil.ChooseStuff(map, wallDef, stonePref);
+            bool gotPreferred;
+            var wallStuff = PlacementUtil.ChooseStuff(map, wallDef, stonePref, out gotPreferred);
             var doorStuff = doorDef != null ? PlacementUtil.ChooseStuff(map, doorDef, stonePref) : null;
 
             var rect = room.Rect;
@@ -303,6 +311,11 @@ namespace AutoColony.Modules
                 if (PlacementUtil.TryPlace(map, wallDef, cell, Rot4.North, wallStuff))
                     placedThisPass++;
             }
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "{0} room walls queued in {1} (fire risk {2:0.00}, stone preference {3:0.00}){4}",
+                room.role, wallStuff != null ? wallStuff.label : "default", risk, stonePref,
+                gotPreferred ? "" : " — preferred material unavailable, used what was in store"));
 
             // Claim the room for housekeeping and ask for a roof over the interior.
             foreach (var cell in rect)
@@ -383,7 +396,8 @@ namespace AutoColony.Modules
             if (def == null || count <= 0) return;
 
             var map = ctx.map;
-            var stuff = PlacementUtil.ChooseStuff(map, def, ctx.Gene(Genes.BaseStonePreference));
+            var stuff = PlacementUtil.ChooseStuff(map, def,
+                FireRisk.StonePreference(ctx, FireRisk.Assess(map, ctx.state)));
             int placed = 0;
 
             foreach (var cell in room.Interior)
