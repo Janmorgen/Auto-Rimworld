@@ -54,8 +54,19 @@ namespace AutoColony
         /// <summary>Real seconds between checks, so this costs nothing per frame.</summary>
         const float CheckInterval = 0.25f;
 
+        /// <summary>
+        /// How long after loading a save a pause is still assumed to be RimWorld's own.
+        ///
+        /// The game pauses itself after every load (<c>Prefs.PauseOnLoad</c>). That is neither
+        /// an event nor the player reaching for the keyboard, so without this it is read as a
+        /// manual pause and respected forever — the colony simply never starts. It also breaks
+        /// training rounds, which reload between every trial.
+        /// </summary>
+        const float LoadPauseGraceSeconds = 30f;
+
         static float lastCheckTime;
         static float pausedSinceTime = -1f;
+        static float loadedAtTime = -1f;
         static bool wasStoppedLastCheck;
         static bool currentPauseIsEventDriven;
         static bool respectingPlayerPause;
@@ -122,9 +133,11 @@ namespace AutoColony
                 wasStoppedLastCheck = true;
                 pausedSinceTime = now;
 
-                // A popup is always something the game raised. A bare speed pause is only the
-                // game's if a letter just landed; otherwise the player pressed pause.
-                currentPauseIsEventDriven = windowPaused || ALetterJustArrived();
+                // A popup is always something the game raised, as is the pause that follows
+                // every load. A bare speed pause otherwise counts as the game's only if a
+                // letter just landed; failing that, the player pressed pause.
+                bool loadPause = loadedAtTime > 0f && now - loadedAtTime < LoadPauseGraceSeconds;
+                currentPauseIsEventDriven = windowPaused || loadPause || ALetterJustArrived();
                 respectingPlayerPause = !currentPauseIsEventDriven;
 
                 if (respectingPlayerPause)
@@ -232,10 +245,21 @@ namespace AutoColony
             }
         }
 
+        /// <summary>
+        /// Called when a save finishes loading, so the pause RimWorld applies on load is not
+        /// mistaken for the player having pressed pause.
+        /// </summary>
+        public static void NotifyGameLoaded()
+        {
+            Reset();
+            loadedAtTime = Time.realtimeSinceStartup;
+        }
+
         /// <summary>Clears per-game runtime state so nothing leaks across loads.</summary>
         public static void Reset()
         {
             pausedSinceTime = -1f;
+            loadedAtTime = -1f;
             lastCheckTime = 0f;
             wasStoppedLastCheck = false;
             currentPauseIsEventDriven = false;

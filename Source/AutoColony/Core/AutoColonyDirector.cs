@@ -119,7 +119,7 @@ namespace AutoColony
         public override void LoadedGame()
         {
             EnsureModules();
-            TimeControl.Reset();
+            TimeControl.NotifyGameLoaded();
             // A load may be the game coming back up mid-training round; re-apply the seed so
             // this trial sees the same world as its siblings.
             TrainingSession.OnGameLoaded();
