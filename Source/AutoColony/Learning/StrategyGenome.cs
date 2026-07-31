@@ -81,11 +81,30 @@ namespace AutoColony.Learning
                 mutatedAny = true;
             }
 
-            // Guarantee the child actually differs, otherwise the epoch is wasted.
+            // Guarantee the child actually differs, otherwise the epoch is wasted re-testing
+            // the incumbent. Naively perturbing one random gene is not enough: a gene already
+            // sitting on a bound clamps straight back to where it started, so the delta is
+            // reflected inward and a few genes are tried before giving up.
             if (!mutatedAny)
             {
-                var spec = specs[rng.Range(0, specs.Count)];
-                child.Set(spec.Key, spec.Clamp(Get(spec.Key) + (float)rng.Gaussian() * sigma * spec.Range));
+                for (int attempt = 0; attempt < 8; attempt++)
+                {
+                    var spec = specs[rng.Range(0, specs.Count)];
+                    if (spec.Range <= 0f) continue;
+
+                    float current = Get(spec.Key);
+                    float delta = (float)rng.Gaussian() * sigma * spec.Range;
+                    if (delta == 0f) continue;
+
+                    if (current + delta > spec.Max) delta = -Math.Abs(delta);
+                    else if (current + delta < spec.Min) delta = Math.Abs(delta);
+
+                    float next = spec.Clamp(current + delta);
+                    if (next == current) continue;
+
+                    child.Set(spec.Key, next);
+                    break;
+                }
             }
 
             child.generation = generation + 1;

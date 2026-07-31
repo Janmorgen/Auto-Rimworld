@@ -95,6 +95,10 @@ namespace AutoColony.Learning
         public const string ColonistMedCare = "colonist.medCare";
         public const string ColonistSelfTend = "colonist.selfTend";
 
+        // ---- item claiming ----------------------------------------------------------
+        public const string ItemClaimRadius = "items.claimRadius";
+        public const string ItemClaimDuringDanger = "items.claimDuringDanger";
+
         // ---- incident policy --------------------------------------------------------
         public const string IncidentRiskTolerance = "incident.riskTolerance";
 
@@ -151,6 +155,11 @@ namespace AutoColony.Learning
             Add(ColonistRecruitBias, 0f, 1f, 0.6f, "Colonists", "Willingness to recruit prisoners");
             Add(ColonistMedCare, 0f, 4f, 3f, "Colonists", "Default medical care level");
             Add(ColonistSelfTend, 0f, 1f, 1f, "Colonists", "Allow self-tending");
+
+            // How far the colony will walk to claim loot is a genuine trade-off: distant items
+            // are free material, but the trip costs work time and exposes the hauler.
+            Add(ItemClaimRadius, 10f, 150f, 60f, "Items", "Range items are claimed within");
+            Add(ItemClaimDuringDanger, 0f, 1f, 0.2f, "Items", "Willingness to haul during a threat");
 
             Add(IncidentRiskTolerance, 0f, 1f, 0.5f, "Incidents", "Appetite for risky offers");
         }

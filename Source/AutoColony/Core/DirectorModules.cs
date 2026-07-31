@@ -19,6 +19,7 @@ namespace AutoColony
                 new WorkPriorityModule(),
                 new ZoneModule(),
                 new BasePlannerModule(),
+                new ItemPolicyModule(),
                 new ProductionModule(),
                 new ResourceModule(),
                 new ResearchModule(),

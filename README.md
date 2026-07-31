@@ -14,6 +14,7 @@ The director is a perceive–decide–act loop wrapped in a learning loop.
 | Work priorities | Per-colonist work assignment from skill, passion, and current colony need |
 | Base planner | Picks a site, reserves rooms along a corridor, queues walls, doors and furniture |
 | Zones | Growing zones on fertile soil, stockpiles in the storage room |
+| Item claiming | Unforbids what the colony may use; locks items down under threat |
 | Production | Standing bills on every work table, sized to stock targets |
 | Resource gathering | Chopping, mining and hunting designations against stock targets |
 | Research | Keeps a project selected at all times |
@@ -23,6 +24,15 @@ The director is a perceive–decide–act loop wrapped in a learning loop.
 
 The director never spawns anything. It places blueprints and designations and sets
 priorities, exactly as a player would, and the colonists' own job system does the work.
+
+Item claiming deserves a note because it is invisible until it bites. RimWorld marks a great
+deal as forbidden — drops, raider loot, ruins, and a scenario's starting resources — and a
+colony that never unforbids them stands next to its own steel and food unable to touch either.
+That looks like the director being incompetent when it is merely blocked. It claims within a
+learnable radius, and under threat a cautious strategy pushes items outside the home area back
+to forbidden so haulers do not walk into a firefight. It never claims anything under fog:
+unforbidding the contents of an unopened ancient danger is how a colony finds a sealed room
+full of mechanoids.
 
 **Learning.** Every management decision is parameterised. Roughly fifty genes — food reserve
 targets, per-work-type weights, room size, beds per room, defence spending as a fraction of
