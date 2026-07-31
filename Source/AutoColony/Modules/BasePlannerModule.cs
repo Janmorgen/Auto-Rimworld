@@ -1,0 +1,408 @@
+using System.Collections.Generic;
+using AutoColony.Learning;
+using RimWorld;
+using Verse;
+
+namespace AutoColony.Modules
+{
+    /// <summary>
+    /// Lays out and builds the colony.
+    ///
+    /// The plan is a corridor with rooms budding off both sides, which is deliberately dull:
+    /// it tiles indefinitely, shares walls between neighbours so it stays cheap, and every
+    /// room is reachable and roofable without pathing tricks. Room dimensions, wall material
+    /// and beds per room come from the genome, and which room to build next is a bandit
+    /// choice, so the interesting decisions stay learnable while the geometry stays reliable.
+    ///
+    /// Construction is queued as blueprints and left to the colonists' own job system — the
+    /// director never spawns anything directly, so the colony still has to earn what it builds.
+    /// </summary>
+    public class BasePlannerModule : DirectorModule
+    {
+        public const string BanditId = "build";
+
+        public override string Name { get { return "Base planner"; } }
+        public override int IntervalTicks { get { return 3750; } }
+
+        /// <summary>Stop queueing work when this much construction is already outstanding.</summary>
+        const int MaxPendingConstruction = 60;
+
+        /// <summary>Blueprints placed in a single pass, to spread the cost over time.</summary>
+        const int MaxPlacementsPerPass = 30;
+
+        /// <summary>How far from the starting position the base may be sited.</summary>
+        const int OriginSearchRadius = 45;
+
+        /// <summary>Total room slots along the corridor before the base is considered full.</summary>
+        const int MaxSlots = 40;
+
+        int placedThisPass;
+
+        protected override void Act(DirectorContext ctx)
+        {
+            var layout = ctx.layout;
+            if (layout == null) return;
+
+            if (!layout.established && !TryEstablish(ctx)) return;
+
+            var s = ctx.state;
+            if (s.pendingBlueprints + s.pendingFrames > MaxPendingConstruction) return;
+
+            placedThisPass = 0;
+
+            // Finish what is already reserved before opening a new room.
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var room = layout.rooms[i];
+                if (!room.wallsQueued)
+                {
+                    QueueShell(ctx, room);
+                    room.wallsQueued = true;
+                    Note("queued walls for " + room.role + " room");
+                    return;
+                }
+            }
+
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var room = layout.rooms[i];
+                if (room.furnitureQueued) continue;
+
+                if (!ShellComplete(ctx.map, room))
+                {
+                    // Walls were queued but neither finished nor still pending: a raid levelled
+                    // them, or the blueprints were cancelled. Re-queue on the next pass rather
+                    // than leaving a half-built room abandoned forever.
+                    if (!HasPendingConstructionIn(ctx.map, room))
+                    {
+                        room.wallsQueued = false;
+                        Note("re-queuing lost walls for " + room.role + " room");
+                        return;
+                    }
+                    continue;
+                }
+
+                QueueFurniture(ctx, room);
+                room.furnitureQueued = true;
+                Note("furnished " + room.role + " room");
+                return;
+            }
+
+            // Everything reserved is done; decide what the colony needs next. A null answer
+            // means the base is complete for the current population — the planner then stops
+            // rather than tiling bedrooms across the map forever.
+            RoomRole role;
+            if (!TryChooseNextRole(ctx, out role)) return;
+
+            var reserved = ReserveRoom(ctx, role);
+            if (reserved != null)
+            {
+                ctx.Credit(BanditId, role.ToString());
+                Note("reserved a new " + role + " room");
+            }
+        }
+
+        // ------------------------------------------------------------ siting
+
+        bool TryEstablish(DirectorContext ctx)
+        {
+            var map = ctx.map;
+            int size = RoomSize(ctx);
+
+            IntVec3 seed = ColonistCentroid(ctx);
+            if (!seed.IsValid) seed = map.Center;
+
+            // The base needs a corridor plus a room on each side, with slack for growth.
+            foreach (var cell in GenRadial.RadialCellsAround(seed, OriginSearchRadius, true))
+            {
+                if (!cell.InBounds(map)) continue;
+                if (!SiteIsViable(map, cell, size)) continue;
+
+                ctx.layout.origin = cell;
+                ctx.layout.established = true;
+                AcLog.Message("Base site chosen at " + cell + " (room size " + size + ").");
+                Note("established base at " + cell);
+                return true;
+            }
+
+            AcLog.WarningOnce("noBaseSite", "Could not find a buildable base site near " + seed + ".");
+            return false;
+        }
+
+        /// <summary>Checks that a candidate origin has room for the corridor and first rooms.</summary>
+        static bool SiteIsViable(Map map, IntVec3 origin, int size)
+        {
+            // Corridor is 2 cells tall; allow two rooms north and two south, three slots wide.
+            var footprint = new CellRect(
+                origin.x - 2,
+                origin.z - size - 1,
+                (size - 1) * 3 + 2,
+                size * 2 + 4);
+
+            if (!footprint.InBounds(map)) return false;
+            return PlacementUtil.BuildableFraction(map, footprint) > 0.85f;
+        }
+
+        static IntVec3 ColonistCentroid(DirectorContext ctx)
+        {
+            var pawns = ctx.state.allColonists;
+            int n = 0, x = 0, z = 0;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                if (!pawns[i].Spawned) continue;
+                x += pawns[i].Position.x;
+                z += pawns[i].Position.z;
+                n++;
+            }
+            return n > 0 ? new IntVec3(x / n, 0, z / n) : IntVec3.Invalid;
+        }
+
+        static int RoomSize(DirectorContext ctx)
+        {
+            int size = ctx.GeneInt(Genes.BaseRoomSize);
+            if (size < 5) size = 5;      // 3x3 interior is the smallest useful room
+            if (size > 11) size = 11;
+            return size;
+        }
+
+        // ------------------------------------------------------------ room reservation
+
+        /// <summary>
+        /// Which room the colony most needs next. Hard prerequisites come first — a colony
+        /// with nowhere to sleep or store food has no business building a research bench —
+        /// and among the genuinely optional rooms the choice is left to the bandit.
+        /// </summary>
+        bool TryChooseNextRole(DirectorContext ctx, out RoomRole role)
+        {
+            var layout = ctx.layout;
+            var s = ctx.state;
+            role = RoomRole.Storage;
+
+            if (!layout.HasRoom(RoomRole.Storage)) return true;
+
+            int bedsPerRoom = Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4);
+            int bedsWanted = s.colonists + ctx.GeneInt(Genes.BaseSpareBeds);
+            int bedsPlanned = layout.CountRooms(RoomRole.Bedroom) * bedsPerRoom;
+            if (bedsPlanned < bedsWanted)
+            {
+                role = RoomRole.Bedroom;
+                return true;
+            }
+
+            if (!layout.HasRoom(RoomRole.Kitchen))
+            {
+                role = RoomRole.Kitchen;
+                return true;
+            }
+
+            // Everything past this point is discretionary, so let experience decide.
+            var options = new List<string>();
+            if (!layout.HasRoom(RoomRole.Workshop)) options.Add(RoomRole.Workshop.ToString());
+            if (!layout.HasRoom(RoomRole.Research)) options.Add(RoomRole.Research.ToString());
+            if (!layout.HasRoom(RoomRole.Dining)) options.Add(RoomRole.Dining.ToString());
+            if (!layout.HasRoom(RoomRole.Hospital)) options.Add(RoomRole.Hospital.ToString());
+            if (s.prisoners > 0 && !layout.HasRoom(RoomRole.Prison)) options.Add(RoomRole.Prison.ToString());
+
+            // Nothing outstanding: the base matches the colony's current size.
+            if (options.Count == 0) return false;
+
+            var bandit = ctx.director.BanditFor(BanditId);
+            string pick = bandit.Select(options, ctx.Gene(Genes.ResearchExplore));
+            role = pick != null
+                ? (RoomRole)System.Enum.Parse(typeof(RoomRole), pick)
+                : RoomRole.Workshop;
+            return true;
+        }
+
+        /// <summary>
+        /// Claims the next free slot along the corridor. Slots alternate north and south and
+        /// march outward from the origin, and neighbouring rooms share a wall.
+        /// </summary>
+        PlannedRoom ReserveRoom(DirectorContext ctx, RoomRole role)
+        {
+            var layout = ctx.layout;
+            var map = ctx.map;
+            int size = RoomSize(ctx);
+
+            // Try successive slots until one lands somewhere buildable. Slots are capped so a
+            // hemmed-in base stops searching instead of marching rooms off across the map.
+            for (int attempt = 0; attempt < 24; attempt++)
+            {
+                if (layout.nextSlot >= MaxSlots) return null;
+                int slot = layout.nextSlot++;
+                bool north = (slot % 2) == 0;
+                int index = slot / 2;
+
+                // Fan out alternately left and right of the origin.
+                int lateral = ((index % 2) == 0 ? 1 : -1) * ((index + 1) / 2);
+                int xMin = layout.origin.x + lateral * (size - 1);
+                int zMin = north
+                    ? layout.origin.z + 2
+                    : layout.origin.z - 1 - (size - 1);
+
+                var rect = new CellRect(xMin, zMin, size, size);
+                if (!rect.InBounds(map)) continue;
+                if (PlacementUtil.BuildableFraction(map, rect) < 0.8f) continue;
+                if (OverlapsExisting(layout, rect)) continue;
+
+                var room = new PlannedRoom();
+                room.minX = xMin;
+                room.minZ = zMin;
+                room.width = size;
+                room.height = size;
+                room.role = role;
+                room.doorX = xMin + size / 2;
+                room.doorZ = north ? zMin : zMin + size - 1;
+
+                layout.rooms.Add(room);
+                return room;
+            }
+
+            return null;
+        }
+
+        static bool OverlapsExisting(BaseLayout layout, CellRect rect)
+        {
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var other = layout.rooms[i].Rect;
+                // Shared walls are fine; genuine interior overlap is not.
+                if (rect.ContractedBy(1).Overlaps(other.ContractedBy(1))) return true;
+            }
+            return false;
+        }
+
+        // ------------------------------------------------------------ construction
+
+        void QueueShell(DirectorContext ctx, PlannedRoom room)
+        {
+            var map = ctx.map;
+            float stonePref = ctx.Gene(Genes.BaseStonePreference);
+
+            var wallDef = AcDefs.Wall;
+            var doorDef = AcDefs.Door;
+            if (wallDef == null) return;
+
+            var wallStuff = PlacementUtil.ChooseStuff(map, wallDef, stonePref);
+            var doorStuff = doorDef != null ? PlacementUtil.ChooseStuff(map, doorDef, stonePref) : null;
+
+            var rect = room.Rect;
+            var door = room.Door;
+
+            foreach (var cell in rect.EdgeCells)
+            {
+                if (placedThisPass >= MaxPlacementsPerPass) return;
+
+                if (cell.x == door.x && cell.z == door.z)
+                {
+                    if (doorDef != null && PlacementUtil.TryPlace(map, doorDef, cell, Rot4.North, doorStuff))
+                        placedThisPass++;
+                    continue;
+                }
+
+                if (PlacementUtil.TryPlace(map, wallDef, cell, Rot4.North, wallStuff))
+                    placedThisPass++;
+            }
+
+            // Claim the room for housekeeping and ask for a roof over the interior.
+            foreach (var cell in rect)
+            {
+                PlacementUtil.MarkHome(map, cell);
+            }
+            foreach (var cell in room.Interior)
+            {
+                PlacementUtil.MarkRoof(map, cell);
+            }
+        }
+
+        /// <summary>True while any blueprint or frame is still outstanding on the room's walls.</summary>
+        static bool HasPendingConstructionIn(Map map, PlannedRoom room)
+        {
+            foreach (var cell in room.Rect.EdgeCells)
+            {
+                if (!cell.InBounds(map)) continue;
+                if (PlacementUtil.HasAnyConstructionAt(map, cell)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>True once no wall cell is still missing a finished building.</summary>
+        static bool ShellComplete(Map map, PlannedRoom room)
+        {
+            var door = room.Door;
+            foreach (var cell in room.Rect.EdgeCells)
+            {
+                if (cell.x == door.x && cell.z == door.z) continue;
+                if (!cell.InBounds(map)) continue;
+                if (cell.GetEdifice(map) == null) return false;
+            }
+            return true;
+        }
+
+        void QueueFurniture(DirectorContext ctx, PlannedRoom room)
+        {
+            switch (room.role)
+            {
+                case RoomRole.Bedroom:
+                    PlaceMany(ctx, room, AcDefs.Bed, Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4));
+                    break;
+                case RoomRole.Kitchen:
+                    PlaceOne(ctx, room, AcDefs.ElectricStove ?? AcDefs.FueledStove ?? AcDefs.Campfire);
+                    PlaceOne(ctx, room, AcDefs.ButcherTable);
+                    break;
+                case RoomRole.Research:
+                    PlaceOne(ctx, room, AcDefs.ResearchBench);
+                    break;
+                case RoomRole.Workshop:
+                    PlaceOne(ctx, room, AcDefs.StonecuttersTable);
+                    PlaceOne(ctx, room, AcDefs.CraftingSpot);
+                    break;
+                case RoomRole.Dining:
+                    PlaceOne(ctx, room, AcDefs.Thing("Table2x2c"));
+                    PlaceMany(ctx, room, AcDefs.Thing("DiningChair"), 2);
+                    break;
+                case RoomRole.Hospital:
+                    PlaceMany(ctx, room, AcDefs.Bed, 2);
+                    break;
+                case RoomRole.Prison:
+                    PlaceMany(ctx, room, AcDefs.Bed, 1);
+                    break;
+            }
+
+            // A light in every room; unlit rooms tank mood and slow work.
+            PlaceOne(ctx, room, AcDefs.Torch);
+        }
+
+        void PlaceOne(DirectorContext ctx, PlannedRoom room, ThingDef def)
+        {
+            PlaceMany(ctx, room, def, 1);
+        }
+
+        void PlaceMany(DirectorContext ctx, PlannedRoom room, ThingDef def, int count)
+        {
+            if (def == null || count <= 0) return;
+
+            var map = ctx.map;
+            var stuff = PlacementUtil.ChooseStuff(map, def, ctx.Gene(Genes.BaseStonePreference));
+            int placed = 0;
+
+            foreach (var cell in room.Interior)
+            {
+                if (placed >= count || placedThisPass >= MaxPlacementsPerPass) return;
+                // Keep the cell in front of the door clear so nothing blocks the entrance.
+                if ((cell - room.Door).LengthHorizontalSquared <= 2) continue;
+
+                if (PlacementUtil.TryPlace(map, def, cell, Rot4.North, stuff))
+                {
+                    placed++;
+                    placedThisPass++;
+                }
+            }
+        }
+
+        static int Clamp(int v, int min, int max)
+        {
+            return v < min ? min : (v > max ? max : v);
+        }
+    }
+}

@@ -1,0 +1,12 @@
+# Build output
+Source/**/bin/
+Source/**/obj/
+
+# The compiled mod assembly is a build artifact; build it with `dotnet build`.
+Assemblies/*.dll
+Assemblies/*.pdb
+
+# Editor
+.vs/
+.idea/
+*.user

@@ -1,0 +1,243 @@
+using System;
+using System.Collections.Generic;
+using RimWorld;
+using Verse;
+
+namespace AutoColony
+{
+    /// <summary>One named term of the fitness score, kept for display in the status window.</summary>
+    public struct ScoreTerm
+    {
+        public string name;
+        public float raw;         // normalised component, 0..1
+        public float weight;
+        public float Contribution { get { return raw * weight; } }
+
+        public ScoreTerm(string name, float raw, float weight)
+        {
+            this.name = name;
+            this.raw = raw;
+            this.weight = weight;
+        }
+    }
+
+    /// <summary>
+    /// The few colony figures an epoch is scored against. Kept separate from the full
+    /// <see cref="ColonyState"/> so the baseline survives a save/load in the middle of an epoch.
+    /// </summary>
+    public class EpochStart : IExposable
+    {
+        public int colonists = 1;
+        public float wealthTotal;
+        public int researchFinished;
+        public int tick;
+
+        public static EpochStart From(ColonyState s)
+        {
+            var e = new EpochStart();
+            if (s == null) return e;
+            e.colonists = s.colonists;
+            e.wealthTotal = s.wealthTotal;
+            e.researchFinished = s.researchFinished;
+            e.tick = s.tick;
+            return e;
+        }
+
+        public void ExposeData()
+        {
+            Scribe_Values.Look(ref colonists, "colonists", 1);
+            Scribe_Values.Look(ref wealthTotal, "wealthTotal", 0f);
+            Scribe_Values.Look(ref researchFinished, "researchFinished", 0);
+            Scribe_Values.Look(ref tick, "tick", 0);
+        }
+    }
+
+    /// <summary>
+    /// Running totals gathered across an epoch.
+    ///
+    /// Endpoint snapshots alone would be easy to game — a colony can look healthy on the last
+    /// day of an epoch after starving for the previous fourteen. Time-averaged mood and health
+    /// plus worst-case food reserves make the score reflect how the colony was actually run.
+    /// </summary>
+    public class EpochAccumulator : IExposable
+    {
+        public int samples;
+        public float moodSum;
+        public float healthSum;
+        public float minDaysOfFood = 999f;
+        public int mentalBreakSamples;
+        public int fireSamples;
+        public int downedSamples;
+
+        // Snapshot of global counters at epoch start, so deltas can be derived.
+        public int startColonistsKilled;
+        public int startRaids;
+        public int startResearchFinished;
+
+        public void ResetFor(ColonyState start)
+        {
+            samples = 0;
+            moodSum = 0f;
+            healthSum = 0f;
+            minDaysOfFood = 999f;
+            mentalBreakSamples = 0;
+            fireSamples = 0;
+            downedSamples = 0;
+
+            var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
+            startColonistsKilled = stats != null ? stats.colonistsKilled : 0;
+            startRaids = stats != null ? stats.numRaidsEnemy : 0;
+            startResearchFinished = start != null ? start.researchFinished : 0;
+        }
+
+        public void Observe(ColonyState s)
+        {
+            if (s == null || !s.Valid) return;
+            samples++;
+            moodSum += s.avgMood;
+            healthSum += s.avgHealth;
+            if (s.daysOfFood < minDaysOfFood) minDaysOfFood = s.daysOfFood;
+            if (s.colonistsInMentalState > 0) mentalBreakSamples++;
+            if (s.fires > 0) fireSamples++;
+            if (s.colonistsDowned > 0) downedSamples++;
+        }
+
+        public float AvgMood { get { return samples > 0 ? moodSum / samples : 0.5f; } }
+        public float AvgHealth { get { return samples > 0 ? healthSum / samples : 1f; } }
+        public float MentalBreakFraction { get { return samples > 0 ? (float)mentalBreakSamples / samples : 0f; } }
+        public float FireFraction { get { return samples > 0 ? (float)fireSamples / samples : 0f; } }
+        public float DownedFraction { get { return samples > 0 ? (float)downedSamples / samples : 0f; } }
+
+        public int DeathsThisEpoch
+        {
+            get
+            {
+                var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
+                return stats != null ? Math.Max(0, stats.colonistsKilled - startColonistsKilled) : 0;
+            }
+        }
+
+        public int RaidsThisEpoch
+        {
+            get
+            {
+                var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
+                return stats != null ? Math.Max(0, stats.numRaidsEnemy - startRaids) : 0;
+            }
+        }
+
+        public void ExposeData()
+        {
+            Scribe_Values.Look(ref samples, "samples", 0);
+            Scribe_Values.Look(ref moodSum, "moodSum", 0f);
+            Scribe_Values.Look(ref healthSum, "healthSum", 0f);
+            Scribe_Values.Look(ref minDaysOfFood, "minDaysOfFood", 999f);
+            Scribe_Values.Look(ref mentalBreakSamples, "mentalBreakSamples", 0);
+            Scribe_Values.Look(ref fireSamples, "fireSamples", 0);
+            Scribe_Values.Look(ref downedSamples, "downedSamples", 0);
+            Scribe_Values.Look(ref startColonistsKilled, "startColonistsKilled", 0);
+            Scribe_Values.Look(ref startRaids, "startRaids", 0);
+            Scribe_Values.Look(ref startResearchFinished, "startResearchFinished", 0);
+        }
+    }
+
+    /// <summary>
+    /// Turns an epoch of colony history into a single fitness number in roughly [0,1].
+    ///
+    /// Deliberately NOT genome-driven. If the strategy could tune its own scoring weights the
+    /// optimiser would simply learn to redefine success rather than to play better, so the
+    /// weights below are fixed constants and the only thing evolution may change is behaviour.
+    ///
+    /// Terms are a mix of levels (how well the colony is running) and rates (how fast it is
+    /// improving), chosen to stay comparable across epochs: wealth uses log-growth so it does
+    /// not inflate as the colony scales, and survival is measured against colonists at risk.
+    /// </summary>
+    public static class ColonyEvaluator
+    {
+        const float WSurvival = 0.30f;
+        const float WGrowth = 0.20f;
+        const float WFood = 0.15f;
+        const float WMood = 0.12f;
+        const float WHealth = 0.08f;
+        const float WResearch = 0.07f;
+        const float WInfrastructure = 0.05f;
+        const float WDefense = 0.03f;
+
+        /// <summary>Days of stored food that counts as fully secure.</summary>
+        const float FoodSecureDays = 12f;
+
+        public static float Evaluate(EpochStart start, ColonyState end, EpochAccumulator acc,
+                                     out List<ScoreTerm> breakdown)
+        {
+            breakdown = new List<ScoreTerm>();
+            if (end == null || start == null || acc == null) return 0f;
+
+            int startPop = Math.Max(1, start.colonists);
+
+            // --- survival: the dominant term. Losing colonists is the worst outcome. ---
+            int deaths = acc.DeathsThisEpoch;
+            float survival = Clamp01(1f - (deaths / (float)startPop) * 1.5f);
+            survival *= Clamp01(1f - acc.DownedFraction * 0.5f);
+            if (end.colonists == 0) survival = 0f;
+            breakdown.Add(new ScoreTerm("Survival", survival, WSurvival));
+
+            // --- growth: log wealth growth (scale-free) blended with population change ---
+            float wealthGrowth = 0.5f;
+            if (start.wealthTotal > 100f && end.wealthTotal > 0f)
+            {
+                double ratio = end.wealthTotal / (double)start.wealthTotal;
+                // +50% wealth over an epoch maps to 1.0, flat maps to 0.5, shrinking to below.
+                wealthGrowth = Clamp01(0.5f + (float)(Math.Log(ratio) / Math.Log(1.5)) * 0.5f);
+            }
+            float popGrowth = Clamp01(0.5f + (end.colonists - start.colonists) * 0.25f);
+            float growth = wealthGrowth * 0.6f + popGrowth * 0.4f;
+            breakdown.Add(new ScoreTerm("Growth", growth, WGrowth));
+
+            // --- food security: worst reserve reached, not the comfortable endpoint ---
+            float worstFood = acc.samples > 0 ? acc.minDaysOfFood : end.daysOfFood;
+            float food = Clamp01(worstFood / FoodSecureDays);
+            breakdown.Add(new ScoreTerm("Food security", food, WFood));
+
+            // --- mood: time-averaged, penalised by how often someone was breaking ---
+            float mood = Clamp01(acc.AvgMood) * Clamp01(1f - acc.MentalBreakFraction * 0.7f);
+            breakdown.Add(new ScoreTerm("Mood", mood, WMood));
+
+            // --- health ---
+            float health = Clamp01(acc.AvgHealth);
+            breakdown.Add(new ScoreTerm("Health", health, WHealth));
+
+            // --- research throughput ---
+            int projects = Math.Max(0, end.researchFinished - acc.startResearchFinished);
+            float research = Clamp01(projects / 2f);
+            breakdown.Add(new ScoreTerm("Research", research, WResearch));
+
+            // --- infrastructure: everyone housed, with a little slack ---
+            float bedRatio = end.colonists > 0 ? end.colonistBeds / (float)end.colonists : 1f;
+            float infra = Clamp01(bedRatio) * 0.7f + Clamp01(1f - acc.FireFraction) * 0.3f;
+            breakdown.Add(new ScoreTerm("Infrastructure", infra, WInfrastructure));
+
+            // --- defense readiness, scaled by the threat wealth actually attracts ---
+            float expectedTurrets = Clamp(end.wealthTotal / 25000f, 0f, 8f);
+            float defense = expectedTurrets < 0.5f ? 1f : Clamp01(end.turrets / expectedTurrets);
+            breakdown.Add(new ScoreTerm("Defense", defense, WDefense));
+
+            float score = 0f;
+            for (int i = 0; i < breakdown.Count; i++) score += breakdown[i].Contribution;
+
+            // Hard failure states the weighted sum would otherwise soften too much.
+            if (end.colonists == 0) score = 0f;
+
+            return Clamp01(score);
+        }
+
+        static float Clamp01(float v)
+        {
+            return v < 0f ? 0f : (v > 1f ? 1f : v);
+        }
+
+        static float Clamp(float v, float min, float max)
+        {
+            return v < min ? min : (v > max ? max : v);
+        }
+    }
+}

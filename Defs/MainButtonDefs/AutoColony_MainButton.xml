@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    Adds the "auto-colony" tab to the bottom bar. It opens the director's status panel:
+    what the colony currently scores, which strategy is being trialled, and what each
+    subsystem last did.
+  -->
+  <MainButtonDef>
+    <defName>AutoColony</defName>
+    <label>auto-colony</label>
+    <description>Shows what the autonomous director is doing and how its strategy is evolving.</description>
+    <tabWindowClass>AutoColony.UI.MainTabWindow_AutoColony</tabWindowClass>
+    <order>95</order>
+    <validWithoutMap>false</validWithoutMap>
+  </MainButtonDef>
+
+</Defs>

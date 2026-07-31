@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Auto-Rimworld</name>
+  <author>janmorgen</author>
+  <!-- packageId allows letters, numbers and dots only - no hyphens. -->
+  <packageId>janmorgen.autorimworld</packageId>
+
+  <description>Removes the player from RimWorld.
+
+An autonomous director takes over the colony: it picks a base site, plans and builds rooms, sets everyone's work priorities, lays out fields and stockpiles, runs production bills, chooses research, orders mining and hunting, drafts colonists against raids, and answers the decisions the game puts in front of you.
+
+It does not play from a fixed script. Every management decision is driven by a strategy - a vector of weights and thresholds covering food reserves, work assignment, building, defence spending and more. The colony is scored every few in-game days on how it actually fared (colonists kept alive, food security, mood, growth, research), and an evolutionary search mutates the strategy, keeps what beats the incumbent and discards what does not. Discrete choices such as which research to start or which crop to sow are handled by bandit learners that credit each choice with the outcome that followed it.
+
+The best strategy found is written to a file alongside your saves, so each new colony starts from what previous colonies learned rather than from scratch. Strategies are indexed by biome and difficulty, so lessons from a boreal forest are not blindly applied to an extreme desert.
+
+Open the "auto-colony" tab to watch the current score, the strategy being trialled and what each subsystem is doing. Every subsystem can be switched off individually in mod settings if you want to keep part of the game for yourself.</description>
+
+  <supportedVersions>
+    <li>1.6</li>
+  </supportedVersions>
+
+  <modVersion>1.0.0</modVersion>
+</ModMetaData>

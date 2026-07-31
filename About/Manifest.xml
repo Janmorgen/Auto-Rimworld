@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Manifest>
+  <identifier>janmorgen.autorimworld</identifier>
+  <version>1.0.0</version>
+
+  <!-- Wires up the "new version available" alert in Mod Manager. -->
+  <manifestUri>https://raw.githubusercontent.com/Janmorgen/Auto-Rimworld/main/About/Manifest.xml</manifestUri>
+  <downloadUri>https://github.com/Janmorgen/Auto-Rimworld/releases/latest</downloadUri>
+</Manifest>

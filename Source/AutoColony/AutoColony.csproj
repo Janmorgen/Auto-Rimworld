@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>AutoColony</AssemblyName>
+    <RootNamespace>AutoColony</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- RimWorld loads loose DLLs from <ModDir>/Assemblies, so build straight there. -->
+    <OutputPath>$(MSBuildProjectDirectory)\..\..\Assemblies\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+
+    <!-- Ship exactly one DLL: no deps.json, no PDB, no copied dependencies. -->
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+
+    <Version>1.0.0</Version>
+    <Authors>janmorgen</Authors>
+    <Product>Auto-Rimworld</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Public reference assemblies for RimWorld's Managed folder. Lets the mod compile
+      without a local game install; never redistributed (ExcludeAssets=runtime).
+    -->
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4871" PrivateAssets="all" ExcludeAssets="runtime" />
+    <!-- RimWorld ships its own 0Harmony; reference only, never copy. -->
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
