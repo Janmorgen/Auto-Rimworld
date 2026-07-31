@@ -72,7 +72,9 @@ namespace AutoColony.Modules
                 var room = layout.rooms[i];
                 if (!room.furnitureQueued) continue;
                 if (!KeyFurnitureMissing(ctx, room)) continue;
-                if (HasPendingConstructionIn(ctx.map, room)) continue;
+                // The whole room, not just its walls: furniture stands in the interior, so a
+                // generator or bed still waiting to be built reads as one that was destroyed.
+                if (HasPendingConstructionAnywhereIn(ctx.map, room)) continue;
 
                 room.furnitureQueued = false;
                 Chronicle.Record(ChronicleCategory.Build,
@@ -362,6 +364,27 @@ namespace AutoColony.Modules
         static bool HasPendingConstructionIn(Map map, PlannedRoom room)
         {
             foreach (var cell in room.Rect.EdgeCells)
+            {
+                if (!cell.InBounds(map)) continue;
+                if (PlacementUtil.HasAnyConstructionAt(map, cell)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// True while anything at all is still outstanding anywhere in the room, interior
+        /// included.
+        ///
+        /// The furniture check needs this rather than the walls-only version above. Furniture
+        /// stands inside the room, so a generator or bed that is merely *not built yet* was
+        /// being read as one that had been destroyed: the room was un-queued, re-queued on the
+        /// next pass, and a second blueprint placed beside the first. Two passes per cycle went
+        /// to that, and because both paths return early, no other room made progress while it
+        /// continued — observed as a duplicate generator and a base that built at a crawl.
+        /// </summary>
+        static bool HasPendingConstructionAnywhereIn(Map map, PlannedRoom room)
+        {
+            foreach (var cell in room.Rect)
             {
                 if (!cell.InBounds(map)) continue;
                 if (PlacementUtil.HasAnyConstructionAt(map, cell)) return true;

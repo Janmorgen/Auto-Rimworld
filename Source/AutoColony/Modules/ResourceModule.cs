@@ -57,7 +57,10 @@ namespace AutoColony.Modules
 
         int MaybeChopWood(DirectorContext ctx, IntVec3 origin)
         {
+            // As with mining: what the plan needs raises the standing target. A wood-fired
+            // generator burns its fuel continuously, so wanting power is also wanting wood.
             float target = ctx.Gene(Genes.WoodTarget);
+            if (ctx.plan != null) target = Max(target, ctx.plan.Needs.For("WoodLog"));
             if (ctx.state.wood >= target) return 0;
 
             float aggression = ctx.Gene(Genes.ChopAggression);

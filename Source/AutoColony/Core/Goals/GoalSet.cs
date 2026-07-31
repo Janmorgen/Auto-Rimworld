@@ -214,6 +214,9 @@ namespace AutoColony.Goals
             // A generator and a battery, with enough left over not to strip the stockpile.
             needs.Need("Steel", 220);
             needs.Need("ComponentIndustrial", 6);
+            // The generator is wood-fired, so it is not built and finished with — it burns fuel
+            // for as long as the colony wants power.
+            needs.Need("WoodLog", 300);
         }
 
         public override string Explain(DirectorContext ctx)

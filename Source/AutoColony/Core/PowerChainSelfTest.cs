@@ -326,11 +326,26 @@ namespace AutoColony
                     generatorBlueprints++;
             }
 
+            // A wood-fired generator nobody has refuelled is the same class of failure as a
+            // roofed solar panel, so the fuel level belongs in the report next to the watts.
+            var fuel = new System.Text.StringBuilder();
+            if (generatorDef != null && map.listerThings != null)
+            {
+                var built = map.listerThings.ThingsOfDef(generatorDef);
+                for (int i = 0; i < built.Count; i++)
+                {
+                    var refuelable = built[i].TryGetComp<CompRefuelable>();
+                    if (fuel.Length > 0) fuel.Append('/');
+                    fuel.Append(refuelable != null ? refuelable.Fuel.ToString("0") : "n-a");
+                }
+            }
+
             Chronicle.Record(ChronicleCategory.System, string.Format(
-                "SELFTEST day {0}: generators {1} ({2} running, {3:0}W), coolers {4}, " +
-                "conduits {5}, generator blueprints {6}, unpowered {7}",
-                s.day, s.generators, s.workingGenerators, s.powerOutput, s.workingCoolers,
-                conduits, generatorBlueprints, s.unpoweredBuildings));
+                "SELFTEST day {0}: generators {1} ({2} running, {3:0}W, fuel {4}), coolers {5}, " +
+                "conduits {6}, generator blueprints {7}, unpowered {8}, wood {9}",
+                s.day, s.generators, s.workingGenerators, s.powerOutput,
+                fuel.Length > 0 ? fuel.ToString() : "-",
+                s.workingCoolers, conduits, generatorBlueprints, s.unpoweredBuildings, s.wood));
         }
     }
 }
