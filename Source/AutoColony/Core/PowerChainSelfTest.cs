@@ -34,6 +34,7 @@ namespace AutoColony
 
         bool granted;
         bool probed;
+        bool cleared;
         int lastReportTick = -99999;
 
         public PowerChainSelfTest(Game game) { }
@@ -47,11 +48,78 @@ namespace AutoColony
 
             if (!granted) granted = TryGrant(map);
             if (granted && !probed) { probed = true; RunProbes(map); }
+            if (probed && !cleared) cleared = TryClearShortTerm(map);
 
             int tick = Find.TickManager.TicksGame;
             if (tick - lastReportTick < 2500) return;
             lastReportTick = tick;
             Report(map);
+        }
+
+        /// <summary>
+        /// Satisfies the short-term goals outright — beds and a food buffer — so the plan reaches
+        /// its long-term horizon in minutes rather than in-game weeks. Neither is under test; the
+        /// colony being slow to lay walls is what makes the power chain unreachable in practice,
+        /// and it is exactly what a long run has always died of before getting here.
+        ///
+        /// Waits for a stockpile, because food only counts towards <c>daysOfFood</c> once it is
+        /// in one — <c>ResourceCounter</c> ignores anything lying on the ground.
+        /// </summary>
+        static bool TryClearShortTerm(Map map)
+        {
+            Zone_Stockpile stockpile = null;
+            var zones = map.zoneManager != null ? map.zoneManager.AllZones : null;
+            for (int i = 0; zones != null && i < zones.Count; i++)
+            {
+                stockpile = zones[i] as Zone_Stockpile;
+                if (stockpile != null && stockpile.Cells.Count > 0) break;
+                stockpile = null;
+            }
+            if (stockpile == null) return false;
+
+            var mealDef = AcDefs.Thing("MealSurvivalPack");
+            int placed = 0;
+            var cells = stockpile.Cells;
+            for (int i = 0; i < cells.Count && placed < 8; i++)
+            {
+                if (cells[i].GetFirstItem(map) != null) continue;
+                var meal = ThingMaker.MakeThing(mealDef, null);
+                meal.stackCount = mealDef.stackLimit;
+                GenSpawn.Spawn(meal, cells[i], map);
+                meal.SetForbidden(false, false);
+                placed++;
+            }
+
+            int beds = SpawnBeds(map, 4);
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SELFTEST: cleared short-term goals — {0} meal stacks into the stockpile, {1} beds",
+                placed, beds));
+            return true;
+        }
+
+        static int SpawnBeds(Map map, int count)
+        {
+            var bedDef = AcDefs.Bed;
+            if (bedDef == null) return 0;
+
+            var wood = AcDefs.Thing("WoodLog");
+            var origin = map.mapPawns.FreeColonists.Count > 0
+                ? map.mapPawns.FreeColonists[0].Position
+                : map.Center;
+
+            int placed = 0;
+            foreach (var cell in GenRadial.RadialCellsAround(origin, 20, true))
+            {
+                if (placed >= count) break;
+                if (!GenSpawn.CanSpawnAt(bedDef, cell, map, Rot4.North)) continue;
+
+                var bed = ThingMaker.MakeThing(bedDef, wood);
+                GenSpawn.Spawn(bed, cell, map, Rot4.North);
+                bed.SetFaction(Faction.OfPlayer);
+                placed++;
+            }
+            return placed;
         }
 
         // ---------------------------------------------------------------- setup
