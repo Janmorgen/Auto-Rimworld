@@ -89,6 +89,9 @@ long enough to do the whole thing in one go.
   only Electricity, which is why it was picked, but it burns fuel forever. Solar placed on open
   ground is the better answer once `SolarPanels` is researched — and would need placement
   outside the roofed room, which nothing does yet.
+- **Conduit routing.** The director can now *see* that unroofed electrical equipment in rain is
+  a fire risk, but it still creates it: `PowerModule` runs an L-shaped path across open ground
+  without preferring cells that are already roofed. Prevention is the obvious follow-on.
 - Production bills beyond butchering, defence positioning under a real firefight, and any
   behaviour over in-game years rather than days.
 
@@ -125,6 +128,10 @@ long enough to do the whole thing in one go.
   colony has researched, so the first one always wins and the rest are dead code. It cost the
   colony its early kitchen. Choose on capability — researched, powered, affordable — not on the
   def existing.
+- **Rain sets unroofed electrical things on fire**, via `ShortCircuitUtility`, and adds an
+  explosion when the net holds charged batteries. Conduit run across open ground is the usual
+  victim, so this is a hazard the director manufactures. `FireRisk` used to treat rain as pure
+  safety and read 0.00 during exactly that weather.
 - **`ResourceCounter` only counts what is in a stockpile.** On day one everything is on the
   ground, so material checks read zero. Use `PlacementUtil.AvailableCount`.
 - **Almost everything arrives forbidden**, including scenario starting resources.
