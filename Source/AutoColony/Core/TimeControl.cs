@@ -6,50 +6,68 @@ using Verse;
 namespace AutoColony
 {
     /// <summary>
-    /// Keeps the game running, and running fast, while the director is in charge.
+    /// Keeps the game running, and running fast, while the director is in charge — without
+    /// overriding the player.
     ///
-    /// An autonomous colony manager that cannot unpause the game stalls the moment RimWorld
-    /// decides something is worth the player's attention — a finished research project, a
-    /// raid, a trade caravan. Left alone the game sits paused indefinitely and the director
-    /// never gets another tick.
+    /// An autonomous colony manager that cannot unpause stalls the moment RimWorld decides
+    /// something deserves attention: a research project finishing, a raid landing. Left alone
+    /// the game sits paused and the director never gets another tick.
     ///
-    /// That last point is the reason this lives on the frame update rather than the tick:
-    /// <c>GameComponentTick</c> does not run while the game is paused, so a director that only
-    /// acted on ticks could never resume itself. <c>GameComponentUpdate</c> runs every frame
-    /// regardless, which is the only place a pause can be observed and undone.
+    /// The distinction that matters is *who* paused. A pause the game raised for an event is
+    /// the director's to clear. A pause the player pressed is an instruction to stop, and is
+    /// left strictly alone until they resume — otherwise the mod fights anyone trying to look
+    /// at their own colony.
     ///
-    /// Two distinct things cause a stall and they need different handling:
-    ///   - the time speed being set to Paused, which is fixed by setting it back;
-    ///   - a modal window being open, which sets <see cref="TickManager.ForcePaused"/> so
-    ///     that setting the speed does nothing at all until the window is closed.
+    /// This runs on the frame hooks rather than the tick, because a paused game issues no
+    /// ticks at all; a director acting only in <c>GameComponentTick</c> could never observe a
+    /// pause, let alone undo one. That was measured, not assumed.
+    ///
+    /// Two different things stop the game and need different treatment:
+    ///   - a time speed of Paused, fixed by setting it back;
+    ///   - a modal window, which sets <see cref="TickManager.ForcePaused"/> so that the speed
+    ///     is ignored entirely until the window is gone.
     ///
     /// Deliberately does not touch <c>Prefs.AutomaticPauseMode</c> or <c>Prefs.PauseOnLoad</c>.
-    /// Those are persistent player settings that live in Prefs.xml, and a mod that rewrites
-    /// them leaves the player's game permanently altered if it is ever removed mid-session.
-    /// Correcting the speed after the fact is idempotent and leaves nothing behind.
+    /// Those are persistent player settings in Prefs.xml; a mod that rewrites them leaves the
+    /// game altered if it is ever removed. Correcting things afterwards leaves nothing behind.
     /// </summary>
     public static class TimeControl
     {
         /// <summary>
-        /// How long a pause is allowed to stand before being undone, in real seconds.
-        ///
-        /// Not zero: an event pause that vanished on the same frame it appeared would make
-        /// letters unreadable and would fight a player who paused deliberately to look at
-        /// something. A beat of visibility costs nothing at superfast speed.
+        /// How long an event pause stands before being undone, in real seconds. Not zero: a
+        /// pause that vanished on the frame it appeared would make letters unreadable.
         /// </summary>
         public const float ResumeDelaySeconds = 1.25f;
 
-        /// <summary>Real seconds between corrections, so this costs nothing per frame.</summary>
+        /// <summary>
+        /// Longer grace for popups, since the player may have opened one to read it.
+        /// </summary>
+        public const float DialogDismissDelaySeconds = 3f;
+
+        /// <summary>
+        /// How recently a letter must have arrived for a pause to be blamed on it. RimWorld
+        /// pauses on the same tick the letter lands, and ticks are frozen while paused, so
+        /// this stays small in practice; the allowance is for the polling interval.
+        /// </summary>
+        const int EventPauseWindowTicks = 60;
+
+        /// <summary>Real seconds between checks, so this costs nothing per frame.</summary>
         const float CheckInterval = 0.25f;
 
         static float lastCheckTime;
         static float pausedSinceTime = -1f;
+        static bool wasStoppedLastCheck;
+        static bool currentPauseIsEventDriven;
+        static bool respectingPlayerPause;
 
         public static int ResumesPerformed;
         public static int DialogsDismissed;
         public static string LastAction = "idle";
 
-        /// <summary>Called every frame while a game is running.</summary>
+        /// <summary>True while the mod is deliberately keeping its hands off a manual pause.</summary>
+        public static bool RespectingPlayerPause { get { return respectingPlayerPause; } }
+
+        /// <summary>Called from the frame hooks, which run even while the game is paused.</summary>
         public static void Update()
         {
             var settings = AutoColonyMod.Settings;
@@ -79,38 +97,82 @@ namespace AutoColony
         static void Maintain(AutoColonySettings settings, float now)
         {
             var ticks = Find.TickManager;
+            bool speedPaused = ticks.CurTimeSpeed == TimeSpeed.Paused;
+            bool windowPaused = Find.WindowStack != null && Find.WindowStack.WindowsForcePause;
 
-            // A modal window blocks ticking outright; the speed setting is irrelevant until
-            // it is gone, so this has to be dealt with first.
-            if (Find.WindowStack != null && Find.WindowStack.WindowsForcePause)
+            if (!speedPaused && !windowPaused)
             {
-                if (settings.dismissPauseDialogs) TryDismissBlockingDialog(now);
-                return;
-            }
-
-            var desired = DesiredSpeed(settings);
-
-            if (ticks.CurTimeSpeed == TimeSpeed.Paused)
-            {
-                // Let the pause stand briefly so the player can see what caused it.
-                if (pausedSinceTime < 0f) pausedSinceTime = now;
-                if (now - pausedSinceTime < ResumeDelaySeconds) return;
-
-                ticks.CurTimeSpeed = desired;
+                // Nothing is holding the game up. Forget any earlier pause and hold the speed.
+                wasStoppedLastCheck = false;
+                respectingPlayerPause = false;
                 pausedSinceTime = -1f;
-                ResumesPerformed++;
-                LastAction = "resumed from a pause";
-                AcLog.Verbose("Time control: resumed the game at " + desired);
+
+                var wanted = DesiredSpeed(settings);
+                if (ticks.CurTimeSpeed != wanted)
+                {
+                    ticks.CurTimeSpeed = wanted;
+                    LastAction = "set speed to " + wanted;
+                }
                 return;
             }
 
-            pausedSinceTime = -1f;
-
-            if (ticks.CurTimeSpeed != desired)
+            // Something has stopped the game. Work out whose doing it was, once, on the edge.
+            if (!wasStoppedLastCheck)
             {
-                ticks.CurTimeSpeed = desired;
-                LastAction = "set speed to " + desired;
+                wasStoppedLastCheck = true;
+                pausedSinceTime = now;
+
+                // A popup is always something the game raised. A bare speed pause is only the
+                // game's if a letter just landed; otherwise the player pressed pause.
+                currentPauseIsEventDriven = windowPaused || ALetterJustArrived();
+                respectingPlayerPause = !currentPauseIsEventDriven;
+
+                if (respectingPlayerPause)
+                {
+                    LastAction = "paused by you — left alone";
+                    AcLog.Verbose("Time control: this pause looks manual, leaving it alone");
+                }
             }
+
+            if (respectingPlayerPause) return;
+
+            if (windowPaused)
+            {
+                if (settings.dismissPauseDialogs && now - pausedSinceTime >= DialogDismissDelaySeconds)
+                    TryDismissBlockingDialog();
+                return;
+            }
+
+            if (now - pausedSinceTime < ResumeDelaySeconds) return;
+
+            var speed = DesiredSpeed(settings);
+            ticks.CurTimeSpeed = speed;
+            wasStoppedLastCheck = false;
+            pausedSinceTime = -1f;
+            ResumesPerformed++;
+            LastAction = "resumed after an event pause";
+            AcLog.Verbose("Time control: resumed the game at " + speed + " after an event pause");
+        }
+
+        /// <summary>
+        /// Whether a letter landed just now, which is what an event-driven pause looks like.
+        /// Ticks are frozen while paused, so the gap stays where it was at the moment of the
+        /// pause rather than growing.
+        /// </summary>
+        static bool ALetterJustArrived()
+        {
+            var stack = Find.LetterStack;
+            if (stack == null) return false;
+
+            int now = Find.TickManager.TicksGame;
+            var letters = stack.LettersListForReading;
+            for (int i = 0; i < letters.Count; i++)
+            {
+                var letter = letters[i];
+                if (letter == null) continue;
+                if (now - letter.arrivalTick <= EventPauseWindowTicks) return true;
+            }
+            return false;
         }
 
         static TimeSpeed DesiredSpeed(AutoColonySettings settings)
@@ -121,44 +183,47 @@ namespace AutoColony
                 case 1: return TimeSpeed.Fast;
                 case 3:
                     // Ultrafast is a development speed; the game only offers it with dev mode
-                    // on, and it is unstable enough that it should not be reachable by accident.
+                    // on, and it is unstable enough not to be reachable by accident.
                     return Prefs.DevMode ? TimeSpeed.Ultrafast : TimeSpeed.Superfast;
                 default: return TimeSpeed.Superfast;
             }
         }
 
         /// <summary>
-        /// Closes an event popup that is holding the game paused.
-        ///
-        /// Only the two window types RimWorld raises for events are ever touched. Closing
-        /// windows indiscriminately would shut the options menu or this mod's own settings
-        /// out from under the player, so anything the player plausibly opened themselves is
-        /// treated as a signal to stop interfering entirely.
+        /// Closes an event popup holding the game. Only the two window types RimWorld raises
+        /// for events are touched, and while the options or any mod's settings screen is open
+        /// nothing is touched at all — that is taken as the player driving.
         /// </summary>
-        static void TryDismissBlockingDialog(float now)
+        static void TryDismissBlockingDialog()
         {
             var stack = Find.WindowStack;
             if (stack == null) return;
 
             var windows = stack.Windows;
-
-            // If a settings or options screen is up, the player is driving. Leave everything.
             for (int i = 0; i < windows.Count; i++)
             {
                 if (windows[i] is Dialog_Options || windows[i] is Dialog_ModSettings) return;
             }
 
-            // Same grace period as a speed pause, so an event dialog is readable before it goes.
-            if (pausedSinceTime < 0f) pausedSinceTime = now;
-            if (now - pausedSinceTime < ResumeDelaySeconds) return;
-
             for (int i = windows.Count - 1; i >= 0; i--)
             {
                 var window = windows[i];
                 if (window == null || !window.forcePause) continue;
-                if (!(window is Dialog_NodeTree) && !(window is Dialog_MessageBox)) continue;
+
+                if (!(window is Dialog_NodeTree) && !(window is Dialog_MessageBox))
+                {
+                    // A window type not on the list will hold the game open indefinitely and
+                    // there is no way to know from here whether closing it is safe. Name it
+                    // once so the situation is diagnosable instead of looking like a hang.
+                    AcLog.WarningOnce("blockingWindow:" + window.GetType().FullName,
+                        "Game is held paused by " + window.GetType().FullName +
+                        ", which Auto-Colony will not close. The colony will not advance " +
+                        "until it is dismissed.");
+                    continue;
+                }
 
                 stack.TryRemove(window, false);
+                wasStoppedLastCheck = false;
                 pausedSinceTime = -1f;
                 DialogsDismissed++;
                 LastAction = "dismissed a " + window.GetType().Name;
@@ -167,11 +232,14 @@ namespace AutoColony
             }
         }
 
-        /// <summary>Clears per-game runtime state so counters do not leak across loads.</summary>
+        /// <summary>Clears per-game runtime state so nothing leaks across loads.</summary>
         public static void Reset()
         {
             pausedSinceTime = -1f;
             lastCheckTime = 0f;
+            wasStoppedLastCheck = false;
+            currentPauseIsEventDriven = false;
+            respectingPlayerPause = false;
             ResumesPerformed = 0;
             DialogsDismissed = 0;
             LastAction = "idle";

@@ -117,17 +117,36 @@ namespace AutoColony.Modules
             return false;
         }
 
+        /// <summary>
+        /// Hunts when food is short, and hunts harder the shorter it gets.
+        ///
+        /// A fixed radius and a fixed risk tolerance are wrong at both ends. Observed in-game:
+        /// a desert colony with crops planted but weeks from harvest sat on a starvation alert
+        /// while this designated zero animals two passes running — everything nearby was either
+        /// out of range or filtered out as dangerous. A colony with a full larder can afford to
+        /// be picky about muffalo; a starving one cannot, and walking further is free by
+        /// comparison to not eating.
+        /// </summary>
         int MaybeHunt(DirectorContext ctx, IntVec3 origin)
         {
             float foodTarget = ctx.Gene(Genes.FoodDaysPerColonist);
-            if (ctx.state.daysOfFood >= foodTarget) return 0;
+            float daysOfFood = ctx.state.daysOfFood;
+            if (daysOfFood >= foodTarget) return 0;
+
+            // 0 when comfortably stocked, 1 when the larder is empty.
+            float urgency = foodTarget > 0f ? Clamp01(1f - daysOfFood / foodTarget) : 1f;
 
             float aggression = ctx.Gene(Genes.HuntAggression);
-            if (aggression < 0.15f) return 0;
+            float effective = Clamp01(aggression + urgency * 0.5f);
+            if (effective < 0.15f) return 0;
+
+            // Range the colony will walk for a meal, widening as the situation worsens.
+            int radius = GatherRadius + (int)(urgency * 60f);
+            int radiusSq = radius * radius;
 
             var map = ctx.map;
             var des = DesignationDefOf.Hunt;
-            int budget = (int)(8 * aggression) + 1;
+            int budget = (int)(8 * effective) + 1;
             int done = 0;
 
             var pawns = map.mapPawns.AllPawnsSpawned;
@@ -138,17 +157,22 @@ namespace AutoColony.Modules
                 if (animal.Faction != null) continue;
                 if (animal.RaceProps.foodType == FoodTypeFlags.None) continue;
                 if (map.designationManager.DesignationOn(animal, des) != null) continue;
-                if ((animal.Position - origin).LengthHorizontalSquared > GatherRadius * GatherRadius) continue;
+                if ((animal.Position - origin).LengthHorizontalSquared > radiusSq) continue;
 
-                // Leave the genuinely dangerous ones alone unless the strategy is aggressive.
+                // Dangerous game is a last resort, not a permanent no.
                 bool dangerous = animal.RaceProps.manhunterOnDamageChance > 0.25f;
-                if (dangerous && aggression < 0.7f) continue;
+                if (dangerous && effective < 0.7f) continue;
 
                 map.designationManager.AddDesignation(new Designation(animal, des));
                 done++;
             }
 
             return done;
+        }
+
+        static float Clamp01(float v)
+        {
+            return v < 0f ? 0f : (v > 1f ? 1f : v);
         }
     }
 }

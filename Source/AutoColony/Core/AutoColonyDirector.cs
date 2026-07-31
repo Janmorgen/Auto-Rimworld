@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AutoColony.Learning;
 using AutoColony.Modules;
 using RimWorld;
+using UnityEngine;
 using Verse;
 
 namespace AutoColony
@@ -132,12 +133,28 @@ namespace AutoColony
         // ---------------------------------------------------------------- main loop
 
         /// <summary>
-        /// Runs every frame, including while the game is paused — which is precisely why time
-        /// control lives here. A paused game issues no ticks, so a director that only acted in
-        /// <see cref="GameComponentTick"/> could never undo a pause it did not choose.
+        /// Time control cannot live on the tick: a paused game issues no ticks, so a director
+        /// that only acted in <see cref="GameComponentTick"/> could never undo a pause it did
+        /// not choose.
+        ///
+        /// It is driven from both of the non-tick hooks. <see cref="GameComponentUpdate"/>
+        /// alone was measured *not* to be enough — with the game paused by hand the colony
+        /// stopped dead and never resumed — whereas OnGUI keeps running because the interface
+        /// stays interactive while paused. Update is kept as well since it is the cheaper of
+        /// the two while the game is running normally, and the work is throttled and
+        /// idempotent, so being called from both costs nothing.
         /// </summary>
         public override void GameComponentUpdate()
         {
+            TimeControl.Update();
+        }
+
+        public override void GameComponentOnGUI()
+        {
+            // OnGUI is raised for both the layout and repaint passes. Closing a window during
+            // layout desynchronises Unity's IMGUI control counts and throws, so only act on
+            // repaint, by which point the frame's layout is settled.
+            if (Event.current != null && Event.current.type != EventType.Repaint) return;
             TimeControl.Update();
         }
 

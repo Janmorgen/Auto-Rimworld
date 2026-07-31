@@ -53,7 +53,8 @@ namespace AutoColony
             Text.Font = GameFont.Small;
 
             listing.CheckboxLabeled("Keep the game running", ref Settings.controlTime,
-                "Undoes event pauses after a short delay so the colony keeps going unattended.");
+                "Undoes pauses the game raised for an event, so the colony keeps going " +
+                "unattended. A pause you press yourself is left alone until you resume.");
 
             if (Settings.controlTime)
             {

@@ -94,9 +94,16 @@ Two different things stall the game and need different handling. A time speed of
 fixed by setting it back. A modal popup sets `TickManager.ForcePaused`, where setting the
 speed does nothing at all until the window is closed.
 
-Both are undone after a short delay rather than instantly, so letters stay readable. Only
-event popups are ever closed, and while the options screen or any mod's settings are open the
-mod does not touch anything — that is taken as a sign you are driving.
+**Whose pause it was decides what happens.** A pause the *game* raised is the director's to
+clear. A pause *you* pressed is an instruction to stop, and is left strictly alone until you
+resume — otherwise the mod fights you every time you want to look at your own colony. The two
+are told apart by whether a letter landed in the moment the pause appeared, which is what an
+event pause looks like and a keypress does not.
+
+Both kinds are handled after a short delay rather than instantly, so letters stay readable.
+Only event popups are ever closed, and while the options screen or any mod's settings are
+open the mod does not touch anything. A popup it does not recognise is named in the log rather
+than force-closed, so a stuck game is diagnosable instead of looking like a hang.
 
 It deliberately does **not** change `Prefs.AutomaticPauseMode` or `Prefs.PauseOnLoad`. Those
 are persistent player settings; a mod that rewrites them leaves your game altered if it is
