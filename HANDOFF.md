@@ -55,15 +55,40 @@ It had never run, and could not have. Four faults, fixed together — see the co
 - The Power room was furnished with a solar panel, under the roof the planner had just asked for.
 - A battery counted as a power source.
 
-Verified with `AUTOCOLONY_POWERTEST=1`, which runs `PowerChainSelfTest`: it hands the real
-planner hand-built colony states and records what it decides, so the arbitration is settled in
-seconds instead of hours. Every case behaves — including the ones that used to pass for the
-wrong reason, like a generator that is built but producing 0W.
+Watching it finally build turned up three more, all in the base planner rather than the power
+code: a pending blueprint read as destroyed furniture (so the room re-queued forever and built
+duplicates), the planner opened new rooms while the one the plan asked for stood half-built (two
+colonists, seven shells, nothing finished), and the kitchen's `ElectricStove ?? FueledStove ??
+Campfire` was not a fallback chain at all — `??` gives way only on null, and all three defs
+always resolve.
+
+Verified with `AUTOCOLONY_POWERTEST=1`, which runs `PowerChainSelfTest`. It settles both halves
+in seconds instead of hours:
+
+- *Decisions* — hands the real planner hand-built colony states. Every case behaves, including
+  the ones that used to pass for the wrong reason (a generator built but producing 0W still
+  leaves Power unsatisfied; a freezer whose cooler is dead still wants Refrigeration).
+- *Wiring* — stands a fuelled generator and a stranded consumer on the map and lets
+  `PowerModule` do the rest:
+
+```
+wiring probe: generator (1000W, fuel 75), consumer 19 cells away, on a grid: False
+day 0 03h  wiring Electric stove to Wood-fired generator, 19 cells away
+day 0 12h  generators 1 (1 running, 1000W), conduits 14, unpowered 0
+```
+
+A live colony also reached Power by itself, built the room and queued the generator, so the
+decision path and the physical path have both been walked — the live run just never survived
+long enough to do the whole thing in one go.
 
 ## Not verified
 
-- **The chain over a long run.** Proven at the decision layer and through construction, but no
-  colony has been carried across seasons to see how it holds up.
+- **The chain over a long run, in one colony.** Both halves are proven, but no single colony has
+  been carried from nothing to a powered freezer across seasons.
+- **Whether the wood-fired generator is the right long-term choice.** It works indoors and needs
+  only Electricity, which is why it was picked, but it burns fuel forever. Solar placed on open
+  ground is the better answer once `SolarPanels` is researched — and would need placement
+  outside the roofed room, which nothing does yet.
 - Production bills beyond butchering, defence positioning under a real firefight, and any
   behaviour over in-game years rather than days.
 
@@ -96,6 +121,10 @@ wrong reason, like a generator that is built but producing 0W.
   that wants any of them should say so in `RequiresResearch`.
 - **A `-quicktest` colony starts with Electricity already researched**, which will quietly hide
   any research-gating bug. `ResearchManager.ResetAllProgress()` winds it back.
+- **`defA ?? defB` is not a fallback between buildings.** Every vanilla def resolves whatever the
+  colony has researched, so the first one always wins and the rest are dead code. It cost the
+  colony its early kitchen. Choose on capability — researched, powered, affordable — not on the
+  def existing.
 - **`ResourceCounter` only counts what is in a stockpile.** On day one everything is on the
   ground, so material checks read zero. Use `PlacementUtil.AvailableCount`.
 - **Almost everything arrives forbidden**, including scenario starting resources.

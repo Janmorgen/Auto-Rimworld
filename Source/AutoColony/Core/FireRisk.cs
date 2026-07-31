@@ -36,9 +36,9 @@ namespace AutoColony
             float risk = 0.3f;
             if (map.fireWatcher != null) risk = Clamp01(map.fireWatcher.FireDanger);
 
-            // Rain puts fires out and stops them starting.
-            if (map.weatherManager != null)
-                risk *= 1f - Clamp01(map.weatherManager.RainRate);
+            // Rain puts ordinary fires out and stops them starting.
+            float rain = map.weatherManager != null ? Clamp01(map.weatherManager.RainRate) : 0f;
+            risk *= 1f - rain;
 
             // Heat dries everything out; the game's own danger figure already leans on this,
             // but a genuinely hot map deserves the extra nudge.
@@ -47,6 +47,15 @@ namespace AutoColony
 
             if (state != null)
             {
+                // Rain is not only protective. It is exactly what sets unroofed electrical
+                // things alight: the game shorts them out, which starts a fire and, on a net
+                // with charged batteries, an explosion. Treating rain as pure safety read the
+                // risk as 0.00 during the very weather that caused seven fires in one test
+                // colony — and the director lays its own conduit runs across open ground, so
+                // this is a hazard it creates rather than one it merely encounters.
+                if (rain > 0f && state.unroofedPowered > 0)
+                    risk = Max(risk, Clamp01(rain * Clamp01(state.unroofedPowered / 12f)));
+
                 // A fire burning now is evidence, not a forecast.
                 if (state.firesNearBase > 0) risk = Max(risk, 0.9f);
                 else if (state.fires > 0) risk = Max(risk, 0.6f);

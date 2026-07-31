@@ -81,6 +81,16 @@ namespace AutoColony
         public int unpoweredBuildings;
 
         /// <summary>
+        /// Electrical buildings standing under open sky, conduits included.
+        ///
+        /// Rain shorts these out — `ShortCircuitUtility.TryShortCircuitInRain` — which starts a
+        /// fire, and an explosion if the net has charged batteries. It matters because the
+        /// director lays its own long conduit runs across open ground, so this is a hazard it
+        /// creates rather than one it finds.
+        /// </summary>
+        public int unroofedPowered;
+
+        /// <summary>
         /// Haulable items sitting under open sky. They deteriorate where they are, and in a
         /// dry climate they are also the easiest thing on the map to lose to a fire.
         /// </summary>
@@ -341,6 +351,14 @@ namespace AutoColony
             {
                 var building = buildings[i];
                 if (building == null || !building.Spawned) continue;
+
+                // Anything electrical, conduits included — CompPowerTrader and the conduits'
+                // transmitter both derive from CompPower.
+                if (building.TryGetComp<CompPower>() != null)
+                {
+                    var roofs = building.Map != null ? building.Map.roofGrid : null;
+                    if (roofs != null && !roofs.Roofed(building.Position)) s.unroofedPowered++;
+                }
 
                 var trader = building.TryGetComp<CompPowerTrader>();
                 if (trader == null) continue;

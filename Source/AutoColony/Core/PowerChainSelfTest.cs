@@ -410,12 +410,16 @@ namespace AutoColony
                 }
             }
 
+            float rain = map.weatherManager != null ? map.weatherManager.RainRate : 0f;
+
             Chronicle.Record(ChronicleCategory.System, string.Format(
                 "SELFTEST day {0}: generators {1} ({2} running, {3:0}W, fuel {4}), coolers {5}, " +
-                "conduits {6}, generator blueprints {7}, unpowered {8}, wood {9}",
+                "conduits {6}, generator blueprints {7}, unpowered {8}, wood {9}, " +
+                "unroofed-powered {10}, rain {11:0.00}, fire risk {12:0.00}",
                 s.day, s.generators, s.workingGenerators, s.powerOutput,
                 fuel.Length > 0 ? fuel.ToString() : "-",
-                s.workingCoolers, conduits, generatorBlueprints, s.unpoweredBuildings, s.wood));
+                s.workingCoolers, conduits, generatorBlueprints, s.unpoweredBuildings, s.wood,
+                s.unroofedPowered, rain, FireRisk.Assess(map, s)));
         }
     }
 }
