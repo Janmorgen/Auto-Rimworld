@@ -223,12 +223,127 @@ namespace AutoColony
             return true;
         }
 
+        /// <summary>
+        /// True when something has already been ordered about this thing — knocked down, lifted,
+        /// or carried elsewhere.
+        ///
+        /// The third case is easy to miss. A reinstall is a `Blueprint_Install` standing at the
+        /// *destination*, not a designation on the building, so a check that looked only at
+        /// designations kept reporting a stove as still needing moving while two colonists were
+        /// already carrying it.
+        /// </summary>
+        public static bool AlreadyOrdered(Map map, Thing thing)
+        {
+            if (map == null || thing == null) return false;
+
+            return HasDesignation(map, thing, DesignationDefOf.Deconstruct)
+                || HasDesignation(map, thing, DesignationDefOf.Uninstall)
+                || InstallBlueprintUtility.ExistingBlueprintFor(thing) != null;
+        }
+
         /// <summary>True when this thing is already on its way out.</summary>
         public static bool MarkedForDeconstruction(Map map, Thing thing)
         {
-            if (map == null || thing == null) return false;
-            var def = DesignationDefOf.Deconstruct;
-            return def != null && map.designationManager.DesignationOn(thing, def) != null;
+            return HasDesignation(map, thing, DesignationDefOf.Deconstruct)
+                || HasDesignation(map, thing, DesignationDefOf.Uninstall);
+        }
+
+        public static bool HasDesignation(Map map, Thing thing, DesignationDef def)
+        {
+            if (map == null || thing == null || def == null) return false;
+            return map.designationManager.DesignationOn(thing, def) != null;
+        }
+
+        /// <summary>
+        /// Whether this can be picked up and put down again rather than knocked down.
+        ///
+        /// Furniture — beds, chairs, tables, lamps — inherits <c>minifiedDef</c> from
+        /// `FurnitureBase`, and so do batteries, heaters and turrets. Anything minifiable should
+        /// be moved rather than deconstructed: it keeps every unit of material *and* its quality,
+        /// where deconstruction returns only `resourcesFractionWhenDeconstructed` of the cost —
+        /// a per-def figure that several vanilla buildings set to zero outright.
+        /// </summary>
+        public static bool Movable(Thing thing)
+        {
+            return thing != null && thing.def != null && thing.def.Minifiable;
+        }
+
+        /// <summary>
+        /// Moves a building to another cell intact, by queueing the game's own reinstall job.
+        /// Colonists uninstall it, carry it and set it down again — nothing is lost on the way.
+        /// </summary>
+        public static bool TryReinstall(Map map, Thing thing, IntVec3 target, Rot4 rot)
+        {
+            var building = thing as Building;
+            if (map == null || building == null || !building.Spawned) return false;
+            if (!Movable(building) || building.Faction != Faction.OfPlayer) return false;
+            if (!target.InBounds(map) || target == building.Position) return false;
+            if (AlreadyOrdered(map, building)) return false;
+
+            var report = GenConstruct.CanPlaceBlueprintAt(building.def, target, rot, map,
+                                                          false, building, building);
+            if (!report.Accepted) return false;
+
+            GenConstruct.PlaceBlueprintForReinstall(building, target, map, rot, Faction.OfPlayer);
+            return true;
+        }
+
+        /// <summary>
+        /// Takes a building up and leaves it as an item to be placed later. Worth it when the
+        /// colony wants the thing but not where it currently stands, and has nowhere to put it
+        /// yet — an uninstalled bed keeps its quality and all of its material.
+        /// </summary>
+        public static bool TryUninstall(Map map, Thing thing)
+        {
+            if (map == null || thing == null || !thing.Spawned) return false;
+            if (!Movable(thing) || thing.Faction != Faction.OfPlayer) return false;
+
+            var def = DesignationDefOf.Uninstall;
+            if (def == null) return false;
+            if (MarkedForDeconstruction(map, thing)) return false;
+
+            map.designationManager.AddDesignation(new Designation(thing, def));
+            return true;
+        }
+
+        /// <summary>
+        /// Withdraws a standing order.
+        ///
+        /// Orders outlive the reason they were given. A bed marked to be pulled out of a barracks
+        /// while the colony was comfortable is actively harmful once it is not, and nothing else
+        /// in the director ever cancelled anything it had asked for.
+        /// </summary>
+        public static bool CancelDesignation(Map map, Thing thing, DesignationDef def)
+        {
+            if (map == null || thing == null || def == null) return false;
+
+            var designation = map.designationManager.DesignationOn(thing, def);
+            if (designation == null) return false;
+
+            map.designationManager.RemoveDesignation(designation);
+            return true;
+        }
+
+        /// <summary>
+        /// Cancels construction that has not happened yet. A blueprint is simply removed; a frame
+        /// is destroyed, which returns the material already carried to it.
+        /// </summary>
+        public static int CancelConstructionAt(Map map, IntVec3 cell)
+        {
+            if (map == null || !cell.InBounds(map)) return 0;
+
+            int cancelled = 0;
+            var things = cell.GetThingList(map);
+            for (int i = things.Count - 1; i >= 0; i--)
+            {
+                var thing = things[i];
+                if (!(thing is Blueprint) && !(thing is Frame)) continue;
+                if (thing.Faction != Faction.OfPlayer) continue;
+
+                thing.Destroy(DestroyMode.Cancel);
+                cancelled++;
+            }
+            return cancelled;
         }
 
         /// <summary>

@@ -135,9 +135,10 @@ namespace AutoColony.Upkeep
                 var thing = exposed[i];
                 if (thing == null || !thing.Spawned) continue;
 
-                // Already on its way out. Still reporting it would leave the survey permanently
-                // showing work that is in hand, and hide whatever is behind it in the queue.
-                if (PlacementUtil.MarkedForDeconstruction(map, thing)) continue;
+                // Already dealt with — knocked down, lifted, or being carried somewhere else.
+                // Still reporting it would leave the survey permanently showing work that is in
+                // hand, and hide whatever is behind it in the queue.
+                if (PlacementUtil.AlreadyOrdered(map, thing)) continue;
 
                 // Roofing beats moving whenever the spot can hold a roof at all. Open ground far
                 // from any wall cannot, and there the only honest answer is to take it down.

@@ -34,6 +34,9 @@ namespace AutoColony.Modules
             if (ctx.state.EmergencyAtHome) return;
             if (ctx.plan != null && ctx.plan.EmergencyActive) return;
 
+            // Withdraw anything the colony asked for and no longer wants, before asking for more.
+            if (CancelStaleOrders(ctx)) return;
+
             unhandled.Clear();
             var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled);
 
@@ -52,6 +55,40 @@ namespace AutoColony.Modules
                 Note(defect.remedy + " for " + defect.kind);
                 return;
             }
+        }
+
+        /// <summary>
+        /// Withdraws standing orders whose reason has gone away.
+        ///
+        /// Orders outlive their justification. The case that matters is a colony that was
+        /// comfortable when it decided to break up a barracks and is destitute by the time
+        /// anyone gets to the job: pulling the beds out is now precisely the wrong move, and
+        /// without this the order stands and the colony dismantles the one room everybody is
+        /// sleeping in during the crisis that made it poor.
+        ///
+        /// Nothing else in the director ever cancelled anything it had asked for.
+        /// </summary>
+        bool CancelStaleOrders(DirectorContext ctx)
+        {
+            float means = BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists);
+            if (!BuildingMeans.Destitute(means)) return false;
+
+            var lister = ctx.map.listerBuildings;
+            if (lister == null) return false;
+
+            foreach (var bed in lister.AllBuildingsColonistOfClass<Building_Bed>())
+            {
+                if (bed == null || !bed.Spawned) continue;
+                if (!bed.ForColonists || bed.Medical) continue;
+                if (!PlacementUtil.CancelDesignation(ctx.map, bed, DesignationDefOf.Uninstall)) continue;
+
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "upkeep — cancelling the order to move a bed out of its room: means have " +
+                    "fallen to {0:0.00} and sharing is now the right answer", means));
+                Note("cancelled a de-sharing order");
+                return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -101,20 +138,68 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
-        /// Takes the building down. The planner's own repair path then notices its room is
-        /// missing its key furniture and re-places it inside, which is what makes this a move
-        /// rather than a demolition.
+        /// Moves the building somewhere it belongs.
+        ///
+        /// Three routes, cheapest first. Anything minifiable is carried to a sheltered spot
+        /// intact, which costs nothing at all — the game has a reinstall job for exactly this.
+        /// Failing a spot to put it, it is uninstalled and kept as an item for later. Only
+        /// something that cannot be picked up is knocked down, and that is the expensive
+        /// option: `resourcesFractionWhenDeconstructed` is per-def and several buildings return
+        /// none of their cost.
         /// </summary>
         static bool Relocate(DirectorContext ctx, ColonyDefect defect)
         {
-            if (defect.thing == null || !defect.thing.Spawned) return false;
-            if (PlacementUtil.MarkedForDeconstruction(ctx.map, defect.thing)) return false;
+            var thing = defect.thing;
+            if (thing == null || !thing.Spawned) return false;
+            if (PlacementUtil.AlreadyOrdered(ctx.map, thing)) return false;
 
             // Never pull down the only thing generating, or the colony loses its grid to fix a
             // risk that has not happened yet.
-            if (IsLastWorkingGenerator(ctx, defect.thing)) return false;
+            if (IsLastWorkingGenerator(ctx, thing)) return false;
 
-            return PlacementUtil.TryDeconstruct(ctx.map, defect.thing);
+            if (PlacementUtil.Movable(thing))
+            {
+                var shelter = FindShelteredSpot(ctx, thing);
+                if (shelter.IsValid &&
+                    PlacementUtil.TryReinstall(ctx.map, thing, shelter, thing.Rotation))
+                {
+                    defect.what += " — moving it under cover at " + shelter;
+                    return true;
+                }
+
+                // Nowhere to put it yet. Lift it anyway rather than leaving it in the rain; it
+                // keeps its quality and every unit of material as an item.
+                if (PlacementUtil.TryUninstall(ctx.map, thing))
+                {
+                    defect.what += " — uninstalling it to place later";
+                    return true;
+                }
+                return false;
+            }
+
+            return PlacementUtil.TryDeconstruct(ctx.map, thing);
+        }
+
+        /// <summary>A roofed cell inside one of the planner's rooms that will take this thing.</summary>
+        static IntVec3 FindShelteredSpot(DirectorContext ctx, Thing thing)
+        {
+            if (ctx.layout == null) return IntVec3.Invalid;
+
+            var rooms = ctx.layout.rooms;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                foreach (var cell in rooms[i].Interior)
+                {
+                    if (!cell.InBounds(ctx.map)) continue;
+                    if (ctx.map.roofGrid == null || !ctx.map.roofGrid.Roofed(cell)) continue;
+                    if (PlacementUtil.HasAnyConstructionAt(ctx.map, cell)) continue;
+
+                    var report = GenConstruct.CanPlaceBlueprintAt(thing.def, cell, thing.Rotation,
+                                                                  ctx.map, false, thing, thing);
+                    if (report.Accepted) return cell;
+                }
+            }
+            return IntVec3.Invalid;
         }
 
         static bool IsLastWorkingGenerator(DirectorContext ctx, Thing thing)
@@ -164,12 +249,17 @@ namespace AutoColony.Modules
 
             if (beds.Count <= 1) return false;
 
+            // Uninstalled, not deconstructed. The colony wants this bed — just not here — and
+            // uninstalling keeps it whole, quality included, ready to be set down in the room
+            // the planner is about to reserve. Knocking it down would return a fraction of the
+            // material and none of the workmanship.
+            //
             // One at a time, so the colony is never left with nowhere to sleep while the
             // replacement rooms are still going up.
             for (int i = 1; i < beds.Count; i++)
             {
                 if (PlacementUtil.MarkedForDeconstruction(ctx.map, beds[i])) continue;
-                if (PlacementUtil.TryDeconstruct(ctx.map, beds[i])) return true;
+                if (PlacementUtil.TryUninstall(ctx.map, beds[i])) return true;
             }
             return false;
         }
@@ -201,12 +291,25 @@ namespace AutoColony.Modules
                 // than the one being solved.
                 if (SharedWithAnotherRoom(ctx.layout, planned, cell)) continue;
 
+                // Anything still only ordered is withdrawn rather than built and then knocked
+                // down again. Finishing a wall in order to demolish it spends the material twice
+                // over, which is the exact opposite of what reclaiming is for.
+                marked += PlacementUtil.CancelConstructionAt(ctx.map, cell);
+
                 var things = cell.GetThingList(ctx.map);
                 for (int i = things.Count - 1; i >= 0; i--)
                 {
                     var thing = things[i];
                     if (thing == null || thing.Faction != Faction.OfPlayer) continue;
                     if (thing.def == null || thing.def.category != ThingCategory.Building) continue;
+
+                    // Furniture comes up whole and keeps its quality; only the shell is knocked
+                    // down, because walls cannot be carried.
+                    if (PlacementUtil.Movable(thing))
+                    {
+                        if (PlacementUtil.TryUninstall(ctx.map, thing)) marked++;
+                        continue;
+                    }
 
                     if (PlacementUtil.TryDeconstruct(ctx.map, thing)) marked++;
                 }
