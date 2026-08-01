@@ -680,6 +680,18 @@ namespace AutoColony.Modules
             if (def == null || count <= 0) return;
 
             var map = ctx.map;
+
+            // Top up to the count rather than adding that many more. Furniture is queued again
+            // whenever a room's key item goes missing, and without this each pass dropped a
+            // fresh copy of everything else in the first free cell — so a workshop whose
+            // stonecutter could not be afforded accumulated crafting spots indefinitely.
+            //
+            // It shows up as an unending stream of "construction botched": a crafting spot has
+            // WorkToBuild 0, so a failed attempt retries in the same instant rather than after
+            // any work, and with a pile of them queued there is always another one to fail at.
+            count -= ExistingCount(map, room, def);
+            if (count <= 0) return;
+
             var stuff = PlacementUtil.ChooseStuff(map, def,
                 FireRisk.StonePreference(ctx, FireRisk.Assess(map, ctx.state)));
             int placed = 0;
@@ -696,6 +708,41 @@ namespace AutoColony.Modules
                     placedThisPass++;
                 }
             }
+        }
+
+        /// <summary>
+        /// How many of this thing the room already has, counting what is built and what is still
+        /// only ordered. Both have to count, or a second copy goes down every pass until the
+        /// first one is finished.
+        /// </summary>
+        static int ExistingCount(Map map, PlannedRoom room, ThingDef def)
+        {
+            int found = 0;
+            foreach (var cell in room.Rect)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var thing = things[i];
+                    if (thing == null) continue;
+
+                    // Only at its own anchor cell. A three-cell table appears in three cells'
+                    // thing lists, and counting it once per cell would report a single bench as
+                    // three and quietly stop the room ever being furnished.
+                    if (thing.Position != cell) continue;
+
+                    if (thing.def == def) { found++; continue; }
+
+                    var blueprint = thing as Blueprint;
+                    if (blueprint != null && blueprint.def.entityDefToBuild == def) { found++; continue; }
+
+                    var frame = thing as Frame;
+                    if (frame != null && frame.def.entityDefToBuild == def) found++;
+                }
+            }
+            return found;
         }
 
         static int Clamp(int v, int min, int max)
