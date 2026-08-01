@@ -54,6 +54,21 @@ namespace AutoColony
         public static ThingDef Torch { get { return Thing("TorchLamp"); } }
         public static ThingDef PsychiteTea { get { return Thing("PsychiteTea"); } }
         public static ThingDef Cooler { get { return Thing("Cooler"); } }
+
+        /// <summary>
+        /// Somewhere to sew. The hand bench needs no power, which matters because clothing is
+        /// most urgently wanted in exactly the early colony that has no grid yet; the electric
+        /// one is only preferred once there is electricity to run it.
+        /// </summary>
+        public static ThingDef TailorBench
+        {
+            get
+            {
+                var electric = Thing("ElectricTailoringBench");
+                if (electric != null && PlacementUtil.ResearchDone(electric)) return electric;
+                return Thing("HandTailoringBench");
+            }
+        }
         public static ThingDef PowerConduit { get { return Thing("PowerConduit"); } }
         public static ThingDef Grave { get { return Thing("Grave"); } }
         public static ThingDef Heater { get { return Thing("Heater"); } }

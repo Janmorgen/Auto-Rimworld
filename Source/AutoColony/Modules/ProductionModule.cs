@@ -65,6 +65,7 @@ namespace AutoColony.Modules
                 {
                     var bill = new Bill_Production(recipe, null);
                     ConfigureBill(bill, desired);
+                    PreferInsulatingStuff(bill, recipe, ctx);
                     table.billStack.AddBill(bill);
                     changed = true;
                 }
@@ -97,6 +98,63 @@ namespace AutoColony.Modules
             bill.pauseWhenSatisfied = true;
             bill.unpauseWhenYouHave = System.Math.Max(1, target / 2);
             ((IRenameable)bill).RenamableLabel = OurTag + ": " + bill.recipe.label;
+        }
+
+        /// <summary>
+        /// Narrows a clothing bill to the materials that actually insulate.
+        ///
+        /// The same parka is a different garment depending on what it is made of — wool and the
+        /// heavier furs insulate several times better than plain cloth, and against heat the
+        /// ordering is its own, so the material is not a detail of the recipe but half the
+        /// answer to the weather.
+        ///
+        /// Applied only when the colony holds something clearly better than the rest, and only
+        /// as a restriction on stuff the colony *has*. A filter that allowed only a material
+        /// nobody owns is a bill that never runs, which is worse than a cloth parka — the whole
+        /// point is that the colonist gets a coat before winter, not the best possible coat.
+        /// </summary>
+        static void PreferInsulatingStuff(Bill_Production bill, RecipeDef recipe, DirectorContext ctx)
+        {
+            var product = recipe.products != null && recipe.products.Count > 0
+                ? recipe.products[0].thingDef : null;
+            if (product == null || !product.IsApparel) return;
+            if (bill.ingredientFilter == null) return;
+
+            bool wantWarm = ctx.state.coldShortfall > 0f;
+            bool wantCool = ctx.state.heatExcess > 0f;
+            if (!wantWarm && !wantCool) return;
+
+            var stat = wantWarm
+                ? StatDefOf.StuffPower_Insulation_Cold
+                : StatDefOf.StuffPower_Insulation_Heat;
+
+            // What the colony actually holds, ranked by how well it insulates.
+            ThingDef best = null;
+            float bestValue = 0f;
+            var counter = ctx.map.resourceCounter;
+
+            var all = DefDatabase<ThingDef>.AllDefsListForReading;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var stuff = all[i];
+                if (stuff.stuffProps == null) continue;
+                if (!recipe.fixedIngredientFilter.Allows(stuff)) continue;
+                if (counter != null && counter.GetCount(stuff) < 40) continue;
+
+                float value = SafeStat(stuff, stat);
+                if (value > bestValue) { bestValue = value; best = stuff; }
+            }
+
+            // Nothing notable in store: leave the bill unrestricted so it can still run.
+            if (best == null || bestValue <= 0f) return;
+
+            bill.ingredientFilter.SetDisallowAll();
+            bill.ingredientFilter.SetAllow(best, true);
+
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "{0} will be made from {1} — best {2} insulation the colony holds",
+                product.label ?? product.defName, best.label ?? best.defName,
+                wantWarm ? "cold" : "heat"));
         }
 
         static Bill_Production FindBill(BillStack stack, RecipeDef recipe)
@@ -149,6 +207,14 @@ namespace AutoColony.Modules
             {
                 target = ctx.Gene(Genes.TextilesTarget);
             }
+            else if (product.IsApparel)
+            {
+                // Clothes were never made at all: apparel fell through to the default and
+                // returned zero, so a tailor bench would have sat idle even where one existed.
+                // ApparelDamaged, SoakingWet and EnvironmentCold recurred in every run's
+                // unfixable list as a direct result.
+                target = ApparelWanted(product, ctx, colonists);
+            }
             else if (IsStoneBlock(product))
             {
                 // Blocks are a building material; want them only while there is building to do.
@@ -169,6 +235,49 @@ namespace AutoColony.Modules
         static bool IsStoneBlock(ThingDef def)
         {
             return def.defName != null && def.defName.StartsWith("Blocks");
+        }
+
+        /// <summary>
+        /// How many of a garment the colony wants, judged against the weather it is actually in.
+        ///
+        /// Clothing is the cheapest answer to temperature there is and the only one that travels
+        /// with the colonist — a heater warms a room nobody can stay in all day, and there is no
+        /// portable cooler at all. Which garment matters enormously and depends on direction: a
+        /// parka is the most insulating thing in the game and useless in a heat wave, where a
+        /// duster covers the most skin and helps against sun.
+        ///
+        /// Everyone gets one of whatever the weather calls for, plus a spare, because apparel
+        /// wears out and a damaged garment is its own standing mood penalty.
+        /// </summary>
+        static float ApparelWanted(ThingDef product, DirectorContext ctx, int colonists)
+        {
+            float cold = ctx.state.coldShortfall;
+            float heat = ctx.state.heatExcess;
+
+            float coldInsulation = SafeStat(product, StatDefOf.Insulation_Cold);
+            float heatInsulation = SafeStat(product, StatDefOf.Insulation_Heat);
+
+            // Neither use against the weather and no armour worth the materials: skip it rather
+            // than filling the stockpile with tribalwear nobody needs.
+            bool warmth = coldInsulation > 4f;
+            bool cooling = heatInsulation > 2f;
+
+            if (cold > 0f && warmth) return colonists + 1;
+            if (heat > 0f && cooling) return colonists + 1;
+
+            // Basic cover, whatever the weather. Naked and tattered are both mood penalties in
+            // their own right, quite apart from temperature.
+            if (!warmth && !cooling) return colonists;
+
+            // A garment for the season the colony is not in. Worth one, not a wardrobe — winter
+            // arrives eventually and a parka takes two minutes of work to make.
+            return 1f;
+        }
+
+        static float SafeStat(ThingDef def, StatDef stat)
+        {
+            try { return def.GetStatValueAbstract(stat); }
+            catch (System.Exception) { return 0f; }
         }
     }
 }

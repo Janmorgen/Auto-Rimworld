@@ -221,6 +221,64 @@ namespace AutoColony.Goals
     /// A workshop, which is what turns rock into blocks. Without it a colony in a dry biome
     /// cannot act on any preference for stone however strongly it holds it.
     /// </summary>
+    /// <summary>
+    /// Clothes against the weather the colony is actually in.
+    ///
+    /// Clothing is the cheapest answer to temperature and the only one that travels with the
+    /// colonist. A heater warms a room nobody can stay in all day, there is no portable cooler
+    /// at all, and past about ten degrees outside what a colonist can bear the cost stops being
+    /// mood and becomes hypothermia or heatstroke — both fatal at full severity.
+    ///
+    /// The good garments — parkas above all, which are far and away the most insulating thing in
+    /// the game — sit behind Complex Clothing, so wanting them has to reach back into research
+    /// the same way wanting a freezer reaches back into electricity. That is the whole reason
+    /// this is a goal rather than a rule inside the production module: the module can only make
+    /// what the colony has already unlocked.
+    /// </summary>
+    public class WeatherClothingGoal : ColonyGoal
+    {
+        public const string Id = "Clothe the colony";
+        public override string Name { get { return Id; } }
+        public override GoalHorizon Horizon { get { return GoalHorizon.ShortTerm; } }
+        public override RoomRole? WantsRoom { get { return RoomRole.Workshop; } }
+
+        public override string[] RequiresResearch { get { return Research; } }
+        static readonly string[] Research = { "ComplexClothing" };
+
+        /// <summary>Degrees outside the comfortable band before clothing becomes the point.</summary>
+        const float Pressing = 4f;
+
+        static float Pressure(DirectorContext ctx)
+        {
+            float worst = ctx.state.coldShortfall > ctx.state.heatExcess
+                ? ctx.state.coldShortfall
+                : ctx.state.heatExcess;
+            return worst;
+        }
+
+        public override bool Satisfied(DirectorContext ctx)
+        {
+            // Nothing to answer while the weather is bearable; a workshop is enough once it is.
+            if (Pressure(ctx) < Pressing) return true;
+            return ctx.layout != null && ctx.layout.HasRoom(RoomRole.Workshop);
+        }
+
+        public override float Urgency(DirectorContext ctx)
+        {
+            // Ten degrees past the comfortable edge is where harm begins, so that is full
+            // urgency rather than an arbitrary ceiling.
+            return AcMath.Clamp01(Pressure(ctx) / 10f);
+        }
+
+        public override string Explain(DirectorContext ctx)
+        {
+            return ctx.state.outdoorTemperature.ToString("0") + "C outdoors, " +
+                   (ctx.state.coldShortfall > 0f
+                       ? ctx.state.coldShortfall.ToString("0") + " below what colonists bear"
+                       : ctx.state.heatExcess.ToString("0") + " above what colonists bear");
+        }
+    }
+
     public class MasonryGoal : ColonyGoal
     {
         public const string Id = "Masonry";

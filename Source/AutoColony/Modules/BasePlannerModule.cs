@@ -623,6 +623,10 @@ namespace AutoColony.Modules
                 case RoomRole.Workshop:
                     PlaceOne(ctx, room, AcDefs.StonecuttersTable);
                     PlaceOne(ctx, room, AcDefs.CraftingSpot);
+                    // Somewhere to make clothes. The production module has always been willing
+                    // to keep bills on any table it finds; there was simply never a tailor bench
+                    // on the map for it to find, so nothing was ever sewn.
+                    PlaceOne(ctx, room, AcDefs.TailorBench);
                     break;
                 case RoomRole.Dining:
                     PlaceOne(ctx, room, AcDefs.Thing("Table2x2c"));

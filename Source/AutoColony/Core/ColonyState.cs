@@ -147,6 +147,23 @@ namespace AutoColony
         /// </summary>
         public Conditions.ActiveConditions conditions;
 
+        /// <summary>
+        /// Outdoor temperature in Celsius, and how far it sits outside what an ordinary colonist
+        /// can bear.
+        ///
+        /// Humans are comfortable between roughly 16 and 26 degrees, and ten degrees past either
+        /// edge begins hypothermia or heatstroke, both of which are fatal at full severity. So
+        /// this is not a comfort reading: it decides whether clothing is a nicety or the thing
+        /// keeping people alive, and which direction the answer runs in.
+        /// </summary>
+        public float outdoorTemperature;
+
+        /// <summary>Degrees below the comfortable floor, 0 when it is not cold.</summary>
+        public float coldShortfall;
+
+        /// <summary>Degrees above the comfortable ceiling, 0 when it is not hot.</summary>
+        public float heatExcess;
+
         // --- research ---
         public int researchFinished;
         public bool hasResearchBench;
@@ -397,6 +414,7 @@ namespace AutoColony
 
             CaptureFields(s, map);
             CaptureConditions(s, map);
+            CaptureTemperature(s, map);
 
             var things = map.listerThings;
             if (things != null)
@@ -449,6 +467,23 @@ namespace AutoColony
                 if (plant != null) crops.Add(plant.defName);
             }
             s.distinctCrops = crops.Count;
+        }
+
+        /// <summary>What an ordinary colonist can bear, in Celsius, before they start taking harm.</summary>
+        public const float ComfortableMin = 16f;
+        public const float ComfortableMax = 26f;
+
+        static void CaptureTemperature(ColonyState s, Map map)
+        {
+            try
+            {
+                s.outdoorTemperature = map.mapTemperature.OutdoorTemp;
+                s.coldShortfall = ComfortableMin - s.outdoorTemperature;
+                if (s.coldShortfall < 0f) s.coldShortfall = 0f;
+                s.heatExcess = s.outdoorTemperature - ComfortableMax;
+                if (s.heatExcess < 0f) s.heatExcess = 0f;
+            }
+            catch (Exception) { }
         }
 
         /// <summary>
