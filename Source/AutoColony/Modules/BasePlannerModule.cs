@@ -240,7 +240,23 @@ namespace AutoColony.Modules
                         var bed = things[t] as Building_Bed;
                         if (bed == null || !bed.Spawned || bed.ForPrisoners) continue;
 
-                        bed.SetBedOwnerTypeByInterface(BedOwnerType.Prisoner);
+                        // ForOwnerType directly, not SetBedOwnerTypeByInterface. The "ByInterface"
+                        // name is the tell: it is the guarded path the player's own UI goes
+                        // through, and it declines quietly. The bed came out unmarked, which
+                        // left the entire prisoner chain dead — a prison room with an ordinary
+                        // bed in it, and no way for anyone ever to be captured into it.
+                        bed.ForOwnerType = BedOwnerType.Prisoner;
+
+                        // And the room has to be told. `IsPrisonCell` is cached on the room, not
+                        // derived on demand, so a bed that says it is for prisoners inside a room
+                        // that still believes it holds none is refused by the game with "no
+                        // enclosed prisoner-marked bed" — every clause of which looks satisfied.
+                        var bedRoom = bed.GetRoom();
+                        if (bedRoom != null)
+                        {
+                            bedRoom.Notify_BedTypeChanged();
+                            bedRoom.Notify_ContainedThingSpawnedOrDespawned(bed);
+                        }
                         Chronicle.Record(ChronicleCategory.Build,
                             "marked a bed for prisoners — the colony can now take them");
                         Note("marked a prisoner bed");

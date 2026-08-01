@@ -75,13 +75,31 @@ namespace AutoColony.Modules
             JobDef job;
             string what;
 
+            // The carrier has to be found first, because the bed is looked up *on their behalf*.
+            // Asking as the victim returns nothing: a hostile pawn cannot claim one of the
+            // colony's beds under their own name, which reads identically to owning no prison.
+            var carrier = NearestAbleColonist(ctx, victim);
+            if (carrier == null)
+            {
+                Decline(victim, "nobody free and able could reach them");
+                return false;
+            }
+
             if (hostile)
             {
-                bed = RestUtility.FindBedFor(victim, victim, false, false, GuestStatus.Prisoner);
+                bed = RestUtility.FindBedFor(victim, carrier, false, false, GuestStatus.Prisoner);
                 float value = ValueOf(victim);
                 if (!PrisonerPolicy.WorthCapturing(value, ctx.state.daysOfFood, recruitBias,
                                                    bed != null, true))
+                {
+                    // Say why, once. A capture that silently does not happen is indistinguishable
+                    // from a module that is not running, and three separate causes — no prison
+                    // bed, no food, nobody worth taking — look identical from outside.
+                    Decline(victim, string.Format(
+                        "no capture: bed {0}, worth {1:0.00}, food {2:0.0} days, appetite {3:0.00}",
+                        bed != null ? "found" : "NONE", value, ctx.state.daysOfFood, recruitBias));
                     return false;
+                }
 
                 job = JobDefOf.Capture;
                 what = string.Format("capturing {0} — worth {1:0.00} as a colonist, {2:0.0} days " +
@@ -92,7 +110,7 @@ namespace AutoColony.Modules
             {
                 // An ordinary bed: rescue needs no prison, which is most of why it is the better
                 // outcome when the option exists at all.
-                bed = RestUtility.FindBedFor(victim, victim, false, false, null);
+                bed = RestUtility.FindBedFor(victim, carrier, false, false, null);
                 if (!PrisonerPolicy.WorthRescuing(ctx.state.daysOfFood, bed != null, true))
                     return false;
 
@@ -101,9 +119,6 @@ namespace AutoColony.Modules
                        "needed and they may well stay";
             }
 
-            var carrier = NearestAbleColonist(ctx, victim);
-            if (carrier == null) return false;
-
             var ordered = JobMaker.MakeJob(job, victim, bed);
             ordered.count = 1;
             if (!carrier.jobs.TryTakeOrderedJob(ordered, JobTag.Misc)) return false;
@@ -111,6 +126,19 @@ namespace AutoColony.Modules
             Chronicle.Record(ChronicleCategory.Incident, what);
             Note(carrier.LabelShortCap + " sent for " + victim.LabelShortCap);
             return true;
+        }
+
+        readonly Dictionary<int, string> declined = new Dictionary<int, string>();
+
+        /// <summary>Records a refusal once per person per reason, so it explains without spamming.</summary>
+        void Decline(Pawn victim, string why)
+        {
+            string previous;
+            if (declined.TryGetValue(victim.thingIDNumber, out previous) && previous == why) return;
+
+            declined[victim.thingIDNumber] = why;
+            Chronicle.Record(ChronicleCategory.Incident,
+                "left " + victim.LabelShortCap + " where they fell — " + why);
         }
 
         /// <summary>

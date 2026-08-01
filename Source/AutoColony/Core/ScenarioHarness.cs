@@ -37,6 +37,10 @@ namespace AutoColony
         bool fired;
         int lastReport = -9999;
 
+        /// <summary>A bed waiting for its room to settle before it can be marked.</summary>
+        Building_Bed pendingPrisonBed;
+        int markAtTick;
+
         public ScenarioHarness(Game game) { }
 
         public override void GameComponentTick()
@@ -51,8 +55,13 @@ namespace AutoColony
             if (!fired && tick >= FireAtTick)
             {
                 fired = true;
+                pendingPrisonBed = spawnedPrisonBed;
                 Fire(map, scenario);
+                pendingPrisonBed = spawnedPrisonBed;
+                markAtTick = tick + 250;
             }
+
+            if (pendingPrisonBed != null && tick >= markAtTick) MarkPendingPrisonBed();
 
             if (!fired || tick - lastReport < 300) return;
             lastReport = tick;
@@ -87,7 +96,11 @@ namespace AutoColony
             }
             catch (Exception e)
             {
-                Chronicle.Record(ChronicleCategory.System, "SCENARIO failed: " + e.Message);
+                // The type and the top frame, not just the message — "object reference not set"
+                // on its own names nothing and cost several runs of guessing.
+                string where = e.StackTrace != null ? e.StackTrace.Split('\n')[0].Trim() : "?";
+                Chronicle.Record(ChronicleCategory.System,
+                    "SCENARIO failed: " + e.GetType().Name + " — " + e.Message + " @ " + where);
             }
         }
 
@@ -124,13 +137,28 @@ namespace AutoColony
 
             // A world can be generated with no faction of the kind asked for, and a null here
             // took the whole scenario down with a null reference.
-            if (faction == null && hostile)
+            // Any settled neighbour will do for a non-hostile stranger; some worlds have no
+            // faction of the exact kind asked for.
+            if (faction == null && !hostile)
             {
-                Chronicle.Record(ChronicleCategory.System, "SCENARIO: no enemy faction in this world");
+                var all = Find.FactionManager.AllFactionsListForReading;
+                for (int i = 0; i < all.Count; i++)
+                {
+                    if (all[i] == null || all[i].IsPlayer) continue;
+                    if (all[i].HostileTo(Faction.OfPlayer)) continue;
+                    faction = all[i];
+                    break;
+                }
+            }
+
+            if (faction == null)
+            {
+                Chronicle.Record(ChronicleCategory.System, string.Format(
+                    "SCENARIO: no {0} faction in this world", hostile ? "enemy" : "neutral"));
                 return;
             }
 
-            var kind = hostile ? PawnKindDefOf.Villager : PawnKindDefOf.Refugee;
+            var kind = PawnKindDefOf.Villager;
             var pawn = PawnGenerator.GeneratePawn(kind, faction);
 
             var origin = map.mapPawns.FreeColonists.Count > 0
@@ -176,13 +204,37 @@ namespace AutoColony
                 if (forPrisoners && !BuildCellAround(map, cell)) continue;
 
                 var bed = (Building_Bed)ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
-                GenSpawn.Spawn(bed, cell, map, Rot4.North);
-                bed.SetFaction(Faction.OfPlayer);
-                if (forPrisoners) bed.SetBedOwnerTypeByInterface(BedOwnerType.Prisoner);
 
+                // Owned *before* it spawns. SpawnSetup is what registers a building with its
+                // room and with the faction-dependent systems around it, so a bed that spawns
+                // ownerless registers as nobody's and setting the faction afterwards never
+                // revisits that — which is why a marked bed in an eligible room still would not
+                // make the room a prison.
+                bed.SetFactionDirect(Faction.OfPlayer);
+                if (forPrisoners) bed.ForOwnerType = BedOwnerType.Prisoner;
+
+                GenSpawn.Spawn(bed, cell, map, Rot4.North);
+
+                // Rebuild *after* the bed is in. Spawning it dirties the regions again, and
+                // marking a bed while the room around it is stale asks the question of the wrong
+                // room — which is how a walled cell with a door still failed to be a prison.
+                map.regionAndRoomUpdater.RebuildAllRegionsAndRooms();
+
+                // Marked later, not now. The walls went up this instant, and a room cannot settle
+                // in the tick it is created — the game rebuilds regions on its own schedule, and
+                // anything asked before that gets an answer about the room that was there before.
+                // The real planner never hits this because colonists take hours to build a wall.
+                if (forPrisoners) spawnedPrisonBed = bed;
+
+                var room = bed.GetRoom();
                 Chronicle.Record(ChronicleCategory.System, string.Format(
-                    "SCENARIO: placed a {0} bed at {1}",
-                    forPrisoners ? "prisoner" : "colonist", cell));
+                    "SCENARIO: placed a {0} bed at {1} — ForPrisoners={2}, room={3}, cells={4}, " +
+                    "outdoors={5}, prisonCell={6}",
+                    forPrisoners ? "prisoner" : "colonist", cell, bed.ForPrisoners,
+                    room != null ? "yes" : "NONE",
+                    room != null ? room.CellCount : 0,
+                    room != null && room.PsychologicallyOutdoors,
+                    room != null && room.IsPrisonCell));
                 return;
             }
         }
@@ -213,11 +265,16 @@ namespace AutoColony
             {
                 var def = cell == doorCell ? door : wall;
                 var built = ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
+                built.SetFactionDirect(Faction.OfPlayer);
                 GenSpawn.Spawn(built, cell, map, Rot4.North);
-                built.SetFaction(Faction.OfPlayer);
             }
 
             foreach (var cell in rect) map.roofGrid.SetRoof(cell, RoofDefOf.RoofConstructed);
+
+            // The walls went up this instant, so the room they enclose does not exist yet.
+            // Marking a bed for prisoners before the rebuild asks about a room that is still the
+            // great outdoors, and the answer is no.
+            map.regionAndRoomUpdater.RebuildAllRegionsAndRooms();
             return true;
         }
 
@@ -369,6 +426,44 @@ namespace AutoColony
                 }
             }
             Chronicle.Record(ChronicleCategory.System, "SCENARIO: removed " + removed + " building material");
+        }
+
+        static Building_Bed spawnedPrisonBed;
+
+        /// <summary>
+        /// Marks the bed now that the room around it exists, and says whether it took.
+        ///
+        /// Both halves are needed: the flag on the bed, and a nudge to the room, because
+        /// `IsPrisonCell` is cached there rather than derived on demand. Without the nudge the
+        /// game refuses with "no enclosed prisoner-marked bed" while every clause of that
+        /// sentence looks satisfied from outside.
+        /// </summary>
+        void MarkPendingPrisonBed()
+        {
+            var bed = pendingPrisonBed;
+            pendingPrisonBed = null;
+            spawnedPrisonBed = null;
+            if (bed == null || !bed.Spawned) return;
+
+            bed.ForOwnerType = BedOwnerType.Prisoner;
+
+            var room = bed.GetRoom();
+            if (room != null)
+            {
+                // Both notifications. Notify_BedTypeChanged alone left IsPrisonCell false even
+                // with the bed marked and the room eligible; what actually made it take, when
+                // done by hand in game, was reinstalling the bed — which is a despawn and a
+                // respawn, and that is the notification respawning sends.
+                room.Notify_BedTypeChanged();
+                room.Notify_ContainedThingSpawnedOrDespawned(bed);
+            }
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SCENARIO: marked the prisoner bed once its room settled — ForPrisoners={0}, " +
+                "roomCanBePrison={1}, prisonCell={2}",
+                bed.ForPrisoners,
+                room != null && Building_Bed.RoomCanBePrisonCell(room),
+                room != null && room.IsPrisonCell));
         }
 
         // ---------------------------------------------------------------- what actually happens
