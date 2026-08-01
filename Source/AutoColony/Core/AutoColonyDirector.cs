@@ -60,6 +60,15 @@ namespace AutoColony
         int moduleCursor;
         ColonyState lastState;
         ColonyMetrics lastMetrics = ColonyMetrics.Neutral();
+
+        /// <summary>
+        /// The last snapshot taken while anyone was still alive.
+        ///
+        /// Kept separately because a wipe destroys the evidence: with nobody left to eat, the
+        /// larder climbs, mood and health reset to their neutral defaults, and the final
+        /// snapshot describes an empty map rather than the colony that died on it.
+        /// </summary>
+        ColonyMetrics lastLivingMetrics = ColonyMetrics.Neutral();
         int lastPlanTick = -999999;
         int lastStateTick = -999999;
         int lastVitalsTick = -999999;
@@ -228,6 +237,7 @@ namespace AutoColony
                         ? evolution.Active.Get(Genes.FireResponseRadius)
                         : 45f);
                 lastMetrics = lastState.ToMetrics();
+                if (lastMetrics.Valid) lastLivingMetrics = lastMetrics;
 
                 // What the planner is answering right now, carried into scoring. An outcome
                 // figure cannot tell a colony that spent the epoch building from one that spent
@@ -574,8 +584,15 @@ namespace AutoColony
             var e = new LossEvidence();
             e.day = lastMetrics.day;
             e.samples = accumulator.samples;
-            e.daysOfFood = lastMetrics.daysOfFood;
-            e.minDaysOfFood = accumulator.samples > 0 ? accumulator.minDaysOfFood : lastMetrics.daysOfFood;
+
+            // Everything about the colony itself comes from the last moment it existed, not
+            // from the empty map left behind.
+            e.colonists = lastLivingMetrics.colonists;
+            e.downed = lastLivingMetrics.colonistsDowned;
+            e.daysOfFood = lastLivingMetrics.daysOfFood;
+            e.minDaysOfFood = accumulator.samples > 0
+                ? accumulator.minDaysOfFood
+                : lastLivingMetrics.daysOfFood;
             e.avgMood = accumulator.AvgMood;
             e.avgHealth = accumulator.AvgHealth;
             e.downedFraction = accumulator.DownedFraction;

@@ -11,7 +11,15 @@ namespace AutoColony
         /// <summary>Observations the epoch got. Below a handful, none of the averages mean much.</summary>
         public int samples;
 
-        /// <summary>Food in the larder at the end, and the lowest it reached during the epoch.</summary>
+        /// <summary>
+        /// The colony as it stood at the last moment anyone was alive, which is the most
+        /// diagnostic instant there is. Measured after the wipe instead, food reads high
+        /// precisely because nobody is left to eat it.
+        /// </summary>
+        public int colonists;
+        public int downed;
+
+        /// <summary>Food in the larder at that moment, and the lowest it reached during the epoch.</summary>
         public float daysOfFood;
         public float minDaysOfFood;
 
@@ -69,21 +77,27 @@ namespace AutoColony
             // with none taken they all read as zero — which looks exactly like a colony that
             // starved, burned and lost its mind at once. An unobserved epoch knows nothing.
             bool observed = e.samples > 0;
-            bool larderRanDry = observed && e.minDaysOfFood <= EmptyLarder;
 
-            if (larderRanDry && e.daysOfFood <= EmptyLarder) return "starvation";
-
-            // Food in the store and everyone on the floor: the colony did not run out, it ran
-            // out of people able to carry it. This is its own failure and wants its own name,
-            // because the remedy is holding a colonist back rather than stocking more food.
-            if (observed && e.downedFraction >= ProlongedDowned && e.minDaysOfFood >= FoodWasThere)
+            // Everybody on the floor with food still in the store. The colony did not run out
+            // of food, it ran out of people able to reach it, and the remedy is keeping someone
+            // standing rather than stocking more. Checked first because it is the case the end
+            // state most reliably misreports: the larder fills up after a wipe, since nobody is
+            // left to eat from it.
+            if (e.colonists > 0 && e.downed >= e.colonists && e.daysOfFood >= FoodWasThere)
                 return "incapacity";
+
+            // Judged on the last moment anyone was alive, never on the epoch minimum. On day one
+            // every colony reads 0.0 days of food whatever it has, because `ResourceCounter`
+            // only counts what is in a stockpile and nothing has been hauled to one yet — so any
+            // epoch containing the colony's first hours has an empty larder in its history, and
+            // a rule keyed on that called an 18.5-day store starvation.
+            if (e.daysOfFood <= EmptyLarder) return "starvation";
 
             if (e.raids > 0 && e.deaths > 0) return "raid";
             if (observed && e.fireFraction >= ProlongedFire) return "fire";
+            if (observed && e.downedFraction >= ProlongedDowned) return "incapacity";
             if (observed && (e.mentalBreakFraction >= ProlongedBreaking || e.avgMood < MoodCollapse))
                 return "mood collapse";
-            if (larderRanDry) return "starvation";
             if (e.deaths > 0) return "attrition";
 
             return "unexplained";
@@ -103,11 +117,13 @@ namespace AutoColony
                   .Append(" observations, so nothing below is reliable");
             }
 
-            sb.Append(": ").Append(e.daysOfFood.ToString("0.0", c)).Append("d food in store");
+            sb.Append(": last alive with ").Append(e.colonists).Append(" colonists (")
+              .Append(e.downed).Append(" down) and ")
+              .Append(e.daysOfFood.ToString("0.0", c)).Append("d food");
             if (e.samples > 0 && e.minDaysOfFood < e.daysOfFood)
-                sb.Append(" (low ").Append(e.minDaysOfFood.ToString("0.0", c)).Append("d)");
+                sb.Append(", low ").Append(e.minDaysOfFood.ToString("0.0", c)).Append("d in the epoch");
 
-            sb.Append(", mood ").Append(e.avgMood.ToString("0.00", c));
+            sb.Append("; mood ").Append(e.avgMood.ToString("0.00", c));
             sb.Append(", health ").Append(e.avgHealth.ToString("0.00", c));
 
             var also = Contributing(e);

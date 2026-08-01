@@ -28,5 +28,30 @@ namespace AutoColony
             if (downedColonists <= 0) return false;
             return ableFighters >= 2;
         }
+
+        /// <summary>
+        /// How much better the odds have to be before the few still standing meet a threat in
+        /// the open, given how many are already down.
+        ///
+        /// Desperation scales acceptable risk upward; this is the same idea running the other
+        /// way. A colony with three of four on the floor is one lost fight from having nobody
+        /// left to tend, feed or carry anyone, and that is not a survivable position however the
+        /// fight itself looks — where withdrawing risks only what the raider can do to a
+        /// defended room. So the stake, not just the odds, belongs in the decision.
+        ///
+        /// Watched happen: with three colonists down, the director drafted the fourth against a
+        /// single raider on a 95-to-77 advantage, lost her, and the whole colony bled out over
+        /// the next four hours with eleven days of food in the store. That fight was worth
+        /// having on its numbers and not worth having on its stake.
+        ///
+        /// This raises the bar rather than forbidding the fight. Answering a threat is never
+        /// optional — the raider comes either way — so what changes is whether it is met outside
+        /// or from cover.
+        /// </summary>
+        public static float EngagementCaution(int ableFighters, int downedColonists)
+        {
+            if (downedColonists <= 0 || ableFighters <= 0) return 1f;
+            return 1f + (float)downedColonists / ableFighters;
+        }
     }
 }

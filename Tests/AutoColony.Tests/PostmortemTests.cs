@@ -14,6 +14,8 @@ namespace AutoColony.Tests
             var e = new LossEvidence();
             e.day = 30;
             e.samples = 400;
+            e.colonists = 3;
+            e.downed = 0;
             e.daysOfFood = 5f;
             e.minDaysOfFood = 4f;
             e.avgMood = 0.7f;
@@ -38,8 +40,39 @@ namespace AutoColony.Tests
             var e = Healthy();
             e.daysOfFood = 3.2f;
             e.minDaysOfFood = 3f;
+            e.downed = e.colonists;
             e.downedFraction = 0.7f;
             Assert.Equal("incapacity", Postmortem.Cause(e));
+        }
+
+        [Fact]
+        public void AnEarlyEmptyLarderInTheHistoryIsNotStarvation()
+        {
+            // Watched in game: a colony wiped out by a raid on day 3 was called starvation
+            // because minDaysOfFood was 0.0. Every colony reads 0.0 on day one whatever it has,
+            // since ResourceCounter only sees stockpiled goods and nothing is hauled yet.
+            var e = Healthy();
+            e.colonists = 1;
+            e.downed = 1;
+            e.daysOfFood = 11.5f;
+            e.minDaysOfFood = 0f;
+            e.deaths = 3;
+            e.downedFraction = 0.09f;
+            Assert.Equal("incapacity", Postmortem.Cause(e));
+            Assert.DoesNotContain("starvation", Postmortem.Describe(e));
+        }
+
+        [Fact]
+        public void TheColonyIsJudgedAsItWasWhileAliveNotAfterwards()
+        {
+            // After a wipe the larder climbs because nobody is left to eat from it, so the
+            // evidence has to be the last living snapshot rather than the empty map.
+            var e = Healthy();
+            e.colonists = 2;
+            e.downed = 2;
+            e.daysOfFood = 11.5f;
+            string line = Postmortem.Describe(e);
+            Assert.Contains("last alive with 2 colonists (2 down)", line);
         }
 
         [Fact]
@@ -145,6 +178,32 @@ namespace AutoColony.Tests
         {
             Assert.False(CasualtyPolicy.ShouldReserveMedic(1, 2));
             Assert.False(CasualtyPolicy.ShouldReserveMedic(0, 1));
+        }
+
+        [Fact]
+        public void AHealthyColonyMeetsAThreatOnItsOwnTerms()
+        {
+            Assert.Equal(1f, CasualtyPolicy.EngagementCaution(4, 0), 3);
+        }
+
+        [Fact]
+        public void TheLastOneStandingHoldsCoverOnOddsFourWouldHaveTaken()
+        {
+            // The fight that lost the colony: one able colonist, three already down, a 1.23x
+            // advantage and a default engage ratio around 0.35. Four times the bar refuses it.
+            float caution = CasualtyPolicy.EngagementCaution(1, 3);
+            Assert.Equal(4f, caution, 3);
+            Assert.True(1.23f < 0.35f * caution);
+
+            // The same odds at full strength are still worth meeting in the open.
+            Assert.True(1.23f > 0.35f * CasualtyPolicy.EngagementCaution(4, 0));
+        }
+
+        [Fact]
+        public void TheBarRisesWithHowMuchOfTheColonyIsAlreadyDown()
+        {
+            Assert.True(CasualtyPolicy.EngagementCaution(2, 1) < CasualtyPolicy.EngagementCaution(1, 1));
+            Assert.True(CasualtyPolicy.EngagementCaution(2, 1) < CasualtyPolicy.EngagementCaution(2, 3));
         }
     }
 }

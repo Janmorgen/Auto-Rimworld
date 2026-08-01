@@ -231,16 +231,22 @@ namespace AutoColony.Modules
             // while sending two broken colonists out to be downed, and they starved where they
             // fell because nobody was left standing to carry food to them. Answering a raid is
             // not optional; meeting it in the open is.
-            bool winnable = threat <= 0f ||
-                            strength / threat >= ctx.Gene(Genes.DefenseEngageRatio);
+            // Best fighters first. A raid is not elective — it is happening regardless of
+            // whether anyone suitable exists — so the question is who goes, not whether.
+            var fighters = CombatAssessment.RankFighters(ctx.state.ableColonists);
+
+            // What losing this fight would cost, alongside how likely losing it is. With most of
+            // the colony already on the floor, the few still upright are the only thing standing
+            // between it and nobody left to tend or feed anyone, so they hold cover on odds they
+            // would have met in the open at full strength.
+            float caution = CasualtyPolicy.EngagementCaution(fighters.Count, ctx.state.colonistsDowned);
+            float required = ctx.Gene(Genes.DefenseEngageRatio) * caution;
+
+            bool winnable = threat <= 0f || strength / threat >= required;
 
             var rally = winnable ? RallyPoint(ctx) : Refuge(ctx);
             float retreatAt = ctx.Gene(Genes.DefenseRetreatHealth);
             int mobilised = 0;
-
-            // Best fighters first. A raid is not elective — it is happening regardless of
-            // whether anyone suitable exists — so the question is who goes, not whether.
-            var fighters = CombatAssessment.RankFighters(ctx.state.ableColonists);
 
             // Somebody has to still be standing afterwards to tend whoever is not.
             var medic = ChooseReservedMedic(ctx, fighters);
@@ -290,13 +296,22 @@ namespace AutoColony.Modules
             if (mobilised > 0)
             {
                 Note((winnable ? "drafted " : "withdrew ") + mobilised + " colonists");
+
+                // The numbers the decision was actually taken on. This used to print the
+                // desperation-scaled ratio, which is a different rule from the one applied and
+                // read as an explanation of a choice it had not made.
                 Chronicle.Record(ChronicleCategory.Threat, string.Format(
-                    "{0} hostiles (danger {1}); {2} {3} to {4} — {5}",
+                    "{0} hostiles (danger {1}); {2} {3} to {4} — strength {5:0} vs threat {6:0} " +
+                    "({7:0.00}x), needed {8:0.00}x{9}{10}",
                     ctx.state.hostilePawns, ctx.state.danger,
                     winnable ? "engaging with" : "WITHDRAWING",
-                    mobilised, rally,
-                    CombatAssessment.Explain(strength, threat, 1f) +
-                    (winnable ? "" : " — not worth meeting in the open, holding the base instead")));
+                    mobilised, rally, strength, threat,
+                    threat > 0f ? strength / threat : 999f, required,
+                    caution > 1f
+                        ? " (" + ctx.state.colonistsDowned + " already down, so the bar is " +
+                          caution.ToString("0.0") + "x higher)"
+                        : "",
+                    winnable ? "" : " — not worth meeting in the open, holding the base instead"));
             }
         }
 
