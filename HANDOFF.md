@@ -1,7 +1,59 @@
 # Handoff — goal planning direction
 
-State of the work as of 2026-07-31. The README describes *what the mod is*; this describes
+State of the work as of 2026-08-01. The README describes *what the mod is*; this describes
 *where the work is* and what to do next. Read both.
+
+## The round of 2026-08-01: four colonies, four causes
+
+Each launch was watched, the cause of the failure read out of the chronicle, one thing fixed,
+and the game relaunched. Every round found something, and the causes were all different — which
+is the argument for running it rather than reading it.
+
+| Run | Outcome | What it turned out to be |
+|---|---|---|
+| 1 | died day 3 | drafted the last standing colonist while three lay downed |
+| 2 | died day 3 | six room shells, none finished, no bed ever placed |
+| 3 | reached day 4, scored 0.591 | deadlocked on RimWorld's name-your-colony prompt |
+| 4 | running | — |
+
+**Three of the four were the same shape.** A threshold read one quantity when the outcome
+depended on a second one nobody had modelled:
+
+- Food urgency read the *store* and not the *delivery time*. A hunt is kill → haul → butcher →
+  cook, so escalating at one day of food leaves no margin for any of it to fail. Urgency is now
+  measured against `daysOfFood - 1.5`, which moves every food decision earlier without changing
+  a judgement built on top of it. `FoodTiming`.
+- Construction read *material* and not *labour*. `BuildingMeans` knew the colony could afford six
+  rooms; nothing knew it had two pairs of hands. Concurrent rooms now scale with builders —
+  one room for a colony of two. `BuildingMeans.ConcurrentRooms`.
+- Engagement read the *odds* and not the *stake*. Desperation already scales acceptable risk up;
+  fragility has to scale it down, because losing the last person standing is not survivable at
+  any odds. Required ratio multiplies by `1 + downed/able`. `CasualtyPolicy.EngagementCaution`.
+
+**When a rule fires "too late" or "too eagerly", suspect the quantity before the constant.**
+
+A doctor is also now held back once anyone is down — never the last fighter — and nothing new is
+built while the plan is answering something immediate.
+
+### What made all of that findable
+
+The observation work went in first, and it earned its keep in the same session:
+
+- `COLONY LOST` names a cause and the chain behind it. It was *wrong on its first live run* —
+  it called an 18-day food store starvation — which is itself the lesson: it keyed on the
+  epoch's lowest food reading, and that is 0.0 for every colony that lived through day one,
+  because `ResourceCounter` only counts stockpiled goods. Cause is now read from the last
+  snapshot in which anyone was alive, since after a wipe the larder *climbs*.
+- Trial lines carry `[trial 2/4]`, and a trial says which genes it holds furthest from the
+  incumbent. No more checking whether a `session begins` followed a `COLONY LOST`.
+- A wall-clock heartbeat with a tick delta. This caught the run-3 deadlock in one line. It was
+  itself broken at first — it ran on the tick, and **a paused game issues no ticks**, so it went
+  silent exactly when the run stalled. It now runs from the non-tick hooks and names whatever is
+  holding the game: `— HELD BY Dialog_NamePlayerFactionAndSettlement`.
+- Epoch scores carry sample count and elapsed days.
+
+Offline tests: 134 → 165. Two of the new ones were written after the behaviour they describe was
+watched failing in game.
 
 ## Where things stand
 
@@ -132,8 +184,6 @@ long enough to do the whole thing in one go.
 - **Conduit routing.** The director can now *see* that unroofed electrical equipment in rain is
   a fire risk, but it still creates it: `PowerModule` runs an L-shaped path across open ground
   without preferring cells that are already roofed. Prevention is the obvious follow-on.
-- **No doctor is held back.** The colony that died had both colonists downed and nobody left
-  standing to tend or feed them, with 3.2 days of food in the stockpile.
 - **The epoch-close conduct line has never been seen live**, and neither has the *production*
   prisoner-bed marking — only the harness's. A `-quicktest` colony restarts at day nought, so
   nothing has reached an epoch boundary.
@@ -181,13 +231,6 @@ slow, so it is worth fixing first.
 
 ### Control — what the director cannot do
 
-- **React to hunger with enough lead time.** Escalation to last-resort hunting fires at around
-  one day of food, which leaves no margin for the hunt to fail, the meat to be hauled and a meal
-  to be cooked. Most losses this run were this, and the fix is timing rather than capability —
-  the search is already sampling it (candidates escalated at 0.0 days and at 3.0 days).
-- **Hold a doctor back.** Colonies died with every colonist downed and days of food in the
-  stockpile because nobody was left standing to carry it. Nothing reserves an able colonist when
-  someone goes down.
 - **Touch the schedule at all.** `NightOwlDuringTheDay (-10)` is one of the largest recurring
   penalties and is fixable purely by assigning that colonist a night shift. The schedule tab is
   untouched by any module.
