@@ -135,6 +135,13 @@ namespace AutoColony
         public StoryDanger danger = StoryDanger.None;
         public int hostilePawns;
 
+        /// <summary>
+        /// Raids the colony has seen. Used as the signal that prisoners are a live prospect: a
+        /// prison has to be standing *before* anyone can be captured, so waiting until the colony
+        /// holds prisoners to build one is a deadlock with no way in.
+        /// </summary>
+        public int raidsSurvived;
+
         public bool Valid { get { return map != null && colonists > 0; } }
 
         // --- proximity, filled in by the director once the base location is known ---
@@ -224,6 +231,9 @@ namespace AutoColony
                 CaptureResearch(s);
 
                 if (map.dangerWatcher != null) s.danger = map.dangerWatcher.DangerRating;
+
+                var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
+                if (stats != null) s.raidsSurvived = stats.numRaidsEnemy;
             }
             catch (Exception e)
             {

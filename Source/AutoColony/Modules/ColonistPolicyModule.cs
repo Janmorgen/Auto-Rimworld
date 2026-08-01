@@ -16,10 +16,13 @@ namespace AutoColony.Modules
         public override string Name { get { return "Colonist policy"; } }
         public override int IntervalTicks { get { return 20000; } }
 
+        // Prisoners used to be handled here too, as a straight recruit-or-not read off the
+        // genome. They now belong to PrisonerModule, which weighs the person against the
+        // colony's situation — and two modules writing the same setting on alternate passes
+        // would simply have fought each other.
         protected override void Act(DirectorContext ctx)
         {
             ApplyColonistSettings(ctx);
-            ApplyPrisonerPolicy(ctx);
         }
 
         void ApplyColonistSettings(DirectorContext ctx)
@@ -59,31 +62,6 @@ namespace AutoColony.Modules
             }
 
             if (changed > 0) Note("updated policy on " + changed + " settings");
-        }
-
-        void ApplyPrisonerPolicy(DirectorContext ctx)
-        {
-            if (ctx.state.prisoners == 0) return;
-
-            float recruitBias = ctx.Gene(Genes.ColonistRecruitBias);
-            var mode = recruitBias >= 0.5f
-                ? PrisonerInteractionModeDefOf.AttemptRecruit
-                : PrisonerInteractionModeDefOf.MaintainOnly;
-
-            var prisoners = ctx.map.mapPawns.PrisonersOfColony;
-            int changed = 0;
-
-            for (int i = 0; i < prisoners.Count; i++)
-            {
-                var p = prisoners[i];
-                if (p == null || p.guest == null) continue;
-                if (p.guest.ExclusiveInteractionMode == mode) continue;
-
-                p.guest.SetExclusiveInteraction(mode);
-                changed++;
-            }
-
-            if (changed > 0) Note("set " + changed + " prisoners to " + mode.defName);
         }
 
         static int Clamp(int v, int min, int max)

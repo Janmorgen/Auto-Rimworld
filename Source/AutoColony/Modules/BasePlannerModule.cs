@@ -109,6 +109,8 @@ namespace AutoColony.Modules
                 return;
             }
 
+            MarkPrisonBeds(ctx);
+
             // Finish the room the plan actually asked for before opening another.
             //
             // Reserving a room aims at the focus, but only at the moment of reserving. After
@@ -212,6 +214,41 @@ namespace AutoColony.Modules
             return n > 0 ? new IntVec3(x / n, 0, z / n) : IntVec3.Invalid;
         }
 
+        /// <summary>
+        /// Makes the beds in a prison actually prisoner beds.
+        ///
+        /// Placing a bed in a room the planner calls a prison does not make it one — `ForPrisoners`
+        /// is a flag on the built bed, and until it is set the game sees an ordinary bed, offers
+        /// nobody the option to capture anyone, and the room does nothing at all. Done here
+        /// rather than at placement time because the flag lives on the finished building, which
+        /// does not exist when the blueprint goes down.
+        /// </summary>
+        void MarkPrisonBeds(DirectorContext ctx)
+        {
+            var layout = ctx.layout;
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var room = layout.rooms[i];
+                if (room.role != RoomRole.Prison) continue;
+
+                foreach (var cell in room.Rect)
+                {
+                    if (!cell.InBounds(ctx.map)) continue;
+                    var things = cell.GetThingList(ctx.map);
+                    for (int t = 0; t < things.Count; t++)
+                    {
+                        var bed = things[t] as Building_Bed;
+                        if (bed == null || !bed.Spawned || bed.ForPrisoners) continue;
+
+                        bed.SetBedOwnerTypeByInterface(BedOwnerType.Prisoner);
+                        Chronicle.Record(ChronicleCategory.Build,
+                            "marked a bed for prisoners — the colony can now take them");
+                        Note("marked a prisoner bed");
+                    }
+                }
+            }
+        }
+
         /// <summary>How comfortably the colony can afford to build right now.</summary>
         static float Means(DirectorContext ctx)
         {
@@ -291,7 +328,12 @@ namespace AutoColony.Modules
             if (!layout.HasRoom(RoomRole.Research)) options.Add(RoomRole.Research.ToString());
             if (!layout.HasRoom(RoomRole.Dining)) options.Add(RoomRole.Dining.ToString());
             if (!layout.HasRoom(RoomRole.Hospital)) options.Add(RoomRole.Hospital.ToString());
-            if (s.prisoners > 0 && !layout.HasRoom(RoomRole.Prison)) options.Add(RoomRole.Prison.ToString());
+            // A prison has to exist *before* anyone can be taken prisoner: the game will not let
+            // a colonist capture someone without a prisoner bed to carry them to. Gating this on
+            // already having prisoners was a deadlock with no way in — no prison, so no capture,
+            // so no prisoners, so no prison. Raids are the signal that the opportunity is coming.
+            if (!layout.HasRoom(RoomRole.Prison) && s.raidsSurvived > 0)
+                options.Add(RoomRole.Prison.ToString());
 
             // Nothing outstanding: the base matches the colony's current size.
             if (options.Count == 0) return false;
@@ -490,6 +532,9 @@ namespace AutoColony.Modules
                     break;
                 case RoomRole.Prison:
                     PlaceMany(ctx, room, AcDefs.Bed, 1);
+                    // Marked when it is actually built — see MarkPrisonBeds. A bed in a room the
+                    // planner calls a prison is still an ordinary bed until someone says so, and
+                    // an unmarked one makes the whole room useless for its purpose.
                     break;
                 case RoomRole.Power:
                     // A wood-fired generator, not a solar panel, because this room gets roofed

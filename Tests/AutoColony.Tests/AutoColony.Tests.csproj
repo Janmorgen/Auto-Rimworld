@@ -35,6 +35,7 @@
     <Compile Include="../../Source/AutoColony/Core/Goals/ResearchChain.cs" Link="Production/ResearchChain.cs" />
     <Compile Include="../../Source/AutoColony/Core/Upkeep/Defects.cs" Link="Production/Defects.cs" />
     <Compile Include="../../Source/AutoColony/Core/Upkeep/BuildingMeans.cs" Link="Production/BuildingMeans.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Prisoners/PrisonerPolicy.cs" Link="Production/PrisonerPolicy.cs" />
   </ItemGroup>
 
 </Project>
