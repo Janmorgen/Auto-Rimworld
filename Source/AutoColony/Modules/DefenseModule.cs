@@ -97,10 +97,22 @@ namespace AutoColony.Modules
             return total;
         }
 
+        /// <summary>
+        /// Whether anything hostile is close enough to what the colony is protecting.
+        ///
+        /// The base is not the only thing worth protecting — the colonists are, and they do not
+        /// stay in it. Measuring only from the base origin meant a hunter who met a raider out
+        /// in the field was on her own: the director saw nothing near the base, drafted nobody,
+        /// and the two colonists still at home carried on sowing while she was shot down. That
+        /// is how a colony loses people one at a time to a threat it could have met together.
+        /// </summary>
         static bool HostilesNearBase(DirectorContext ctx)
         {
             var origin = ctx.layout != null && ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
             const int NearSq = 45 * 45;
+
+            // Anyone caught out in the open is much closer to the threat than the base is.
+            const int NearColonistSq = 30 * 30;
 
             var pawns = ctx.map.mapPawns.AllPawnsSpawned;
             for (int i = 0; i < pawns.Count; i++)
@@ -108,6 +120,15 @@ namespace AutoColony.Modules
                 var p = pawns[i];
                 if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
                 if ((p.Position - origin).LengthHorizontalSquared <= NearSq) return true;
+
+                var colonists = ctx.state.allColonists;
+                for (int c = 0; c < colonists.Count; c++)
+                {
+                    var colonist = colonists[c];
+                    if (colonist == null || !colonist.Spawned) continue;
+                    if ((p.Position - colonist.Position).LengthHorizontalSquared <= NearColonistSq)
+                        return true;
+                }
             }
             return false;
         }
