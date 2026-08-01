@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AutoColony.Learning;
 using RimWorld;
+using RimWorld.Planet;
 using Verse;
 using Verse.Profile;
 
@@ -101,6 +102,8 @@ namespace AutoColony
 
             if (candidateCount < 2) candidateCount = 2;
 
+            EnsureColonyNamed();
+
             try
             {
                 GameDataSaveLoader.SaveGame(BaselineSaveName);
@@ -132,6 +135,39 @@ namespace AutoColony
             AcLog.Message("Training round " + RoundIndex + " begins: " + Candidates.Count +
                           " candidates on seed " + TrialSeed + ".");
             return true;
+        }
+
+        /// <summary>
+        /// Gives the colony a name before anything tries to save it.
+        ///
+        /// RimWorld asks the player to name their faction and settlement the first time a game
+        /// is saved, through a window that force-pauses. A colony started with `-quicktest` has
+        /// neither name, so the first training snapshot raised that window — and `TimeControl`
+        /// rightly refuses to close windows it does not recognise, since it cannot know whether
+        /// dismissing one is safe. The run stopped dead with the heartbeat eighteen minutes
+        /// stale and the game happily reporting itself alive.
+        ///
+        /// Naming them here is the fix rather than teaching the dismissal list a new window:
+        /// the prompt only exists because something has to supply a name, and the director is
+        /// the one playing this colony.
+        /// </summary>
+        static void EnsureColonyNamed()
+        {
+            try
+            {
+                var player = Faction.OfPlayer;
+                if (player != null && !player.HasName) player.Name = "Auto-Colony";
+
+                var map = Find.CurrentMap;
+                var settlement = map != null ? map.Parent as Settlement : null;
+                if (settlement != null && !settlement.HasName) settlement.Name = "Auto-Colony";
+            }
+            catch (Exception e)
+            {
+                // Worth continuing regardless: an unnamed colony that saves without prompting
+                // is fine, and the prompt is only fatal when it actually appears.
+                AcLog.WarningOnce("nameColony", "Could not name the colony before saving: " + e.Message);
+            }
         }
 
         /// <summary>

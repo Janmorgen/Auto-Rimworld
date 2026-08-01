@@ -197,6 +197,30 @@ namespace AutoColony
         public override void GameComponentUpdate()
         {
             TimeControl.Update();
+            Pulse();
+        }
+
+        /// <summary>
+        /// Emits the heartbeat, from a hook that keeps running while the game is stopped.
+        ///
+        /// It was on the tick to begin with, which silences it in exactly the situation it was
+        /// built for: a paused game issues no ticks, so a run held by a dialog stopped writing
+        /// heartbeats and became indistinguishable from a run that had exited — which is the
+        /// distinction the heartbeat exists to make. It cost eighteen minutes of a stalled run
+        /// before anyone looked at the game log to find the naming prompt holding it.
+        ///
+        /// Throttled inside <see cref="Chronicle.Heartbeat"/>, so being called every frame from
+        /// both non-tick hooks costs a float comparison.
+        /// </summary>
+        void Pulse()
+        {
+            try
+            {
+                if (Current.ProgramState != ProgramState.Playing) return;
+                if (Find.TickManager == null) return;
+                Chronicle.Heartbeat(Find.TickManager.TicksGame, HeartbeatStatus());
+            }
+            catch (Exception) { }
         }
 
         public override void GameComponentOnGUI()
@@ -206,6 +230,7 @@ namespace AutoColony
             // repaint, by which point the frame's layout is settled.
             if (Event.current != null && Event.current.type != EventType.Repaint) return;
             TimeControl.Update();
+            Pulse();
         }
 
         public override void GameComponentTick()
@@ -223,9 +248,6 @@ namespace AutoColony
             if (map == null) return;
 
             int tick = Find.TickManager.TicksGame;
-
-            // Throttled inside, so calling it per tick costs one comparison.
-            Chronicle.Heartbeat(tick, HeartbeatStatus());
 
             if (tick - lastStateTick >= StateInterval)
             {
@@ -326,9 +348,13 @@ namespace AutoColony
         {
             return string.Format(
                 System.Globalization.CultureInfo.InvariantCulture,
-                "day {0}, {1} colonists, {2:0.0}d food, {3}",
+                "day {0}, {1} colonists, {2:0.0}d food, {3}{4}",
                 lastMetrics.day, lastMetrics.colonists, lastMetrics.daysOfFood,
-                TrainingSession.Active ? TrainingSession.StatusLine : "playing live");
+                TrainingSession.Active ? TrainingSession.StatusLine : "playing live",
+                // A stalled run has to say so where the post-mortem will read it. Without this
+                // the tick simply stops advancing and the reason lives only in the game log.
+                string.IsNullOrEmpty(TimeControl.BlockedBy)
+                    ? "" : " — HELD BY " + TimeControl.BlockedBy);
         }
 
         /// <summary>

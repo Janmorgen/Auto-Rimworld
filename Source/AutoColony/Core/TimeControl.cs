@@ -75,6 +75,13 @@ namespace AutoColony
         public static int DialogsDismissed;
         public static string LastAction = "idle";
 
+        /// <summary>
+        /// The window holding the game up that the director will not close, or empty when
+        /// nothing is. Carried into the heartbeat so a stalled run says why in the one file a
+        /// post-mortem reads, rather than only in the game log.
+        /// </summary>
+        public static string BlockedBy = "";
+
         /// <summary>True while the mod is deliberately keeping its hands off a manual pause.</summary>
         public static bool RespectingPlayerPause { get { return respectingPlayerPause; } }
 
@@ -117,6 +124,7 @@ namespace AutoColony
                 wasStoppedLastCheck = false;
                 respectingPlayerPause = false;
                 pausedSinceTime = -1f;
+                BlockedBy = "";
 
                 var wanted = DesiredSpeed(settings);
                 if (ticks.CurTimeSpeed != wanted)
@@ -228,6 +236,7 @@ namespace AutoColony
                     // A window type not on the list will hold the game open indefinitely and
                     // there is no way to know from here whether closing it is safe. Name it
                     // once so the situation is diagnosable instead of looking like a hang.
+                    BlockedBy = window.GetType().Name;
                     AcLog.WarningOnce("blockingWindow:" + window.GetType().FullName,
                         "Game is held paused by " + window.GetType().FullName +
                         ", which Auto-Colony will not close. The colony will not advance " +
