@@ -42,9 +42,11 @@ namespace AutoColony.Modules
         /// </summary>
         void TryCapture(DirectorContext ctx)
         {
-            // Never while the fight is still going. Walking an unarmed colonist into a firefight
-            // to pick someone up is how a colony turns one casualty into two.
-            if (ctx.state.hostilesNearBase > 0) return;
+            // Never during an emergency. Walking an unarmed colonist into a firefight to pick
+            // someone up is how a colony turns one casualty into two, and this hands out an
+            // ordered job — it will pull someone off firefighting to do it.
+            if (ctx.state.EmergencyAtHome) return;
+            if (ctx.plan != null && ctx.plan.EmergencyActive) return;
 
             var map = ctx.map;
             float recruitBias = ctx.Gene(Genes.ColonistRecruitBias);
