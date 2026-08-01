@@ -422,8 +422,15 @@ namespace AutoColony.Goals
 
         public override float Urgency(DirectorContext ctx)
         {
-            // Raids scale with wealth, so the richer the colony the more this matters.
-            return AcMath.Clamp01(ctx.state.wealthTotal / 60000f);
+            // Against the raid the colony's own size is summoning, rather than off raw wealth
+            // on a straight line. Wealth drives raid points, so defence is a race and not a
+            // threshold: the question is whether the colony is keeping up with what it is
+            // building, and a bare wealth ramp cannot answer that at all.
+            float strength = CombatAssessment.ColonyStrength(ctx.state);
+            float expected = ThreatForecast.ExpectedRaidPoints(
+                ctx.state.wealthTotal, ctx.state.colonists);
+
+            return 1f - ThreatForecast.Readiness(strength, expected);
         }
 
         public override void DeclareNeeds(DirectorContext ctx, MaterialNeeds needs)
@@ -435,9 +442,16 @@ namespace AutoColony.Goals
         public override string Explain(DirectorContext ctx)
         {
             int dead = ctx.state.turrets - ctx.state.poweredTurrets;
+            float strength = CombatAssessment.ColonyStrength(ctx.state);
+            float expected = ThreatForecast.ExpectedRaidPoints(
+                ctx.state.wealthTotal, ctx.state.colonists);
+
             return ctx.state.poweredTurrets + " working turrets" +
                    (dead > 0 ? " (" + dead + " unpowered)" : "") +
-                   ", wealth " + ctx.state.wealthTotal.ToString("N0");
+                   ", wealth " + ctx.state.wealthTotal.ToString("N0") +
+                   " is summoning about " + expected.ToString("0") +
+                   " raid points against strength " + strength.ToString("0") +
+                   " (readiness " + ThreatForecast.Readiness(strength, expected).ToString("0.00") + ")";
         }
 
     }
