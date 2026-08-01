@@ -61,7 +61,7 @@ Branch `feat/autonomous-colony-director`, pushed, **not merged to `main`**. `mai
 original HelloWorld template commit. Merge with `git checkout main && git merge --ff-only
 feat/autonomous-colony-director` when you want it there.
 
-The mod runs in RimWorld 1.6.4871. 134 offline tests pass. It has been played against generated
+The mod runs in RimWorld 1.6.4871. 165 offline tests pass. It has been played against generated
 colonies and against a real save (`AutoColony_trial_baseline`, the colony "Botein-IV").
 
 ## The direction this was heading
@@ -314,6 +314,19 @@ slow, so it is worth fixing first.
   safety and read 0.00 during exactly that weather.
 - **`ResourceCounter` only counts what is in a stockpile.** On day one everything is on the
   ground, so material checks read zero. Use `PlacementUtil.AvailableCount`.
+- **Which means every colony has an empty larder in its history.** `daysOfFood` reads 0.0 for the
+  first hours of every colony whatever it actually has, so any *lowest-seen* food statistic is
+  0.0 forever after. A post-mortem keyed on that called an 18.5-day store starvation. Corroborate
+  a low-water mark against the end state before believing it.
+- **The first save of a colony raises a naming prompt that force-pauses.** `-quicktest` colonies
+  have no faction or settlement name, and `GameDataSaveLoader.SaveGame` asks for one through
+  `Dialog_NamePlayerFactionAndSettlement`. `TimeControl` will not close windows it does not
+  recognise, so an unattended run deadlocks silently. `TrainingSession.EnsureColonyNamed` sets
+  both before snapshotting; anything else that saves must too.
+- **Anything that must survive a pause cannot live on the tick.** This is the same trap as time
+  control, and the heartbeat fell into it: a paused game issues no ticks, so a signal meant to
+  prove the run is alive goes quiet exactly when the run stops. `GameComponentUpdate` and
+  `GameComponentOnGUI` are where such things belong.
 - **Almost everything arrives forbidden**, including scenario starting resources.
 - **Colonists only fight fires inside the home area.**
 - **A paused game issues no ticks**, so `GameComponentTick` cannot recover a pause.
