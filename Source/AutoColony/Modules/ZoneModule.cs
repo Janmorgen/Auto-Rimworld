@@ -256,9 +256,19 @@ namespace AutoColony.Modules
                 var def = all[i];
                 if (def.plant == null || !def.plant.Sowable) continue;
                 if (def.plant.harvestedThingDef == null) continue;
-                // Food crops only; drugs and textiles are managed elsewhere. Healroot has its
-                // own plot, since it is medicine rather than dinner.
+                // Food crops only; textiles are managed elsewhere and healroot has its own plot,
+                // since it is medicine rather than dinner.
                 if (!def.plant.harvestedThingDef.IsNutritionGivingIngestible) continue;
+
+                // And not drugs, which that test does not exclude.
+                //
+                // Psychoid and smokeleaf leaves are ingestible and carry enough nutrition to
+                // pass for food, so the colony planted seventy-two cells of psychoid as its
+                // second *food* crop — a field of psychite where the larder needed potatoes.
+                // Harmless while there was only ever one crop and the bandit favoured a real
+                // one; the moment a second, deliberately different crop was added, the next arm
+                // along was whatever the filter had failed to exclude.
+                if (def.plant.harvestedThingDef.IsDrug) continue;
 
                 // Skill and research are hard limits, not preferences: a crop nobody can sow is
                 // a field that stays bare, and the colony would never find out why.
