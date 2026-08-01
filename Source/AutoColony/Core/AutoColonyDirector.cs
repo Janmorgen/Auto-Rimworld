@@ -154,6 +154,12 @@ namespace AutoColony
             EnsureModules();
             seeded = false;
             Chronicle.BeginSession(ColonyName());
+
+            // Before anything can save. RimWorld asks the player to name an unnamed faction or
+            // settlement through a window that force-pauses, and it autosaves on its own
+            // schedule — so an unattended colony deadlocks on it sooner or later whether or not
+            // training is on. Naming it up front is cheaper than recognising the window.
+            TrainingSession.EnsureColonyNamed();
         }
 
         public override void LoadedGame()
@@ -161,6 +167,7 @@ namespace AutoColony
             EnsureModules();
             Chronicle.BeginSession(ColonyName());
             TimeControl.NotifyGameLoaded();
+            TrainingSession.EnsureColonyNamed();
 
             // A save can carry an epoch deadline that had already passed when it was written.
             // Left alone it closes on the first tick after loading. Clearing it defers to the

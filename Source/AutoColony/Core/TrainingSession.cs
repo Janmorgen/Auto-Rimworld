@@ -150,17 +150,44 @@ namespace AutoColony
         /// Naming them here is the fix rather than teaching the dismissal list a new window:
         /// the prompt only exists because something has to supply a name, and the director is
         /// the one playing this colony.
+        ///
+        /// Called when a colony starts or loads as well as before a snapshot, because the
+        /// training snapshot is not the only save that can raise it — RimWorld autosaves on its
+        /// own schedule, so any unattended run reaches this eventually whether or not it is
+        /// training.
         /// </summary>
-        static void EnsureColonyNamed()
+        public static void EnsureColonyNamed()
         {
             try
             {
                 var player = Faction.OfPlayer;
                 if (player != null && !player.HasName) player.Name = "Auto-Colony";
 
-                var map = Find.CurrentMap;
-                var settlement = map != null ? map.Parent as Settlement : null;
-                if (settlement != null && !settlement.HasName) settlement.Name = "Auto-Colony";
+                // Every player settlement, not just the current map's parent. Naming only the
+                // map parent left the settlement unnamed — the prompt merely changed from
+                // Dialog_NamePlayerFactionAndSettlement to Dialog_NamePlayerSettlement, which
+                // is the faction half having worked and the settlement half not. Whatever the
+                // map's parent is in a `-quicktest` world, the world object list is the thing
+                // RimWorld actually asks about.
+                int named = 0, found = 0;
+                var worldObjects = Find.WorldObjects;
+                var settlements = worldObjects != null ? worldObjects.Settlements : null;
+                for (int i = 0; settlements != null && i < settlements.Count; i++)
+                {
+                    var settlement = settlements[i];
+                    if (settlement == null || settlement.Faction != Faction.OfPlayer) continue;
+
+                    found++;
+                    if (settlement.HasName) continue;
+                    settlement.Name = "Auto-Colony";
+                    named++;
+                }
+
+                // Said out loud because the failure mode is a silent deadlock: if a naming
+                // prompt still appears after this, the counts are what say which half missed.
+                AcLog.Message("Named the colony before snapshotting: faction '" +
+                              (player != null ? player.Name : "none") + "', " + named +
+                              " of " + found + " player settlements newly named.");
             }
             catch (Exception e)
             {
