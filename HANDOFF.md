@@ -9,7 +9,7 @@ Branch `feat/autonomous-colony-director`, pushed, **not merged to `main`**. `mai
 original HelloWorld template commit. Merge with `git checkout main && git merge --ff-only
 feat/autonomous-colony-director` when you want it there.
 
-The mod runs in RimWorld 1.6.4871. 97 offline tests pass. It has been played against generated
+The mod runs in RimWorld 1.6.4871. 134 offline tests pass. It has been played against generated
 colonies and against a real save (`AutoColony_trial_baseline`, the colony "Botein-IV").
 
 ## The direction this was heading
@@ -45,9 +45,21 @@ sources. The colonists' own thoughts say what is costing mood, so the colony ans
 experience rather than a rule someone guessed. Direct inspection catches what nobody complains
 about because it has not hurt yet; an unroofed generator costs nothing until it rains.
 
-**Complaints it cannot fix are reported, not dropped.** That list is the to-do list — a live run
-named `EnvironmentCold`, `AteWithoutTable`, `NeedComfort`, `NeedBeauty` and
-`NightOwlDuringTheDay`. Adding a case is a row in `Complaints` plus a `RemedyKind`.
+**Complaints it cannot fix are reported, not dropped.** That list is the to-do list, and it is
+measured rather than guessed. Working through it is what killed the biggest survival gaps:
+burial, recreation, tables and heating all came off it. What is left there now is mostly grief —
+`KnowColonistDied`, `PawnWithGoodOpinionDied` — which is not a building problem. Adding a case is
+a row in `Complaints` plus a `RemedyKind`.
+
+**Upkeep does not switch off in a crisis; its bar rises.** A module that defers entirely while
+anything immediate is happening never gets to anything in a colony that lurches between
+emergencies — which is exactly the colony that needs it, and is why one carried an unburied
+colonist for eleven days over a building that costs nothing. Burying the dead clears the raised
+bar; decorating does not.
+
+**A scoring note.** The `Conduct` term shifted the score scale, so archive entries from before it
+are not directly comparable with ones after. If cross-run comparison starts mattering, that wants
+a scoring-version key on the archive.
 
 **Sharing is not a fault.** `BuildingMeans` scales the whole question on material per colonist: a
 destitute colony puts every bed in one room and is not nagged about it, a comfortable one
@@ -120,26 +132,33 @@ long enough to do the whole thing in one go.
 - **Conduit routing.** The director can now *see* that unroofed electrical equipment in rain is
   a fire risk, but it still creates it: `PowerModule` runs an L-shaped path across open ground
   without preferring cells that are already roofed. Prevention is the obvious follow-on.
+- **No doctor is held back.** The colony that died had both colonists downed and nobody left
+  standing to tend or feed them, with 3.2 days of food in the stockpile.
+- **The epoch-close conduct line has never been seen live**, and neither has the *production*
+  prisoner-bed marking — only the harness's. A `-quicktest` colony restarts at day nought, so
+  nothing has reached an epoch boundary.
 - Production bills beyond butchering, defence positioning under a real firefight, and any
   behaviour over in-game years rather than days.
 
 ## What to do next, roughly in order
 
-1. **Apparel and heating.** Still the largest survival gap, and now confirmed by the colony
-   itself rather than by argument: `EnvironmentCold (-4.0)` came top of the unfixable-complaints
-   list on a live run. `Heater` needs only Electricity, so this is a goal requiring `Power` with
-   `RequiresResearch` of Electricity, a capability check on a *working* heater, and an
-   `EnvironmentCold` row in `Complaints`. The probe harness proves it without playing a colony
-   into a cold snap.
-2. **The rest of what the colony asked for.** The same run named `AteWithoutTable` (no dining
-   table), `NeedComfort` (nothing comfortable to sit on), `NeedBeauty`, and
-   `NightOwlDuringTheDay` — that last one a scheduling problem rather than a building one, which
-   is worth noting because it shows the survey finds things no construction module could fix.
-   Each is a row in `Complaints` plus a remedy.
-3. **Cut the search's dimensionality.** ~50 genes against tens of epochs. A live colony
+1. **Apparel.** Warm clothes are still never crafted or assigned. Heating landed (a `Heater`
+   remedy gated on a working generator) but clothing did not, and a cold snap is answered only
+   indoors.
+2. **The rest of what the colony asks for.** Burial, recreation, tables and heating are done.
+   Still unanswered on the live list: `NeedComfort` (chairs need `ComplexFurniture` research),
+   `NeedRoomSize`, `SleepDisturbed`, `NightOwlDuringTheDay` (a scheduling problem, not a building
+   one — worth noting because it shows the survey finds things no construction module could
+   fix), and `ProsthophileNoProsthetic`. Each is a row in `Complaints` plus a remedy.
+3. **Make the consequential rules testable.** `CombatAssessment` and `FireRisk` are pure
+   arithmetic behind a `Map` read, so fight-or-withdraw — now gene-driven — cannot be exercised
+   offline. `Prisoners/` and `Upkeep/` show the pattern. The goal prerequisite walk in
+   `GoalPlanner.Actionable` is the same algorithm as `ResearchChain` one level up, but inline and
+   untested, and it lacks that one's cycle detection.
+4. **Cut the search's dimensionality.** ~50 genes against tens of epochs. A live colony
    measured score noise at ±0.061, roughly three times the ~0.02 where offline tests show the
    sequential search going flat. Grouping work-type weights by category is the obvious cut.
-4. **Combat positioning.** Everyone rallies to one point; no cover, no chokepoints, and no
+5. **Combat positioning.** Everyone rallies to one point; no cover, no chokepoints, and no
    doctor held back when someone is downed.
 
 ## Traps worth knowing before you touch it
@@ -192,7 +211,7 @@ long enough to do the whole thing in one go.
 
 ```bash
 cd Source/AutoColony && dotnet build          # → Assemblies/AutoColony.dll
-cd Tests/AutoColony.Tests && dotnet test      # 97 tests, learning layer, goals and upkeep policy
+cd Tests/AutoColony.Tests && dotnet test      # 134 tests, learning layer, goals, upkeep, prisoners
 ```
 
 Offline tests cover anything free of `Map` and `Pawn`; everything else needs a colony. Launch
