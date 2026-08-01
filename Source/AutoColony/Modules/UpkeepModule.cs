@@ -26,16 +26,28 @@ namespace AutoColony.Modules
         // costs a room walk per colonist for something that changes over days.
         public override int IntervalTicks { get { return 15000; } }
 
-        /// <summary>None of this is worth doing while the colony is burning.</summary>
-        public override bool Discretionary { get { return true; } }
+        // Deliberately *not* Discretionary. Most upkeep should wait while the colony is
+        // burning, but "most" is not "all", and switching the whole module off during an
+        // emergency is how a colony that lurched from one crisis to the next never got round to
+        // burying anyone — carrying the largest penalty in the game for eleven days over a
+        // building that costs nothing. The bar rises instead of the work stopping.
+
+        /// <summary>How well a fix has to pay for itself to be worth doing mid-crisis.</summary>
+        const float UrgentOnly = 0.8f;
 
         readonly List<UnmetComplaint> unhandled = new List<UnmetComplaint>();
 
         protected override void Act(DirectorContext ctx)
         {
 
+            // While something immediate is happening the colony only does what clearly pays for
+            // itself — burying the dead does, decorating does not.
+            bool crisis = ctx.state.EmergencyAtHome ||
+                          (ctx.plan != null && ctx.plan.EmergencyActive);
+            float bar = crisis ? UrgentOnly : DefectPolicy.ActionThreshold;
+
             // Withdraw anything the colony asked for and no longer wants, before asking for more.
-            if (CancelStaleOrders(ctx)) return;
+            if (!crisis && CancelStaleOrders(ctx)) return;
 
             unhandled.Clear();
             var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled);
@@ -47,6 +59,7 @@ namespace AutoColony.Modules
             for (int i = 0; i < defects.Count; i++)
             {
                 var defect = defects[i];
+                if (defect.Priority < bar) continue;
                 if (!DefectPolicy.WorthActing(defect.kind, defect.severity)) continue;
                 if (!Apply(ctx, defect)) continue;
 
@@ -149,11 +162,122 @@ namespace AutoColony.Modules
                 case RemedyKind.RemoveSurplusBeds: return RemoveSurplusBeds(ctx, defect);
                 case RemedyKind.AddBeauty: return AddBeauty(ctx, defect);
                 case RemedyKind.Reclaim: return Reclaim(ctx, defect);
+                case RemedyKind.BuryDead: return BuryDead(ctx, defect);
+                case RemedyKind.AddHeater: return AddHeater(ctx);
+                case RemedyKind.AddTable: return AddTable(ctx);
+                case RemedyKind.AddRecreation: return AddRecreation(ctx);
                 default: return false;
             }
         }
 
         // ------------------------------------------------------------ remedies
+
+        /// <summary>
+        /// Digs a grave near where the body is.
+        ///
+        /// A grave needs no research and costs nothing whatsoever, which makes this the best
+        /// trade in the game: the single largest mood penalty, removed for free. Colonists haul
+        /// their own dead into it once one exists — the director only has to provide the hole.
+        /// </summary>
+        static bool BuryDead(DirectorContext ctx, ColonyDefect defect)
+        {
+            var grave = AcDefs.Grave;
+            if (grave == null) return false;
+
+            // One spare grave is enough; they hold one each, so only dig when none is waiting.
+            if (EmptyGraveExists(ctx.map)) return false;
+
+            var near = defect.thing != null && defect.thing.Spawned
+                ? defect.thing.Position : ctx.Origin;
+
+            foreach (var cell in GenRadial.RadialCellsAround(near, 18, true))
+            {
+                if (PlacementUtil.TryPlace(ctx.map, grave, cell, Rot4.North, null))
+                {
+                    PlacementUtil.MarkHome(ctx.map, cell);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static bool EmptyGraveExists(Map map)
+        {
+            var grave = AcDefs.Grave;
+            if (grave == null || map.listerThings == null) return false;
+
+            var graves = map.listerThings.ThingsOfDef(grave);
+            for (int i = 0; i < graves.Count; i++)
+            {
+                var building = graves[i] as Building_Grave;
+                if (building != null && !building.HasCorpse) return true;
+            }
+
+            // One already on order counts, or a grave is queued every pass until it is finished.
+            var pending = map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint);
+            for (int i = 0; i < pending.Count; i++)
+                if (PlacementUtil.BuildTargetOf(pending[i]) == grave) return true;
+
+            var frames = map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame);
+            for (int i = 0; i < frames.Count; i++)
+                if (PlacementUtil.BuildTargetOf(frames[i]) == grave) return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// A heater, which needs electricity and something generating it — a heater on a dead
+        /// grid is as much use as the unpowered turrets that started all of this.
+        /// </summary>
+        static bool AddHeater(DirectorContext ctx)
+        {
+            if (ctx.state.workingGenerators == 0) return false;
+            return PlaceInBase(ctx, AcDefs.Heater, 1);
+        }
+
+        /// <summary>
+        /// Something to eat off.
+        ///
+        /// Placed in whatever room has space rather than waiting for a Dining room. The table
+        /// was only ever queued as part of one, and that is a discretionary pick after storage,
+        /// beds and a kitchen — so a colony that never got comfortable never got a table, and
+        /// paid three mood per colonist at every meal indefinitely.
+        /// </summary>
+        static bool AddTable(DirectorContext ctx)
+        {
+            return PlaceInBase(ctx, AcDefs.Thing("Table2x2c"), 1);
+        }
+
+        /// <summary>Somewhere to play. Horseshoes needs no research and barely any material.</summary>
+        static bool AddRecreation(DirectorContext ctx)
+        {
+            return PlaceInBase(ctx, AcDefs.Thing("HorseshoesPin"), 1);
+        }
+
+        /// <summary>
+        /// Puts one of something into the first planned room with space for it.
+        ///
+        /// Some complaints belong to no particular room — nobody has anywhere to eat, nobody has
+        /// anything to do — so the remedy chooses rather than the survey.
+        /// </summary>
+        static bool PlaceInBase(DirectorContext ctx, ThingDef def, int count)
+        {
+            if (def == null || ctx.layout == null) return false;
+
+            var stuff = PlacementUtil.ChooseStuff(ctx.map, def,
+                FireRisk.StonePreference(ctx, FireRisk.Assess(ctx.map, ctx.state)));
+
+            var rooms = ctx.layout.rooms;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                foreach (var cell in rooms[i].Interior)
+                {
+                    if ((cell - rooms[i].Door).LengthHorizontalSquared <= 2) continue;
+                    if (PlacementUtil.TryPlace(ctx.map, def, cell, Rot4.North, stuff)) return true;
+                }
+            }
+            return false;
+        }
 
         /// <summary>Roofs every cell the building stands on, which is cheaper than moving it.</summary>
         static bool RoofOver(DirectorContext ctx, ColonyDefect defect)

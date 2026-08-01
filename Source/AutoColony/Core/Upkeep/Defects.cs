@@ -33,7 +33,22 @@ namespace AutoColony.Upkeep
         /// More building than the colony can now afford to keep. The walls hold material it
         /// needs back, so the surplus comes down and everyone moves in together.
         /// </summary>
-        Overbuilt
+        Overbuilt,
+
+        /// <summary>
+        /// Somebody is lying where they fell. The largest single mood penalty in the game, and
+        /// a grave costs nothing at all — which is why it outranks everything else here.
+        /// </summary>
+        UnburiedDead,
+
+        /// <summary>Colonists are cold. A heater needs only electricity.</summary>
+        ColdRoom,
+
+        /// <summary>Nowhere to eat off a table, which every colonist pays for at every meal.</summary>
+        NoTable,
+
+        /// <summary>Nothing to do. Recreation is cheap and the penalty compounds.</summary>
+        Cheerless
     }
 
     /// <summary>
@@ -86,7 +101,19 @@ namespace AutoColony.Upkeep
         /// <see cref="RemoveSurplusBeds"/>, and the right one when the colony has fallen on hard
         /// times since it built out.
         /// </summary>
-        Reclaim
+        Reclaim,
+
+        /// <summary>Dig a grave, so the dead stop costing the living.</summary>
+        BuryDead,
+
+        /// <summary>Put a heater in.</summary>
+        AddHeater,
+
+        /// <summary>A table to eat at.</summary>
+        AddTable,
+
+        /// <summary>Something to do that is not work.</summary>
+        AddRecreation
     }
 
     /// <summary>
@@ -113,7 +140,21 @@ namespace AutoColony.Upkeep
 
             // Only its lower stages are negative, so the survey reads the actual mood offset
             // rather than assuming the thought is bad news.
-            { "SleptInBedroom", DefectKind.DrearyRoom }
+            { "SleptInBedroom", DefectKind.DrearyRoom },
+
+            // -10 and entirely self-inflicted: a grave needs no research and costs nothing, and
+            // a colony carried this one for eleven days before it died of the accumulation.
+            { "ColonistLeftUnburied", DefectKind.UnburiedDead },
+            { "ObservedLayingCorpse", DefectKind.UnburiedDead },
+
+            { "EnvironmentCold", DefectKind.ColdRoom },
+
+            // Paid by every colonist at every meal, and the table was only ever placed inside a
+            // Dining room — a discretionary pick a struggling colony never reaches.
+            { "AteWithoutTable", DefectKind.NoTable },
+
+            { "NeedJoy", DefectKind.Cheerless },
+            { "NeedBeauty", DefectKind.DrearyRoom }
         };
 
         /// <summary>The defect a complaint points at, when it is one the director can act on.</summary>
@@ -162,6 +203,10 @@ namespace AutoColony.Upkeep
                 case DefectKind.SharedBedroom: return RemedyKind.RemoveSurplusBeds;
                 case DefectKind.DrearyRoom: return RemedyKind.AddBeauty;
                 case DefectKind.Overbuilt: return RemedyKind.Reclaim;
+                case DefectKind.UnburiedDead: return RemedyKind.BuryDead;
+                case DefectKind.ColdRoom: return RemedyKind.AddHeater;
+                case DefectKind.NoTable: return RemedyKind.AddTable;
+                case DefectKind.Cheerless: return RemedyKind.AddRecreation;
                 default: return RemedyKind.None;
             }
         }
@@ -186,7 +231,14 @@ namespace AutoColony.Upkeep
         {
             switch (kind)
             {
+                // A free building that removes the largest penalty in the game. Nothing else
+                // here has that ratio, so nothing else should outrank it.
+                case DefectKind.UnburiedDead: return 2.0f;
+
                 case DefectKind.Overbuilt: return 1.6f;
+                case DefectKind.ColdRoom: return 1.3f;   // cold kills, unlike the rest of these
+                case DefectKind.NoTable: return 0.9f;    // small, but every colonist every meal
+                case DefectKind.Cheerless: return 0.7f;
                 case DefectKind.ExposedPowered: return 1.4f;
                 case DefectKind.DarkRoom: return 1.2f;
                 case DefectKind.SharedBedroom: return 1.0f;

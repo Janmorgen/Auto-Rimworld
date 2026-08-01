@@ -202,6 +202,48 @@ namespace AutoColony.Tests
         }
 
         [Fact]
+        public void BuryingTheDeadOutranksEverything()
+        {
+            // The best trade available: the largest single mood penalty in the game, removed by
+            // a building that needs no research and costs nothing at all.
+            foreach (DefectKind kind in System.Enum.GetValues(typeof(DefectKind)))
+            {
+                if (kind == DefectKind.UnburiedDead) continue;
+                Assert.True(DefectPolicy.Priority(DefectKind.UnburiedDead, 0.5f) >
+                            DefectPolicy.Priority(kind, 0.5f),
+                            "burial should outrank " + kind);
+            }
+        }
+
+        [Fact]
+        public void ColdOutranksTheComfortsBecauseColdKills()
+        {
+            Assert.True(DefectPolicy.Priority(DefectKind.ColdRoom, 0.5f) >
+                        DefectPolicy.Priority(DefectKind.NoTable, 0.5f));
+            Assert.True(DefectPolicy.Priority(DefectKind.ColdRoom, 0.5f) >
+                        DefectPolicy.Priority(DefectKind.Cheerless, 0.5f));
+        }
+
+        [Fact]
+        public void TheComplaintsThatKilledAColonyAllMapToSomething()
+        {
+            // Every one of these was reported by a real colony's own survey as unfixable, and
+            // the accumulation is what ground it to a mood of zero.
+            var wereUnfixable = new[]
+            {
+                "ColonistLeftUnburied", "ObservedLayingCorpse", "EnvironmentCold",
+                "AteWithoutTable", "NeedJoy", "NeedBeauty"
+            };
+
+            foreach (var thought in wereUnfixable)
+            {
+                DefectKind kind;
+                Assert.True(Complaints.TryMap(thought, out kind), thought + " still has no answer");
+                Assert.NotEqual(RemedyKind.None, DefectPolicy.RemedyFor(kind));
+            }
+        }
+
+        [Fact]
         public void TrivialFaultsAreLeftAlone()
         {
             Assert.False(DefectPolicy.WorthActing(DefectKind.DrearyRoom, 0.01f));

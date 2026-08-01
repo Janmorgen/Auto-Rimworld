@@ -58,6 +58,8 @@ namespace AutoColony.Upkeep
             float means = BuildingMeans.Assess(state.usableMaterial, state.colonists);
 
             SurveyExposedPower(map, state, defects);
+            SurveyDead(map, complaints, defects);
+            SurveyComforts(complaints, defects);
             SurveyRooms(map, state, means, complaints, defects);
             SurveyOverbuilding(map, state, layout, means, defects);
 
@@ -159,6 +161,77 @@ namespace AutoColony.Upkeep
 
                 defects.Add(defect);
             }
+        }
+
+        // ------------------------------------------------------------ the dead
+
+        /// <summary>
+        /// Colonists lying where they fell.
+        ///
+        /// The largest single mood penalty in the game and the cheapest to answer — a grave
+        /// needs no research and costs nothing at all. A colony carried two of these for eleven
+        /// days and died of the accumulation while every outcome figure still looked survivable.
+        /// </summary>
+        static void SurveyDead(Map map, Dictionary<DefectKind, float> complaints,
+                               List<ColonyDefect> defects)
+        {
+            if (map.listerThings == null) return;
+
+            Corpse unburied = null;
+            var corpses = map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse);
+            for (int i = 0; i < corpses.Count; i++)
+            {
+                var corpse = corpses[i] as Corpse;
+                if (corpse == null || !corpse.Spawned) continue;
+
+                // Only our own dead carry the penalty, and only while nothing holds them.
+                if (corpse.InnerPawn == null || !corpse.InnerPawn.IsColonist) continue;
+                if (corpse.StoringThing() != null) continue;
+
+                unburied = corpse;
+                break;
+            }
+            if (unburied == null) return;
+
+            float severity;
+            if (!complaints.TryGetValue(DefectKind.UnburiedDead, out severity)) severity = 0.5f;
+
+            var defect = new ColonyDefect();
+            defect.kind = DefectKind.UnburiedDead;
+            defect.remedy = RemedyKind.BuryDead;
+            defect.thing = unburied;
+            defect.cell = unburied.Position;
+            defect.severity = severity;
+            defect.what = unburied.LabelCap + " is still lying at " + unburied.Position;
+            defects.Add(defect);
+        }
+
+        // ------------------------------------------------------------ comforts
+
+        /// <summary>
+        /// Complaints the colony carries wherever it goes, so no particular room is at fault:
+        /// nothing to eat off, nothing to do. The remedy picks somewhere to put the answer.
+        /// </summary>
+        static void SurveyComforts(Dictionary<DefectKind, float> complaints,
+                                   List<ColonyDefect> defects)
+        {
+            AddIfFelt(complaints, defects, DefectKind.NoTable, "nowhere to eat off a table");
+            AddIfFelt(complaints, defects, DefectKind.ColdRoom, "colonists are cold");
+            AddIfFelt(complaints, defects, DefectKind.Cheerless, "nothing to do but work");
+        }
+
+        static void AddIfFelt(Dictionary<DefectKind, float> complaints, List<ColonyDefect> defects,
+                              DefectKind kind, string what)
+        {
+            float severity;
+            if (!complaints.TryGetValue(kind, out severity)) return;
+
+            var defect = new ColonyDefect();
+            defect.kind = kind;
+            defect.remedy = DefectPolicy.RemedyFor(kind);
+            defect.severity = severity;
+            defect.what = what;
+            defects.Add(defect);
         }
 
         // ------------------------------------------------------------ rooms
