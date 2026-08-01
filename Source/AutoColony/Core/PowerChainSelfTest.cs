@@ -196,6 +196,76 @@ namespace AutoColony
             Probe(map, round, "solar panel built but roofed, so producing nothing",
                   s => { s.generators = 1; s.workingGenerators = 0; s.powerOutput = 0f; },
                   Everything(true, RoomRole.Power));
+
+            // --- states a live colony reaches too rarely to test by playing -----------------
+            //
+            // A -quicktest colony runs about a week in a temperate biome, so it never sees a
+            // freezing winter and can never see toxic fallout at all — the game will not raise
+            // it before day 60. These probe the decisions directly instead of waiting.
+
+            Probe(map, round, "no fields planted at all",
+                  s => { s.growingCells = 0; s.distinctCrops = 0; },
+                  Everything(true));
+
+            Probe(map, round, "one big field of a single crop, which one blight would empty",
+                  s => { s.distinctCrops = 1; },
+                  Everything(true));
+
+            Probe(map, round, "hard freeze, nobody dressed for it",
+                  s => { s.outdoorTemperature = -20f; s.colonistsUnderdressed = 3;
+                         s.worstClothingGap = 36f; },
+                  Everything(true));
+
+            Probe(map, round, "hard freeze, but everyone is in parkas",
+                  s => { s.outdoorTemperature = -20f; },
+                  Everything(true));
+
+            Probe(map, round, "heat wave, nobody dressed for it",
+                  s => { s.outdoorTemperature = 42f; s.colonistsUnderdressed = 3;
+                         s.worstClothingGap = 16f; },
+                  Everything(true));
+
+            Probe(map, round, "mild weather, so clothing should not be the focus",
+                  s => { s.outdoorTemperature = 20f; },
+                  Everything(true));
+
+            ProbeConditions(map, round);
+        }
+
+        /// <summary>
+        /// The map-wide conditions, which are judged by a policy rather than by the planner, so
+        /// they are checked against that policy directly.
+        ///
+        /// Toxic fallout is the one that matters and the one that can never be reached in a test
+        /// colony: the game will not raise it before day 60 and these runs end around day seven.
+        /// </summary>
+        static void ProbeConditions(Map map, string round)
+        {
+            var quiet = new Conditions.ActiveConditions();
+            var fallout = new Conditions.ActiveConditions();
+            fallout.toxicFallout = true;
+            var flare = new Conditions.ActiveConditions();
+            flare.solarFlare = true;
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SELFTEST: conditions ({0}) — quiet: outdoors dangerous {1}, gathering suspended {2}",
+                round,
+                Conditions.ConditionResponse.OutsideIsDangerous(quiet),
+                Conditions.ConditionResponse.SuspendElectiveOutdoorWork(quiet)));
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SELFTEST: conditions ({0}) — toxic fallout: outdoors dangerous {1}, gathering " +
+                "suspended {2}, crops at risk {3}",
+                round,
+                Conditions.ConditionResponse.OutsideIsDangerous(fallout),
+                Conditions.ConditionResponse.SuspendElectiveOutdoorWork(fallout),
+                Conditions.ConditionResponse.CropsAtRisk(fallout)));
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SELFTEST: conditions ({0}) — solar flare: power out {1}, but outdoors dangerous {2}",
+                round,
+                Conditions.ConditionResponse.PowerIsOut(flare),
+                Conditions.ConditionResponse.OutsideIsDangerous(flare)));
         }
 
         /// <summary>A layout with the short-term rooms plus whatever extras a probe names.</summary>
@@ -235,7 +305,23 @@ namespace AutoColony
             state.components = 20;
             state.wealthTotal = 20000f;
             state.itemsOutdoors = 0;
+
+            // A default probe is a colony with nothing wrong with it *except* what the probe
+            // names. Both of these are new short-term goals, and short term outranks everything
+            // long term — so leaving the fields empty and the thermometer at zero would have
+            // quietly hijacked every power and refrigeration probe in this file into "plant
+            // something" and "make a coat", and they would still have passed while testing
+            // nothing they were written for.
+            state.growingCells = 3 * 60;
+            state.distinctCrops = 2;
+            state.outdoorTemperature = 20f;
+
             shape(state);
+            // Kept consistent with whatever the probe set, since these are derived readings.
+            state.coldShortfall = ColonyState.ComfortableMin - state.outdoorTemperature;
+            if (state.coldShortfall < 0f) state.coldShortfall = 0f;
+            state.heatExcess = state.outdoorTemperature - ColonyState.ComfortableMax;
+            if (state.heatExcess < 0f) state.heatExcess = 0f;
 
             var ctx = new DirectorContext();
             ctx.map = map;

@@ -164,6 +164,19 @@ namespace AutoColony
         /// <summary>Degrees above the comfortable ceiling, 0 when it is not hot.</summary>
         public float heatExcess;
 
+        /// <summary>
+        /// Colonists whose clothing does not cover the weather they are actually in.
+        ///
+        /// Measured off each pawn's own comfortable range, which RimWorld already computes from
+        /// the apparel they are wearing — so this asks the only question that matters, "is this
+        /// person dressed for outside", rather than counting garments in a stockpile or checking
+        /// whether a workbench exists.
+        /// </summary>
+        public int colonistsUnderdressed;
+
+        /// <summary>Worst gap in degrees between what a colonist can bear and what it is outside.</summary>
+        public float worstClothingGap;
+
         // --- research ---
         public int researchFinished;
         public bool hasResearchBench;
@@ -482,6 +495,25 @@ namespace AutoColony
                 if (s.coldShortfall < 0f) s.coldShortfall = 0f;
                 s.heatExcess = s.outdoorTemperature - ComfortableMax;
                 if (s.heatExcess < 0f) s.heatExcess = 0f;
+
+                // Against each colonist's own tolerance, which already includes what they are
+                // wearing. A colony in parkas is not underdressed at -20; a colony in shirts is.
+                for (int i = 0; i < s.allColonists.Count; i++)
+                {
+                    var pawn = s.allColonists[i];
+                    if (pawn == null) continue;
+
+                    float bearableMin = pawn.GetStatValue(StatDefOf.ComfyTemperatureMin);
+                    float bearableMax = pawn.GetStatValue(StatDefOf.ComfyTemperatureMax);
+
+                    float gap = 0f;
+                    if (s.outdoorTemperature < bearableMin) gap = bearableMin - s.outdoorTemperature;
+                    else if (s.outdoorTemperature > bearableMax) gap = s.outdoorTemperature - bearableMax;
+
+                    if (gap <= 0f) continue;
+                    s.colonistsUnderdressed++;
+                    if (gap > s.worstClothingGap) s.worstClothingGap = gap;
+                }
             }
             catch (Exception) { }
         }

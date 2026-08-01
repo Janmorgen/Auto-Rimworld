@@ -245,37 +245,40 @@ namespace AutoColony.Goals
         public override string[] RequiresResearch { get { return Research; } }
         static readonly string[] Research = { "ComplexClothing" };
 
-        /// <summary>Degrees outside the comfortable band before clothing becomes the point.</summary>
-        const float Pressing = 4f;
-
-        static float Pressure(DirectorContext ctx)
-        {
-            float worst = ctx.state.coldShortfall > ctx.state.heatExcess
-                ? ctx.state.coldShortfall
-                : ctx.state.heatExcess;
-            return worst;
-        }
-
+        /// <summary>
+        /// Whether everyone is dressed for the weather they are actually in.
+        ///
+        /// Asked of the colonists rather than of the buildings. The first version of this asked
+        /// whether a workshop existed, which is satisfied by every colony that has one — so the
+        /// goal could never fire in exactly the situation it was written for, and a probe at
+        /// minus twenty degrees calmly reported that the colony should work on power. A bench is
+        /// a means; being warm is the end, and only the end belongs in a satisfaction test.
+        /// </summary>
         public override bool Satisfied(DirectorContext ctx)
         {
-            // Nothing to answer while the weather is bearable; a workshop is enough once it is.
-            if (Pressure(ctx) < Pressing) return true;
-            return ctx.layout != null && ctx.layout.HasRoom(RoomRole.Workshop);
+            return ctx.state.colonistsUnderdressed == 0;
         }
 
         public override float Urgency(DirectorContext ctx)
         {
-            // Ten degrees past the comfortable edge is where harm begins, so that is full
-            // urgency rather than an arbitrary ceiling.
-            return AcMath.Clamp01(Pressure(ctx) / 10f);
+            if (ctx.state.colonistsUnderdressed == 0) return 0f;
+
+            // Ten degrees past what a colonist can bear is where hypothermia and heatstroke
+            // begin, so that is full urgency rather than an arbitrary ceiling. Scaled by how
+            // much of the colony is exposed, so one unlucky pawn does not outrank the larder.
+            float depth = AcMath.Clamp01(ctx.state.worstClothingGap / 10f);
+            float spread = ctx.state.colonists > 0
+                ? ctx.state.colonistsUnderdressed / (float)ctx.state.colonists
+                : 1f;
+            return AcMath.Clamp01(depth * 0.7f + spread * 0.3f);
         }
 
         public override string Explain(DirectorContext ctx)
         {
-            return ctx.state.outdoorTemperature.ToString("0") + "C outdoors, " +
-                   (ctx.state.coldShortfall > 0f
-                       ? ctx.state.coldShortfall.ToString("0") + " below what colonists bear"
-                       : ctx.state.heatExcess.ToString("0") + " above what colonists bear");
+            return ctx.state.colonistsUnderdressed + " of " + ctx.state.colonists +
+                   " dressed for neither, " + ctx.state.outdoorTemperature.ToString("0") +
+                   "C outdoors, worst " + ctx.state.worstClothingGap.ToString("0") +
+                   " degrees past bearing";
         }
     }
 
