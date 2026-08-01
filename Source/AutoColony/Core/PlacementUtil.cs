@@ -183,6 +183,55 @@ namespace AutoColony
         }
 
         /// <summary>
+        /// Asks for a roof over a cell only where one could actually be held up.
+        ///
+        /// Marking open ground far from any wall queues a job nobody can ever finish, and the
+        /// area stays marked forever. `MarkRoof` is safe over a planned room because its walls
+        /// are going up alongside; anywhere else needs this check first.
+        /// </summary>
+        public static bool TryMarkRoofSupported(Map map, IntVec3 cell)
+        {
+            if (map == null || !cell.InBounds(map)) return false;
+            if (map.roofGrid != null && map.roofGrid.Roofed(cell)) return false;
+            if (!RoofCollapseUtility.WithinRangeOfRoofHolder(cell, map, false)) return false;
+
+            var roof = map.areaManager.BuildRoof;
+            if (roof == null) return false;
+
+            roof[cell] = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Marks a building for deconstruction, which is how the director moves anything.
+        ///
+        /// There is no "relocate" in the game's own terms for something already built: it comes
+        /// down and goes back up elsewhere. Deconstruction returns most of the materials, so
+        /// this is cheaper than it sounds — and the planner's own repair path notices the gap
+        /// afterwards and re-places the building where it belongs.
+        /// </summary>
+        public static bool TryDeconstruct(Map map, Thing thing)
+        {
+            if (map == null || thing == null || !thing.Spawned) return false;
+            if (thing.Faction != Faction.OfPlayer) return false;
+
+            var def = DesignationDefOf.Deconstruct;
+            if (def == null) return false;
+            if (map.designationManager.DesignationOn(thing, def) != null) return false;
+
+            map.designationManager.AddDesignation(new Designation(thing, def));
+            return true;
+        }
+
+        /// <summary>True when this thing is already on its way out.</summary>
+        public static bool MarkedForDeconstruction(Map map, Thing thing)
+        {
+            if (map == null || thing == null) return false;
+            var def = DesignationDefOf.Deconstruct;
+            return def != null && map.designationManager.DesignationOn(thing, def) != null;
+        }
+
+        /// <summary>
         /// Rough test that an area is worth building on: in bounds, mostly standable,
         /// and not water. Used to choose where the base goes.
         /// </summary>

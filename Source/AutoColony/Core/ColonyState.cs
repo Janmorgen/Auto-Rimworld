@@ -42,6 +42,16 @@ namespace AutoColony
         public int textiles;
         public int silver;
 
+        /// <summary>
+        /// Everything the colony could actually put into a wall — wood, steel and cut stone,
+        /// loose stacks included.
+        ///
+        /// Deliberately not read off <c>ResourceCounter</c> like the fields above, which see
+        /// only what is in a stockpile. Whether the colony can afford another room is a question
+        /// about material on the map, not material that has been tidied away yet.
+        /// </summary>
+        public int usableMaterial;
+
         // --- economy and infrastructure ---
         public float wealthTotal;
         public float wealthBuildings;
@@ -87,8 +97,29 @@ namespace AutoColony
         /// fire, and an explosion if the net has charged batteries. It matters because the
         /// director lays its own long conduit runs across open ground, so this is a hazard it
         /// creates rather than one it finds.
+        ///
+        /// This total drives the fire model, where a conduit shorting is exactly as dangerous as
+        /// a generator shorting. The split below drives what to *do* about it, where they are
+        /// nothing alike.
         /// </summary>
         public int unroofedPowered;
+
+        /// <summary>
+        /// Exposed conduit. Almost always the bulk of the count, because one run across open
+        /// ground is a dozen of them — and not separately fixable: pulling one out breaks the
+        /// grid, and open ground away from a wall cannot hold a roof. A routing problem.
+        /// </summary>
+        public int unroofedConduits;
+
+        /// <summary>
+        /// The exposed things worth acting on — generators, stoves, coolers — named rather than
+        /// counted.
+        ///
+        /// A total said the colony had fourteen electrical buildings in the rain but not which,
+        /// so no module could have moved one however much it wanted to. Anything meant to fix a
+        /// building has to be handed the building.
+        /// </summary>
+        public readonly List<Thing> exposedPoweredDevices = new List<Thing>();
 
         /// <summary>
         /// Haulable items sitting under open sky. They deteriorate where they are, and in a
@@ -269,6 +300,11 @@ namespace AutoColony
             s.medicineCount = Count(rc, ThingDefOf.MedicineHerbal)
                             + Count(rc, ThingDefOf.MedicineIndustrial)
                             + Count(rc, ThingDefOf.MedicineUltratech);
+
+            s.usableMaterial = PlacementUtil.AvailableCount(map, ThingDefOf.WoodLog)
+                             + PlacementUtil.AvailableCount(map, ThingDefOf.Steel);
+            for (int i = 0; i < AcDefs.StoneBlockStuff.Length; i++)
+                s.usableMaterial += PlacementUtil.AvailableCount(map, AcDefs.Thing(AcDefs.StoneBlockStuff[i]));
         }
 
         static int Count(ResourceCounter rc, ThingDef def)
@@ -357,7 +393,17 @@ namespace AutoColony
                 if (building.TryGetComp<CompPower>() != null)
                 {
                     var roofs = building.Map != null ? building.Map.roofGrid : null;
-                    if (roofs != null && !roofs.Roofed(building.Position)) s.unroofedPowered++;
+                    if (roofs != null && !roofs.Roofed(building.Position))
+                    {
+                        s.unroofedPowered++;
+
+                        // Conduit is a routing problem; everything else is a thing that can be
+                        // roofed or moved, so it gets named rather than counted.
+                        bool conduit = building.def != null && building.def.building != null &&
+                                       building.def.building.isPowerConduit;
+                        if (conduit) s.unroofedConduits++;
+                        else s.exposedPoweredDevices.Add(building);
+                    }
                 }
 
                 var trader = building.TryGetComp<CompPowerTrader>();

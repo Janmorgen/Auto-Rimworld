@@ -412,6 +412,26 @@ namespace AutoColony
 
             float rain = map.weatherManager != null ? map.weatherManager.RainRate : 0f;
 
+            // What the upkeep survey can see, and what it means to do about it.
+            var unhandled = new List<string>();
+            var director = Current.Game != null ? Current.Game.GetComponent<AutoColonyDirector>() : null;
+            var layout = director != null ? director.layout : null;
+            var defects = Upkeep.DefectSurvey.Survey(map, s, layout, unhandled);
+
+            var top = new System.Text.StringBuilder();
+            for (int i = 0; i < defects.Count && i < 3; i++)
+            {
+                if (top.Length > 0) top.Append("; ");
+                top.Append(defects[i].remedy).Append(' ').Append(defects[i].what)
+                   .Append(" p=").Append(defects[i].Priority.ToString("0.00"));
+            }
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SELFTEST upkeep: means {0:0.00} (material {1}), {2} defects [{3}]{4}",
+                Upkeep.BuildingMeans.Assess(s.usableMaterial, s.colonists), s.usableMaterial,
+                defects.Count, top.Length > 0 ? top.ToString() : "none",
+                unhandled.Count > 0 ? "  unfixable: " + string.Join(", ", unhandled.ToArray()) : ""));
+
             Chronicle.Record(ChronicleCategory.System, string.Format(
                 "SELFTEST day {0}: generators {1} ({2} running, {3:0}W, fuel {4}), coolers {5}, " +
                 "conduits {6}, generator blueprints {7}, unpowered {8}, wood {9}, " +

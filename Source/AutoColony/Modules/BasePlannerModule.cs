@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AutoColony.Learning;
+using AutoColony.Upkeep;
 using RimWorld;
 using Verse;
 
@@ -211,6 +212,25 @@ namespace AutoColony.Modules
             return n > 0 ? new IntVec3(x / n, 0, z / n) : IntVec3.Invalid;
         }
 
+        /// <summary>How comfortably the colony can afford to build right now.</summary>
+        static float Means(DirectorContext ctx)
+        {
+            return BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists);
+        }
+
+        /// <summary>
+        /// Beds to a room, which is a question about wealth rather than taste.
+        ///
+        /// The genome supplies a preference, but a preference for private rooms is worth nothing
+        /// to a colony that cannot afford the walls. When material is short everyone shares, and
+        /// the room count comes back down as the colony recovers. Privacy is bought, not owed.
+        /// </summary>
+        static int BedsPerRoom(DirectorContext ctx)
+        {
+            int preferred = Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4);
+            return BuildingMeans.BedsPerRoom(Means(ctx), preferred, ctx.state.colonists);
+        }
+
         static int RoomSize(DirectorContext ctx)
         {
             int size = ctx.GeneInt(Genes.BaseRoomSize);
@@ -246,7 +266,7 @@ namespace AutoColony.Modules
 
             if (!layout.HasRoom(RoomRole.Storage)) return true;
 
-            int bedsPerRoom = Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4);
+            int bedsPerRoom = BedsPerRoom(ctx);
             int bedsWanted = s.colonists + ctx.GeneInt(Genes.BaseSpareBeds);
             int bedsPlanned = layout.CountRooms(RoomRole.Bedroom) * bedsPerRoom;
             if (bedsPlanned < bedsWanted)
@@ -260,6 +280,10 @@ namespace AutoColony.Modules
                 role = RoomRole.Kitchen;
                 return true;
             }
+
+            // A colony that cannot afford walls has no business starting a dining room. Below
+            // this it builds only what the plan is actually blocked on, which is handled above.
+            if (BuildingMeans.Destitute(Means(ctx))) return false;
 
             // Everything past this point is discretionary, so let experience decide.
             var options = new List<string>();
@@ -444,7 +468,7 @@ namespace AutoColony.Modules
             switch (room.role)
             {
                 case RoomRole.Bedroom:
-                    PlaceMany(ctx, room, AcDefs.Bed, Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4));
+                    PlaceMany(ctx, room, AcDefs.Bed, BedsPerRoom(ctx));
                     break;
                 case RoomRole.Kitchen:
                     PlaceOne(ctx, room, StoveFor(ctx));
