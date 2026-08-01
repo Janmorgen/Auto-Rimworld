@@ -316,6 +316,22 @@ namespace AutoColony
             state.distinctCrops = 2;
             state.outdoorTemperature = 20f;
 
+            // Real colonists from the harness map, because some goals are judged on the people
+            // and not on the tallies. Fortify weighs the colony's fighting strength against the
+            // raid its wealth is summoning, and `ColonyStrength` reads pawns — so an empty list
+            // meant strength zero, readiness zero, and maximum urgency in every probe. Fortify
+            // duly took over the long-term horizon from Refrigeration across the whole file,
+            // which is a property of the fixture and nothing to do with the director.
+            //
+            // Twice in one session a new rule has been silently rerouted by fixture defaults.
+            // Anything added here that reads a new part of the state needs a default here too.
+            var pawns = map.mapPawns != null ? map.mapPawns.FreeColonistsSpawned : null;
+            for (int i = 0; pawns != null && i < pawns.Count; i++)
+            {
+                state.allColonists.Add(pawns[i]);
+                if (!pawns[i].Downed) state.ableColonists.Add(pawns[i]);
+            }
+
             shape(state);
             // Kept consistent with whatever the probe set, since these are derived readings.
             state.coldShortfall = ColonyState.ComfortableMin - state.outdoorTemperature;
