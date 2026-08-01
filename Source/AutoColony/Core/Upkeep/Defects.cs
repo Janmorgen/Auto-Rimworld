@@ -41,8 +41,17 @@ namespace AutoColony.Upkeep
         /// </summary>
         UnburiedDead,
 
-        /// <summary>Colonists are cold. A heater needs only electricity.</summary>
+        /// <summary>Colonists are cold. A heater needs electricity; a campfire needs neither
+        /// that nor research, so this is always answerable.</summary>
         ColdRoom,
+
+        /// <summary>
+        /// Colonists are too hot. Unlike cold this has no low-technology answer — a cooler needs
+        /// AirConditioning and a working grid — so it is often reported rather than fixed. It was
+        /// previously mapped to nothing at all, which made the largest complaint in one survey
+        /// invisible to everything that might have acted on it.
+        /// </summary>
+        HotRoom,
 
         /// <summary>Nowhere to eat off a table, which every colonist pays for at every meal.</summary>
         NoTable,
@@ -89,6 +98,9 @@ namespace AutoColony.Upkeep
 
         /// <summary>Put a lamp in the room.</summary>
         AddLight,
+
+        /// <summary>Cool the room. Needs AirConditioning and a working grid.</summary>
+        AddCooler,
 
         /// <summary>Take out the beds that make a bedroom a barracks.</summary>
         RemoveSurplusBeds,
@@ -148,6 +160,9 @@ namespace AutoColony.Upkeep
             { "ObservedLayingCorpse", DefectKind.UnburiedDead },
 
             { "EnvironmentCold", DefectKind.ColdRoom },
+            { "SleptInCold", DefectKind.ColdRoom },
+            { "EnvironmentHot", DefectKind.HotRoom },
+            { "SleptInHeat", DefectKind.HotRoom },
 
             // Paid by every colonist at every meal, and the table was only ever placed inside a
             // Dining room — a discretionary pick a struggling colony never reaches.
@@ -205,6 +220,7 @@ namespace AutoColony.Upkeep
                 case DefectKind.Overbuilt: return RemedyKind.Reclaim;
                 case DefectKind.UnburiedDead: return RemedyKind.BuryDead;
                 case DefectKind.ColdRoom: return RemedyKind.AddHeater;
+                case DefectKind.HotRoom: return RemedyKind.AddCooler;
                 case DefectKind.NoTable: return RemedyKind.AddTable;
                 case DefectKind.Cheerless: return RemedyKind.AddRecreation;
                 default: return RemedyKind.None;

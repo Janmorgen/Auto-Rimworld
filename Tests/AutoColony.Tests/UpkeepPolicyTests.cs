@@ -302,3 +302,44 @@ namespace AutoColony.Tests
         }
     }
 }
+
+namespace AutoColony.Tests
+{
+    /// <summary>
+    /// Temperature complaints recurred on the unfixable list in every run — cold because the
+    /// only remedy needed a generator the colony did not have, heat because it was mapped to
+    /// nothing at all.
+    /// </summary>
+    public class TemperatureComplaintTests
+    {
+        [Fact]
+        public void ColdComplaintsAskForHeat()
+        {
+            AutoColony.Upkeep.DefectKind kind;
+            Assert.True(AutoColony.Upkeep.Complaints.TryMap("EnvironmentCold", out kind));
+            Assert.Equal(AutoColony.Upkeep.DefectKind.ColdRoom, kind);
+
+            Assert.True(AutoColony.Upkeep.Complaints.TryMap("SleptInCold", out kind));
+            Assert.Equal(AutoColony.Upkeep.DefectKind.ColdRoom, kind);
+        }
+
+        [Fact]
+        public void HeatComplaintsAreNoLongerInvisible()
+        {
+            // EnvironmentHot was the single largest complaint in one run's survey and mapped to
+            // nothing, so no part of the director could see it.
+            AutoColony.Upkeep.DefectKind kind;
+            Assert.True(AutoColony.Upkeep.Complaints.TryMap("EnvironmentHot", out kind));
+            Assert.Equal(AutoColony.Upkeep.DefectKind.HotRoom, kind);
+        }
+
+        [Fact]
+        public void ColdAndHeatAskForOppositeRemedies()
+        {
+            Assert.Equal(AutoColony.Upkeep.RemedyKind.AddHeater,
+                         AutoColony.Upkeep.DefectPolicy.RemedyFor(AutoColony.Upkeep.DefectKind.ColdRoom));
+            Assert.Equal(AutoColony.Upkeep.RemedyKind.AddCooler,
+                         AutoColony.Upkeep.DefectPolicy.RemedyFor(AutoColony.Upkeep.DefectKind.HotRoom));
+        }
+    }
+}

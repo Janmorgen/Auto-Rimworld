@@ -164,6 +164,7 @@ namespace AutoColony.Modules
                 case RemedyKind.Reclaim: return Reclaim(ctx, defect);
                 case RemedyKind.BuryDead: return BuryDead(ctx, defect);
                 case RemedyKind.AddHeater: return AddHeater(ctx);
+                case RemedyKind.AddCooler: return AddCooler(ctx);
                 case RemedyKind.AddTable: return AddTable(ctx);
                 case RemedyKind.AddRecreation: return AddRecreation(ctx);
                 default: return false;
@@ -226,13 +227,40 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
-        /// A heater, which needs electricity and something generating it — a heater on a dead
-        /// grid is as much use as the unpowered turrets that started all of this.
+        /// Warmth, by whichever means the colony can actually manage today.
+        ///
+        /// A heater needs electricity and something generating it — a heater on a dead grid is
+        /// as much use as the unpowered turrets that started all of this. But gating warmth on
+        /// power alone meant a colony without a generator had *no* answer to cold at all, and
+        /// EnvironmentCold and SleptInCold duly sat on the unfixable list at every survey, four
+        /// mood each, for the whole of a colony's short life.
+        ///
+        /// A campfire needs neither power nor research and was already defined here, used only
+        /// for cooking. It burns wood and it is a fire in a wooden room, which is a real cost —
+        /// but freezing is not the safer option, and cold is measured in dead colonists rather
+        /// than in mood once it passes ten degrees below what they can bear.
         /// </summary>
         static bool AddHeater(DirectorContext ctx)
         {
+            if (ctx.state.workingGenerators > 0 && PlaceInBase(ctx, AcDefs.Heater, 1)) return true;
+            return PlaceInBase(ctx, AcDefs.Campfire, 1);
+        }
+
+        /// <summary>
+        /// Cooling, which unlike warmth has no low-technology answer.
+        ///
+        /// A cooler needs both AirConditioning and a working grid, so a colony without either
+        /// genuinely cannot fix this and the complaint belongs on the reported list rather than
+        /// being silently dropped. Naming it is the point: EnvironmentHot was mapped to nothing
+        /// at all, so the largest single complaint in one run's survey was invisible to every
+        /// part of the director that could have acted on it.
+        /// </summary>
+        static bool AddCooler(DirectorContext ctx)
+        {
             if (ctx.state.workingGenerators == 0) return false;
-            return PlaceInBase(ctx, AcDefs.Heater, 1);
+            var cooler = AcDefs.Cooler;
+            if (cooler == null || !PlacementUtil.ResearchDone(cooler)) return false;
+            return PlaceInBase(ctx, cooler, 1);
         }
 
         /// <summary>
