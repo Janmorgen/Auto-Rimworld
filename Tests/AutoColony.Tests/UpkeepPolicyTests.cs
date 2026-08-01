@@ -4,6 +4,44 @@ using Xunit;
 namespace AutoColony.Tests
 {
     /// <summary>
+    /// Labour, as distinct from material. A colony can be rich and still unable to finish
+    /// anything, which is how one died with 842 units in the stockpile and no bed on the map.
+    /// </summary>
+    public class ConcurrentRoomsTests
+    {
+        [Fact]
+        public void ASmallColonyBuildsOneThingAtATime()
+        {
+            Assert.Equal(1, AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(1));
+            Assert.Equal(1, AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(2));
+        }
+
+        [Fact]
+        public void MoreHandsAllowMoreAtOnce()
+        {
+            Assert.True(AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(6) >
+                        AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(2));
+            Assert.True(AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(12) >
+                        AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(6));
+        }
+
+        [Fact]
+        public void TwoColonistsAreNeverAllowedTheSixShellsThatKilledOne()
+        {
+            Assert.True(AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(2) < 6);
+        }
+
+        [Fact]
+        public void AnEmptyColonyStillReturnsSomethingBuildable()
+        {
+            Assert.True(AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(0) >= 1);
+        }
+    }
+}
+
+namespace AutoColony.Tests
+{
+    /// <summary>
     /// The judgement half of the upkeep layer: what counts as a fault, and what to do about it.
     ///
     /// Worth testing offline because the mistake this code exists to avoid is a value judgement

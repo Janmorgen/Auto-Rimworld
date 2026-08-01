@@ -111,14 +111,27 @@ namespace AutoColony.Modules
 
             MarkPrisonBeds(ctx);
 
+            // Opening a building project is not how a fire or a raid is answered, and the
+            // labour it claims is the labour the emergency needs. Everything already reserved
+            // carries on above; this only stops the colony taking on something new.
+            if (ctx.plan != null && ctx.plan.EmergencyActive) return;
+
+            // Only as many rooms at once as there are hands to finish them.
+            //
+            // This used to be guarded solely by the focus room below, which is a narrower rule
+            // than it looks: the focus moves. A raid makes the plan want no room at all, so the
+            // guard passed and the planner opened another shell — six of them in three days,
+            // none finished, with the colonists sleeping on wet ground the whole time and a
+            // bedroom among the things they never got round to.
+            int unfinished = UnfinishedRooms(ctx);
+            if (unfinished >= Upkeep.BuildingMeans.ConcurrentRooms(ctx.state.ableColonists.Count))
+                return;
+
             // Finish the room the plan actually asked for before opening another.
             //
             // Reserving a room aims at the focus, but only at the moment of reserving. After
             // that the planner would happily reserve a hospital while the power room it asked
-            // for stood half-built — and since each reservation adds another shell to the
-            // queue, a small colony spreads itself across all of them and completes none.
-            // Observed with two colonists and seven outstanding shells, the power room among
-            // them, at a standstill.
+            // for stood half-built.
             if (FocusRoomUnfinished(ctx)) return;
 
             // Everything reserved is done; decide what the colony needs next. A null answer
@@ -133,6 +146,23 @@ namespace AutoColony.Modules
                 ctx.Credit(BanditId, role.ToString());
                 Note("reserved a new " + role + " room");
             }
+        }
+
+        /// <summary>
+        /// Rooms reserved but not yet standing with their furniture queued — the same bar
+        /// <see cref="FocusRoomUnfinished"/> uses, applied to every room rather than one.
+        /// </summary>
+        static int UnfinishedRooms(DirectorContext ctx)
+        {
+            var rooms = ctx.layout.rooms;
+            int count = 0;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (room.furnitureQueued && ShellComplete(ctx.map, room)) continue;
+                count++;
+            }
+            return count;
         }
 
         /// <summary>

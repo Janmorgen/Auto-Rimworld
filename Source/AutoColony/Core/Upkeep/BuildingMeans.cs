@@ -47,6 +47,25 @@ namespace AutoColony.Upkeep
         public static bool Comfortable(float means) { return means >= ComfortableAbove; }
 
         /// <summary>
+        /// How many rooms may stand unfinished at once.
+        ///
+        /// Material is not the only thing a room costs; it costs labour, and labour does not
+        /// pool the way material does. Two colonists spread across six shells have each of them
+        /// a third built and nowhere to sleep, where the same two on one shell have a bedroom by
+        /// nightfall. The difference is not effort, it is only what the effort was pointed at.
+        ///
+        /// Watched happen: six shells queued in three days, none finished, no bed ever placed,
+        /// and a colony that died with -12 mood a survey from sleeping on wet ground while 842
+        /// units of material sat in the stockpile. Means said it could afford to build. It could;
+        /// it could not afford to build six things.
+        /// </summary>
+        public static int ConcurrentRooms(int builders)
+        {
+            if (builders <= 2) return 1;
+            return 1 + builders / 3;
+        }
+
+        /// <summary>
         /// How many beds to put in one room.
         ///
         /// A comfortable colony honours the strategy's own preference, which is usually one or
