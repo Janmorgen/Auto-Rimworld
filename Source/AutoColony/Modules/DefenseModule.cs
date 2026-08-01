@@ -25,6 +25,13 @@ namespace AutoColony.Modules
         /// <summary>True once a response has begun, until the threat is genuinely over.</summary>
         bool engaged;
 
+        /// <summary>
+        /// Module passes since anything hostile was last within reach. At a 600-tick interval
+        /// six passes is roughly an in-game hour and a half of quiet before standing down.
+        /// </summary>
+        const int HoldPassesAfterContact = 6;
+        int passesSinceContact;
+
         readonly List<Pawn> drafted = new List<Pawn>();
 
         /// <summary>
@@ -85,12 +92,25 @@ namespace AutoColony.Modules
             // move, so a response measured on it alone flipped on and off every hour: withdraw,
             // stand down, wander back out, withdraw again. Once engaged, hold until nothing
             // hostile is left anywhere near — a wider circle than the one that started it.
+            //
+            // The wider circle was not enough on its own. Raiders milling about its edge cross
+            // it in both directions, and a colony facing fourteen of them drafted and stood down
+            // seven times in seven hours — every stand-down sending colonists back out towards
+            // the thing they had just withdrawn from. So the hold is also in time: contact has
+            // to have been lost for a while, not merely at this instant.
             if (engaged)
             {
-                if (HostilesWithin(ctx, 60, 45)) return true;
+                if (HostilesWithin(ctx, 60, 45))
+                {
+                    passesSinceContact = 0;
+                    return true;
+                }
+                if (++passesSinceContact < HoldPassesAfterContact) return true;
                 engaged = false;
                 return false;
             }
+
+            passesSinceContact = 0;
 
             if (ctx.state.danger == StoryDanger.High || HostilesWithin(ctx, 45, 30))
             {
