@@ -56,6 +56,12 @@ times is not short of resources, it is standing inside them, so `Reclaim` takes 
 down for the ~120 units of material in each shell. The two are mutually exclusive by test;
 without that the colony would oscillate between spreading out and consolidating forever.
 
+**Moving beats demolishing, and orders can be withdrawn.** Anything `Minifiable` is carried to a
+new spot intact or uninstalled and kept as an item; only what cannot be lifted is knocked down.
+`CancelStaleOrders` withdraws work whose reason has gone — the case that matters is a colony
+that decided to break up a barracks while comfortable and is destitute by the time anyone starts
+the job.
+
 ## Verified in game
 
 - Loads, runs unattended at Superfast, recovers from event pauses, respects manual ones.
@@ -161,6 +167,14 @@ long enough to do the whole thing in one go.
 - **A pending blueprint is not a destroyed building.** Any "this is missing, re-place it" check
   has to treat a `Blueprint` or `Frame` as present, and has to scan the room's *interior* —
   furniture stands inside, so a walls-only guard re-queues every pass and places duplicates.
+- **Deconstruction is the expensive way to move something.** Anything `Minifiable` should be
+  reinstalled or uninstalled instead: that keeps all the material and the quality, where
+  deconstructing returns only `resourcesFractionWhenDeconstructed`, which several vanilla defs
+  set to zero. Test `def.Minifiable` at runtime rather than listing defs — it inherits from
+  `FurnitureBase`, and the electric stove qualifies where you would not expect it to.
+- **A reinstall is a blueprint at the destination, not a designation on the building.** Ask
+  `InstallBlueprintUtility.ExistingBlueprintFor(thing)`, or a "is this already handled?" check
+  will miss a building that is halfway across the base in someone's arms.
 - **Rain sets unroofed electrical things on fire**, via `ShortCircuitUtility`, and adds an
   explosion when the net holds charged batteries. Conduit run across open ground is the usual
   victim, so this is a hazard the director manufactures. `FireRisk` used to treat rain as pure
