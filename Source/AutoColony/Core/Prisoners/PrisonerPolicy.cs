@@ -118,7 +118,12 @@ namespace AutoColony.Prisoners
             if (incapableOfEverything) return 0f;
 
             float skill = Clamp01(bestSkill / 16f) * 0.6f + Clamp01(averageSkill / 10f) * 0.4f;
-            float worth = skill * Clamp01(health);
+
+            // Injury discounts, it does not decide. Anyone worth this judgement is lying on the
+            // ground bleeding — that is the only state in which the question comes up — so
+            // scaling straight by current health refused nearly everybody for being in exactly
+            // the condition you find them in. They heal; the skills are what they keep.
+            float worth = skill * (0.6f + 0.4f * Clamp01(health));
 
             // A pacifist is still a cook, a doctor and a grower — worth less in a fight, not
             // worth nothing.

@@ -70,17 +70,34 @@ namespace AutoColony.Modules
         /// storyteller is not low danger to a wooden base. Any hostile now draws a response
         /// unless the strategy has been tuned never to draft.
         /// </summary>
+        /// <summary>True once a response has begun, until the threat is genuinely over.</summary>
+        bool engaged;
+
         bool ThreatActive(DirectorContext ctx)
         {
-            if (ctx.state.hostilePawns <= 0) return false;
+            if (ctx.state.hostilePawns <= 0) { engaged = false; return false; }
 
             float willingness = ctx.Gene(Genes.DefenseDraftDanger);
-            if (willingness < 0.5f) return false;   // a strategy that never takes control
-            if (willingness >= 1.5f) return true;   // answer anything hostile, anywhere
+            if (willingness < 0.5f) { engaged = false; return false; }   // never takes control
+            if (willingness >= 1.5f) { engaged = true; return true; }    // answers anything
 
-            // The middle band answers what the storyteller calls serious, and anything that
-            // has actually reached the colony — which is what matters for arson.
-            return ctx.state.danger == StoryDanger.High || HostilesNearBase(ctx);
+            // Committing is stickier than starting. Proximity moves as the colonists themselves
+            // move, so a response measured on it alone flipped on and off every hour: withdraw,
+            // stand down, wander back out, withdraw again. Once engaged, hold until nothing
+            // hostile is left anywhere near — a wider circle than the one that started it.
+            if (engaged)
+            {
+                if (HostilesWithin(ctx, 60, 45)) return true;
+                engaged = false;
+                return false;
+            }
+
+            if (ctx.state.danger == StoryDanger.High || HostilesWithin(ctx, 45, 30))
+            {
+                engaged = true;
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Combined strength of everything hostile currently on the map.</summary>
@@ -91,7 +108,7 @@ namespace AutoColony.Modules
             for (int i = 0; i < pawns.Count; i++)
             {
                 var p = pawns[i];
-                if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
+                if (p == null || p.Dead || p.Downed || !p.HostileTo(Faction.OfPlayer)) continue;
                 total += CombatAssessment.ThreatValue(p);
             }
             return total;
@@ -106,27 +123,25 @@ namespace AutoColony.Modules
         /// and the two colonists still at home carried on sowing while she was shot down. That
         /// is how a colony loses people one at a time to a threat it could have met together.
         /// </summary>
-        static bool HostilesNearBase(DirectorContext ctx)
+        static bool HostilesWithin(DirectorContext ctx, int ofBase, int ofColonist)
         {
             var origin = ctx.layout != null && ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
-            const int NearSq = 45 * 45;
-
-            // Anyone caught out in the open is much closer to the threat than the base is.
-            const int NearColonistSq = 30 * 30;
+            int baseSq = ofBase * ofBase;
+            int colonistSq = ofColonist * ofColonist;
 
             var pawns = ctx.map.mapPawns.AllPawnsSpawned;
             for (int i = 0; i < pawns.Count; i++)
             {
                 var p = pawns[i];
-                if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
-                if ((p.Position - origin).LengthHorizontalSquared <= NearSq) return true;
+                if (p == null || p.Dead || p.Downed || !p.HostileTo(Faction.OfPlayer)) continue;
+                if ((p.Position - origin).LengthHorizontalSquared <= baseSq) return true;
 
                 var colonists = ctx.state.allColonists;
                 for (int c = 0; c < colonists.Count; c++)
                 {
                     var colonist = colonists[c];
                     if (colonist == null || !colonist.Spawned) continue;
-                    if ((p.Position - colonist.Position).LengthHorizontalSquared <= NearColonistSq)
+                    if ((p.Position - colonist.Position).LengthHorizontalSquared <= colonistSq)
                         return true;
                 }
             }
@@ -375,7 +390,7 @@ namespace AutoColony.Modules
             for (int i = 0; i < pawns.Count; i++)
             {
                 var p = pawns[i];
-                if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
+                if (p == null || p.Dead || p.Downed || !p.HostileTo(Faction.OfPlayer)) continue;
 
                 float dist = (p.Position - origin).LengthHorizontalSquared;
                 if (dist < bestDist) { bestDist = dist; nearest = p.Position; }

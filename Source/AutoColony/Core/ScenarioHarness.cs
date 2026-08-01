@@ -74,6 +74,15 @@ namespace AutoColony
                 }
                 else if (scenario == "downed") SpawnDownedStranger(map, hostile: false);
                 else if (scenario == "downedhostile") SpawnDownedStranger(map, hostile: true);
+                else if (scenario == "fire") StartFires(map);
+                else if (scenario == "coldsnap") FireCondition(map, "ColdSnap");
+                else if (scenario == "heatwave") FireCondition(map, "HeatWave");
+                else if (scenario == "eclipse") FireCondition(map, "SolarFlare");
+                else if (scenario == "corpse") KillAColonist(map);
+                else if (scenario == "manhunters") FireIncident(map, "ManhunterPack", 400f);
+                else if (scenario == "infestation") FireIncident(map, "Infestation", 500f);
+                else if (scenario == "starve") RemoveAllFood(map);
+                else if (scenario == "strip") StripMaterials(map);
                 else Chronicle.Record(ChronicleCategory.System, "SCENARIO: unknown '" + scenario + "'");
             }
             catch (Exception e)
@@ -99,9 +108,27 @@ namespace AutoColony
         /// </summary>
         static void SpawnDownedStranger(Map map, bool hostile)
         {
+            // Both routes need somewhere to put the person, and a day-nought colony has no beds
+            // at all — without this the scenario only ever proves that. The bed is setup; what
+            // the director does about the body is the part under test.
+            SpawnBed(map, forPrisoners: hostile);
+
+            // The colony must be fed for either route to be on the table at all: a starving one
+            // is in a standing emergency, and neither capturing nor rescuing is something to do
+            // while there is nothing to eat. Setup, not the behaviour under test.
+            FeedColony(map);
+
             var faction = hostile
                 ? Find.FactionManager.RandomEnemyFaction(false, false, true)
                 : Find.FactionManager.RandomNonHostileFaction(false, false, true);
+
+            // A world can be generated with no faction of the kind asked for, and a null here
+            // took the whole scenario down with a null reference.
+            if (faction == null && hostile)
+            {
+                Chronicle.Record(ChronicleCategory.System, "SCENARIO: no enemy faction in this world");
+                return;
+            }
 
             var kind = hostile ? PawnKindDefOf.Villager : PawnKindDefOf.Refugee;
             var pawn = PawnGenerator.GeneratePawn(kind, faction);
@@ -116,12 +143,232 @@ namespace AutoColony
 
             GenSpawn.Spawn(pawn, spot, map);
 
-            // Downed, but not dying — the director should have time to decide.
-            HealthUtility.DamageUntilDowned(pawn, false);
+            // Anaesthetised rather than beaten unconscious. Damaging them until they dropped had
+            // them bleed out within a few in-game hours — before the director's next pass — so
+            // the scenario only ever proved that a corpse is not a prisoner.
+            var anesthetic = DefDatabase<HediffDef>.GetNamedSilentFail("Anesthetic");
+            if (anesthetic != null) pawn.health.AddHediff(anesthetic);
+            else HealthUtility.DamageUntilDowned(pawn, false);
 
             Chronicle.Record(ChronicleCategory.System, string.Format(
                 "SCENARIO: dropped {0} {1} at {2}, downed",
                 hostile ? "hostile" : "neutral", pawn.LabelShortCap, spot));
+        }
+
+        /// <summary>Stands a finished bed near the colonists, prisoner-marked if asked.</summary>
+        static void SpawnBed(Map map, bool forPrisoners)
+        {
+            var def = AcDefs.Bed;
+            if (def == null) return;
+
+            var origin = map.mapPawns.FreeColonists.Count > 0
+                ? map.mapPawns.FreeColonists[0].Position
+                : map.Center;
+
+            foreach (var cell in GenRadial.RadialCellsAround(origin, 14, true))
+            {
+                if (!GenSpawn.CanSpawnAt(def, cell, map, Rot4.North)) continue;
+
+                // A prisoner bed standing in the open is not a prison. The game will not let
+                // anyone be carried to one unless it sits in a room that actually encloses it,
+                // so the walls are part of the setup — which is exactly why the planner has to
+                // build a Prison *room* rather than just drop a bed somewhere.
+                if (forPrisoners && !BuildCellAround(map, cell)) continue;
+
+                var bed = (Building_Bed)ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
+                GenSpawn.Spawn(bed, cell, map, Rot4.North);
+                bed.SetFaction(Faction.OfPlayer);
+                if (forPrisoners) bed.SetBedOwnerTypeByInterface(BedOwnerType.Prisoner);
+
+                Chronicle.Record(ChronicleCategory.System, string.Format(
+                    "SCENARIO: placed a {0} bed at {1}",
+                    forPrisoners ? "prisoner" : "colonist", cell));
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Throws a 3x3 walled cell with a door around a spot, so a prisoner bed inside it is in
+        /// a room the game will accept. Returns false if the ground will not take it.
+        /// </summary>
+        static bool BuildCellAround(Map map, IntVec3 centre)
+        {
+            var wall = AcDefs.Wall;
+            var door = AcDefs.Door;
+            if (wall == null || door == null) return false;
+
+            var rect = CellRect.CenteredOn(centre, 1).ExpandedBy(1);
+            if (!rect.InBounds(map)) return false;
+
+            foreach (var cell in rect)
+            {
+                if (!cell.InBounds(map)) return false;
+                if (cell != centre && cell.GetEdifice(map) != null) return false;
+            }
+
+            var stuff = GenStuff.DefaultStuffFor(wall);
+            var doorCell = new IntVec3(rect.minX + rect.Width / 2, 0, rect.minZ);
+
+            foreach (var cell in rect.EdgeCells)
+            {
+                var def = cell == doorCell ? door : wall;
+                var built = ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
+                GenSpawn.Spawn(built, cell, map, Rot4.North);
+                built.SetFaction(Faction.OfPlayer);
+            }
+
+            foreach (var cell in rect) map.roofGrid.SetRoof(cell, RoofDefOf.RoofConstructed);
+            return true;
+        }
+
+        /// <summary>
+        /// Puts food where the colony can count it.
+        ///
+        /// <c>daysOfFood</c> comes off <c>ResourceCounter</c>, which sees only what is in a
+        /// stockpile — so meals dropped on the ground read as nothing and the colony stays in a
+        /// food emergency however much is lying about. The zone has to exist first.
+        /// </summary>
+        static void FeedColony(Map map)
+        {
+            var meal = AcDefs.Thing("MealSurvivalPack");
+            if (meal == null || map.zoneManager == null) return;
+
+            var origin = map.mapPawns.FreeColonists.Count > 0
+                ? map.mapPawns.FreeColonists[0].Position
+                : map.Center;
+
+            var zone = new Zone_Stockpile(StorageSettingsPreset.DefaultStockpile, map.zoneManager);
+            map.zoneManager.RegisterZone(zone);
+
+            int filled = 0;
+            foreach (var cell in GenRadial.RadialCellsAround(origin, 8, true))
+            {
+                if (filled >= 6) break;
+                if (!cell.InBounds(map) || !GenGrid.Standable(cell, map)) continue;
+                if (cell.GetFirstItem(map) != null) continue;
+                if (map.zoneManager.ZoneAt(cell) != null) continue;
+
+                zone.AddCell(cell);
+
+                var stack = ThingMaker.MakeThing(meal, null);
+                stack.stackCount = meal.stackLimit;
+                GenSpawn.Spawn(stack, cell, map);
+                stack.SetForbidden(false, false);
+                filled++;
+            }
+
+            Chronicle.Record(ChronicleCategory.System,
+                "SCENARIO: stockpiled " + filled + " stacks of meals");
+        }
+
+        static void FireIncident(Map map, string defName, float points)
+        {
+            var def = DefDatabase<IncidentDef>.GetNamedSilentFail(defName);
+            if (def == null)
+            {
+                Chronicle.Record(ChronicleCategory.System, "SCENARIO: no incident " + defName);
+                return;
+            }
+
+            var parms = StorytellerUtility.DefaultParmsNow(def.category, map);
+            parms.points = points;
+            parms.forced = true;
+
+            bool ok = def.Worker.TryExecute(parms);
+            Chronicle.Record(ChronicleCategory.System,
+                "SCENARIO: " + defName + " — " + (ok ? "fired" : "REFUSED"));
+        }
+
+        static void FireCondition(Map map, string defName)
+        {
+            var def = DefDatabase<GameConditionDef>.GetNamedSilentFail(defName);
+            if (def == null)
+            {
+                Chronicle.Record(ChronicleCategory.System, "SCENARIO: no condition " + defName);
+                return;
+            }
+
+            var condition = GameConditionMaker.MakeCondition(def, 120000);
+            map.gameConditionManager.RegisterCondition(condition);
+            Chronicle.Record(ChronicleCategory.System, "SCENARIO: " + defName + " started");
+        }
+
+        /// <summary>Fires against the base itself, which is the case the director must answer.</summary>
+        static void StartFires(Map map)
+        {
+            var origin = map.mapPawns.FreeColonists.Count > 0
+                ? map.mapPawns.FreeColonists[0].Position
+                : map.Center;
+
+            int lit = 0;
+            foreach (var cell in GenRadial.RadialCellsAround(origin, 8, true))
+            {
+                if (lit >= 6) break;
+                if (!cell.InBounds(map) || cell.GetFirstThing<Fire>(map) != null) continue;
+                if (!GenGrid.Standable(cell, map)) continue;
+
+                FireUtility.TryStartFireIn(cell, map, 0.5f, null);
+                lit++;
+            }
+            Chronicle.Record(ChronicleCategory.System, "SCENARIO: lit " + lit + " fires at the colony");
+        }
+
+        /// <summary>
+        /// Leaves a colonist's corpse on the ground — the state that cost a real colony a
+        /// standing -10 mood penalty for eleven days because nothing ever buried anyone.
+        /// </summary>
+        static void KillAColonist(Map map)
+        {
+            var colonists = map.mapPawns.FreeColonists;
+            if (colonists.Count <= 1)
+            {
+                Chronicle.Record(ChronicleCategory.System, "SCENARIO: too few colonists to spare one");
+                return;
+            }
+
+            var victim = colonists[colonists.Count - 1];
+            string name = victim.LabelShortCap;
+            victim.Kill(null, null);
+            Chronicle.Record(ChronicleCategory.System, "SCENARIO: killed " + name + ", corpse left where it fell");
+        }
+
+        static void RemoveAllFood(Map map)
+        {
+            int removed = 0;
+            var things = new List<Thing>(map.listerThings.ThingsInGroup(ThingRequestGroup.FoodSourceNotPlantOrTree));
+            for (int i = 0; i < things.Count; i++)
+            {
+                var thing = things[i];
+                if (thing == null || !thing.Spawned) continue;
+                if (thing.def.category != ThingCategory.Item) continue;
+
+                removed += thing.stackCount;
+                thing.Destroy(DestroyMode.Vanish);
+            }
+            Chronicle.Record(ChronicleCategory.System, "SCENARIO: removed " + removed + " food");
+        }
+
+        /// <summary>Takes the building materials away, to see what a destitute colony does.</summary>
+        static void StripMaterials(Map map)
+        {
+            int removed = 0;
+            var names = new List<string> { "WoodLog", "Steel" };
+            names.AddRange(AcDefs.StoneBlockStuff);
+
+            for (int i = 0; i < names.Count; i++)
+            {
+                var def = AcDefs.Thing(names[i]);
+                if (def == null) continue;
+
+                var stacks = new List<Thing>(map.listerThings.ThingsOfDef(def));
+                for (int s = 0; s < stacks.Count; s++)
+                {
+                    if (stacks[s] == null || !stacks[s].Spawned) continue;
+                    removed += stacks[s].stackCount;
+                    stacks[s].Destroy(DestroyMode.Vanish);
+                }
+            }
+            Chronicle.Record(ChronicleCategory.System, "SCENARIO: removed " + removed + " building material");
         }
 
         // ---------------------------------------------------------------- what actually happens

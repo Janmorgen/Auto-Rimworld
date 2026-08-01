@@ -207,6 +207,13 @@ namespace AutoColony
             {
                 var p = pawns[i];
                 if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
+
+                // Someone lying on the ground is not attacking anybody. Counting them kept the
+                // colony permanently "under attack": it drafted against a downed raider hour
+                // after hour, and because that reads as an emergency it also blocked the one
+                // thing worth doing with them, which is picking them up.
+                if (p.Downed) continue;
+
                 if ((p.Position - origin).LengthHorizontalSquared <= radiusSq) hostilesNearBase++;
             }
         }
@@ -295,7 +302,9 @@ namespace AutoColony
             {
                 var p = hostiles[i];
                 if (p == null || p.Dead) continue;
-                if (p.HostileTo(Faction.OfPlayer)) s.hostilePawns++;
+                // Downed hostiles are excluded here too: a raider on the ground is a decision
+                // to be made about them, not a fight still in progress.
+                if (p.HostileTo(Faction.OfPlayer) && !p.Downed) s.hostilePawns++;
 
                 if (p.Downed && p.RaceProps.Humanlike && p.Faction != Faction.OfPlayer)
                     s.downedStrangers++;
