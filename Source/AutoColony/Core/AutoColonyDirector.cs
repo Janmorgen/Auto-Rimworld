@@ -624,7 +624,7 @@ namespace AutoColony
             e.downed = lastLivingMetrics.colonistsDowned;
             e.daysOfFood = lastLivingMetrics.daysOfFood;
             e.minDaysOfFood = accumulator.samples > 0
-                ? accumulator.minDaysOfFood
+                ? accumulator.WorstFood
                 : lastLivingMetrics.daysOfFood;
             e.avgMood = accumulator.AvgMood;
             e.avgHealth = accumulator.AvgHealth;

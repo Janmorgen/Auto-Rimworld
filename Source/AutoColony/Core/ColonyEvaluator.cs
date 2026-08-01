@@ -63,6 +63,18 @@ namespace AutoColony
         public float moodSum;
         public float healthSum;
         public float minDaysOfFood = 999f;
+
+        /// <summary>
+        /// Whether the colony has ever had food in a stockpile this epoch. Until it has, its
+        /// reported food is an artefact of where the food is lying rather than how much there is.
+        /// </summary>
+        public bool foodObserved;
+
+        /// <summary>
+        /// Worst food the epoch actually saw. A colony that never stockpiled anything scores
+        /// zero rather than the sentinel, which would otherwise read as perfect food security.
+        /// </summary>
+        public float WorstFood { get { return foodObserved ? minDaysOfFood : 0f; } }
         public int mentalBreakSamples;
         public int fireSamples;
         public int downedSamples;
@@ -107,6 +119,7 @@ namespace AutoColony
             moodSum = 0f;
             healthSum = 0f;
             minDaysOfFood = 999f;
+            foodObserved = false;
             mentalBreakSamples = 0;
             fireSamples = 0;
             downedSamples = 0;
@@ -129,7 +142,21 @@ namespace AutoColony
             samples++;
             moodSum += m.avgMood;
             healthSum += m.avgHealth;
-            if (m.daysOfFood < minDaysOfFood) minDaysOfFood = m.daysOfFood;
+            // The larder is not measurable until something has been hauled into it.
+            //
+            // `daysOfFood` comes off ResourceCounter, which sees only stockpiled goods, so every
+            // colony reads 0.0 for its opening hours no matter what it owns. Taking a plain
+            // minimum therefore returned 0.0 for every colony that lived through day one, and
+            // the Food security term — worst food over the epoch, divided by a target — scored
+            // exactly 0.00 in every epoch of every run. A strategy hoarding twenty days of food
+            // and one that starved were indistinguishable to the search on the one axis that
+            // most decides whether a colony lives.
+            //
+            // So the minimum is taken from the first moment there was anything to measure. A
+            // colony that stocks up and later empties still records the real low, because by
+            // then the measurement has started.
+            if (m.daysOfFood > 0f) foodObserved = true;
+            if (foodObserved && m.daysOfFood < minDaysOfFood) minDaysOfFood = m.daysOfFood;
             if (m.colonistsInMentalState > 0) mentalBreakSamples++;
             if (m.fires > 0) fireSamples++;
             if (m.colonistsDowned > 0) downedSamples++;
@@ -188,6 +215,7 @@ namespace AutoColony
             Scribe_Values.Look(ref moodSum, "moodSum", 0f);
             Scribe_Values.Look(ref healthSum, "healthSum", 0f);
             Scribe_Values.Look(ref minDaysOfFood, "minDaysOfFood", 999f);
+            Scribe_Values.Look(ref foodObserved, "foodObserved", false);
             Scribe_Values.Look(ref mentalBreakSamples, "mentalBreakSamples", 0);
             Scribe_Values.Look(ref fireSamples, "fireSamples", 0);
             Scribe_Values.Look(ref downedSamples, "downedSamples", 0);
@@ -274,7 +302,7 @@ namespace AutoColony
             breakdown.Add(new ScoreTerm("Growth", growth, WGrowth));
 
             // --- food security: worst reserve reached, not the comfortable endpoint ---
-            float worstFood = acc.samples > 0 ? acc.minDaysOfFood : end.daysOfFood;
+            float worstFood = acc.samples > 0 ? acc.WorstFood : end.daysOfFood;
             float food = AcMath.Clamp01(worstFood / FoodSecureDays);
             breakdown.Add(new ScoreTerm("Food security", food, WFood));
 

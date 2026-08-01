@@ -62,3 +62,87 @@ namespace AutoColony.Tests
         }
     }
 }
+
+namespace AutoColony.Tests
+{
+    /// <summary>
+    /// The Food security term scored exactly 0.00 in every epoch of every run, because the
+    /// worst-food statistic it uses is 0.0 for any colony that lived through its first day.
+    /// </summary>
+    public class WorstFoodTests
+    {
+        static ColonyMetrics At(float daysOfFood)
+        {
+            var m = ColonyMetrics.Neutral();
+            m.daysOfFood = daysOfFood;
+            return m;
+        }
+
+        static EpochAccumulator Fresh()
+        {
+            var acc = new EpochAccumulator();
+            acc.ResetFor(ColonyMetrics.Neutral());
+            return acc;
+        }
+
+        [Fact]
+        public void TheOpeningHoursWithNothingStockpiledDoNotCountAsStarving()
+        {
+            // Day one: everything is still on the ground and ResourceCounter reports nothing.
+            var acc = Fresh();
+            acc.Observe(At(0f));
+            acc.Observe(At(0f));
+            acc.Observe(At(6f));
+            acc.Observe(At(9f));
+
+            Assert.Equal(6f, acc.WorstFood, 3);
+        }
+
+        [Fact]
+        public void AnEmptyLarderAfterStockingUpIsStillTheRealLow()
+        {
+            var acc = Fresh();
+            acc.Observe(At(8f));
+            acc.Observe(At(0f));
+            acc.Observe(At(4f));
+
+            Assert.Equal(0f, acc.WorstFood, 3);
+        }
+
+        [Fact]
+        public void AColonyThatNeverStockpiledAnythingScoresZeroNotPerfect()
+        {
+            // The sentinel is 999, which divided into a target would read as flawless security.
+            var acc = Fresh();
+            acc.Observe(At(0f));
+            acc.Observe(At(0f));
+
+            Assert.Equal(0f, acc.WorstFood, 3);
+        }
+
+        [Fact]
+        public void AWellStockedEpochNoLongerScoresTheSameAsAStarvingOne()
+        {
+            var stocked = Fresh();
+            var starving = Fresh();
+            for (int i = 0; i < 10; i++)
+            {
+                stocked.Observe(At(i == 0 ? 0f : 20f));
+                starving.Observe(At(i == 0 ? 0f : 0.2f));
+            }
+
+            Assert.True(stocked.WorstFood > starving.WorstFood);
+        }
+
+        [Fact]
+        public void ResettingAnEpochForgetsThatFoodWasEverSeen()
+        {
+            var acc = Fresh();
+            acc.Observe(At(5f));
+            acc.ResetFor(ColonyMetrics.Neutral());
+            acc.Observe(At(0f));
+
+            Assert.Equal(0f, acc.WorstFood, 3);
+        }
+    }
+}
