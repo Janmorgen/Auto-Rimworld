@@ -142,6 +142,13 @@ namespace AutoColony
         /// </summary>
         public int raidsSurvived;
 
+        /// <summary>
+        /// Downed outsiders lying on the map right now, hostile or otherwise. A hostile one can
+        /// only be captured, which needs a prison bed built in advance; anyone else can simply be
+        /// rescued into an ordinary bed, which is cheaper and usually ends better.
+        /// </summary>
+        public int downedStrangers;
+
         public bool Valid { get { return map != null && colonists > 0; } }
 
         // --- proximity, filled in by the director once the base location is known ---
@@ -287,7 +294,11 @@ namespace AutoColony
             for (int i = 0; i < hostiles.Count; i++)
             {
                 var p = hostiles[i];
-                if (p != null && !p.Dead && p.HostileTo(Faction.OfPlayer)) s.hostilePawns++;
+                if (p == null || p.Dead) continue;
+                if (p.HostileTo(Faction.OfPlayer)) s.hostilePawns++;
+
+                if (p.Downed && p.RaceProps.Humanlike && p.Faction != Faction.OfPlayer)
+                    s.downedStrangers++;
             }
         }
 

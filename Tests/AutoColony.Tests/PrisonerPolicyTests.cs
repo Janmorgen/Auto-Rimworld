@@ -138,6 +138,44 @@ namespace AutoColony.Tests
             Assert.False(PrisonerPolicy.WorthCapturing(0.2f, WellFed, 0f, true, true));
         }
 
+        // ------------------------------------------------------------ rescue
+
+        [Fact]
+        public void ANonHostileStrangerIsRescuedWithoutAnyAppraisal()
+        {
+            // Rescue asks nothing about skill: it costs a trip and some medicine, needs only an
+            // ordinary bed, and tends to end with them joining or with goodwill from a faction.
+            Assert.True(PrisonerPolicy.WorthRescuing(WellFed, bedAvailable: true, safe: true));
+        }
+
+        [Fact]
+        public void RescueStillNeedsSomewhereToPutThem()
+        {
+            Assert.False(PrisonerPolicy.WorthRescuing(WellFed, bedAvailable: false, safe: true));
+        }
+
+        [Fact]
+        public void NobodyIsRescuedMidFight()
+        {
+            Assert.False(PrisonerPolicy.WorthRescuing(WellFed, bedAvailable: true, safe: false));
+        }
+
+        [Fact]
+        public void AColonyWithNoFoodAtAllRescuesNobody()
+        {
+            Assert.False(PrisonerPolicy.WorthRescuing(0.5f, true, true));
+        }
+
+        [Fact]
+        public void RescueClearsABarWhereCaptureWouldNot()
+        {
+            // The point of the distinction: an unskilled stranger not worth imprisoning is still
+            // worth picking up when they are not hostile, because there is no prison involved.
+            const float Unskilled = 0.05f;
+            Assert.False(PrisonerPolicy.WorthCapturing(Unskilled, WellFed, Keen, true, true));
+            Assert.True(PrisonerPolicy.WorthRescuing(WellFed, true, true));
+        }
+
         // ------------------------------------------------------------ appraisal
 
         [Fact]

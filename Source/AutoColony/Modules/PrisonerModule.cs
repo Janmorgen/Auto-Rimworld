@@ -35,10 +35,17 @@ namespace AutoColony.Modules
         // ------------------------------------------------------------ capture
 
         /// <summary>
-        /// Orders someone to carry a downed hostile to a prison bed.
+        /// Picks up a downed stranger, by whichever route their hostility allows.
         ///
-        /// Given as a job rather than a designation because the game has no "capture" marker for
-        /// the player to leave lying around — it is an ordered job in the vanilla UI too.
+        /// The two are not variations on one action. A hostile can only be *captured*, into a
+        /// prisoner bed the colony had to build beforehand, and then fed and worked on
+        /// indefinitely. Anyone not hostile — a pod crash survivor, a wanderer, a visitor caught
+        /// in someone else's fight — can be *rescued* into an ordinary bed instead, which needs
+        /// no prison at all and generally ends far better: they often join outright, and where
+        /// they have a faction it buys goodwill with it rather than a grudge.
+        ///
+        /// Both are given as ordered jobs rather than designations, because the game has no
+        /// marker for either — they are ordered jobs in the vanilla UI too.
         /// </summary>
         void TryCapture(DirectorContext ctx)
         {
@@ -48,38 +55,71 @@ namespace AutoColony.Modules
             if (ctx.state.EmergencyAtHome) return;
             if (ctx.plan != null && ctx.plan.EmergencyActive) return;
 
-            var map = ctx.map;
             float recruitBias = ctx.Gene(Genes.ColonistRecruitBias);
+            var downed = DownedStrangers(ctx.map);
 
-            var downed = DownedHostiles(map);
             for (int i = 0; i < downed.Count; i++)
             {
                 var victim = downed[i];
                 if (victim.guest != null && victim.guest.IsPrisoner) continue;
+                if (victim.InBed()) continue;      // already picked up
 
-                var bed = RestUtility.FindBedFor(victim, victim, false, false, GuestStatus.Prisoner);
-                float value = ValueOf(victim);
-
-                if (!PrisonerPolicy.WorthCapturing(value, ctx.state.daysOfFood, recruitBias,
-                                                   bed != null, true))
-                    continue;
-
-                var carrier = NearestAbleColonist(ctx, victim);
-                if (carrier == null) continue;
-
-                var job = JobMaker.MakeJob(JobDefOf.Capture, victim, bed);
-                job.count = 1;
-                if (!carrier.jobs.TryTakeOrderedJob(job, JobTag.Misc)) continue;
-
-                Chronicle.Record(ChronicleCategory.Incident, string.Format(
-                    "capturing {0} — worth {1:0.00} as a colonist, {2:0.0} days of food to keep them",
-                    victim.LabelShortCap, value, ctx.state.daysOfFood));
-                Note("sent " + carrier.LabelShortCap + " to capture " + victim.LabelShortCap);
-                return;
+                bool hostile = victim.HostileTo(Faction.OfPlayer);
+                if (Collect(ctx, victim, hostile, recruitBias)) return;
             }
         }
 
-        static List<Pawn> DownedHostiles(Map map)
+        bool Collect(DirectorContext ctx, Pawn victim, bool hostile, float recruitBias)
+        {
+            Building_Bed bed;
+            JobDef job;
+            string what;
+
+            if (hostile)
+            {
+                bed = RestUtility.FindBedFor(victim, victim, false, false, GuestStatus.Prisoner);
+                float value = ValueOf(victim);
+                if (!PrisonerPolicy.WorthCapturing(value, ctx.state.daysOfFood, recruitBias,
+                                                   bed != null, true))
+                    return false;
+
+                job = JobDefOf.Capture;
+                what = string.Format("capturing {0} — worth {1:0.00} as a colonist, {2:0.0} days " +
+                                     "of food to keep them", victim.LabelShortCap, value,
+                                     ctx.state.daysOfFood);
+            }
+            else
+            {
+                // An ordinary bed: rescue needs no prison, which is most of why it is the better
+                // outcome when the option exists at all.
+                bed = RestUtility.FindBedFor(victim, victim, false, false, null);
+                if (!PrisonerPolicy.WorthRescuing(ctx.state.daysOfFood, bed != null, true))
+                    return false;
+
+                job = JobDefOf.Rescue;
+                what = "rescuing " + victim.LabelShortCap + ", who is not hostile — no prison " +
+                       "needed and they may well stay";
+            }
+
+            var carrier = NearestAbleColonist(ctx, victim);
+            if (carrier == null) return false;
+
+            var ordered = JobMaker.MakeJob(job, victim, bed);
+            ordered.count = 1;
+            if (!carrier.jobs.TryTakeOrderedJob(ordered, JobTag.Misc)) return false;
+
+            Chronicle.Record(ChronicleCategory.Incident, what);
+            Note(carrier.LabelShortCap + " sent for " + victim.LabelShortCap);
+            return true;
+        }
+
+        /// <summary>
+        /// Every downed outsider on the map, hostile or not.
+        ///
+        /// Not raid-specific: a downed stranger is a downed stranger however they arrived, and a
+        /// crashed transport pod puts one on the tile with no raid anywhere in sight.
+        /// </summary>
+        static List<Pawn> DownedStrangers(Map map)
         {
             var found = new List<Pawn>();
             var pawns = map.mapPawns.AllPawnsSpawned;
@@ -89,9 +129,17 @@ namespace AutoColony.Modules
                 if (pawn == null || pawn.Dead || !pawn.Downed) continue;
                 if (!pawn.RaceProps.Humanlike) continue;
                 if (pawn.Faction == Faction.OfPlayer) continue;
-                if (!pawn.HostileTo(Faction.OfPlayer)) continue;
                 found.Add(pawn);
             }
+
+            // Anyone who can simply be rescued comes first: it is cheaper, it needs no prison,
+            // and it is the one that goes away if they bleed out while a warden is deliberating.
+            found.Sort(delegate(Pawn a, Pawn b)
+            {
+                int ah = a.HostileTo(Faction.OfPlayer) ? 1 : 0;
+                int bh = b.HostileTo(Faction.OfPlayer) ? 1 : 0;
+                return ah.CompareTo(bh);
+            });
             return found;
         }
 

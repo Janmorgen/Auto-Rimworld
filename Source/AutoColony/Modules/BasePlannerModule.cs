@@ -331,8 +331,13 @@ namespace AutoColony.Modules
             // A prison has to exist *before* anyone can be taken prisoner: the game will not let
             // a colonist capture someone without a prisoner bed to carry them to. Gating this on
             // already having prisoners was a deadlock with no way in — no prison, so no capture,
-            // so no prisoners, so no prison. Raids are the signal that the opportunity is coming.
-            if (!layout.HasRoom(RoomRole.Prison) && s.raidsSurvived > 0)
+            // so no prisoners, so no prison.
+            //
+            // Any downed stranger is the real signal, not raids specifically: a crashed transport
+            // pod puts one on the tile with no raid anywhere in sight. Raids still count, because
+            // a colony that has seen one will see more, and a prison takes days to build — the
+            // body on the ground today will not wait for it.
+            if (!layout.HasRoom(RoomRole.Prison) && (s.raidsSurvived > 0 || s.downedStrangers > 0))
                 options.Add(RoomRole.Prison.ToString());
 
             // Nothing outstanding: the base matches the colony's current size.

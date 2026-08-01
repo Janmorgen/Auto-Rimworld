@@ -72,9 +72,11 @@ namespace AutoColony.Prisoners
         /// <summary>
         /// Whether the colony should be taking prisoners at all right now.
         ///
-        /// Capturing is not free: it costs a colonist a trip across a battlefield, then food and
-        /// warden time indefinitely. A colony that is starving, or that has nowhere to put
-        /// anyone, should be finishing the fight instead.
+        /// Capturing is not free: it costs a colonist a trip across a battlefield, a prisoner bed
+        /// that had to be built in advance, then food and warden time indefinitely. A colony that
+        /// is starving, or that has nowhere to put anyone, should be finishing the fight instead.
+        ///
+        /// This is the *hostile* case, where it is the only option available.
         /// </summary>
         public static bool WorthCapturing(float value, float daysOfFood, float recruitBias,
                                           bool bedAvailable, bool safe)
@@ -85,6 +87,22 @@ namespace AutoColony.Prisoners
             // Even a poor prospect is worth taking when the colony is keen and can afford it;
             // a colony with no appetite for recruits should not be collecting people.
             return Clamp01(value) * (0.3f + Clamp01(recruitBias)) >= 0.2f;
+        }
+
+        /// <summary>
+        /// Whether to rescue a downed stranger who is *not* hostile — a pod crash survivor, a
+        /// wanderer, a visitor caught in someone else's fight.
+        ///
+        /// A much lower bar than capturing, and a different thing entirely. It needs no prison
+        /// bed, only an ordinary one; it costs a trip and some medicine rather than an indefinite
+        /// food burden; and it tends to end far better — the survivor often joins outright, and
+        /// where they belong to a faction it buys goodwill with that faction instead of a
+        /// grudge. Skill barely enters into it, so no appraisal is asked for: a colony with a
+        /// spare bed and food should be picking these people up regardless of what they can do.
+        /// </summary>
+        public static bool WorthRescuing(float daysOfFood, bool bedAvailable, bool safe)
+        {
+            return bedAvailable && safe && daysOfFood >= 1f;
         }
 
         /// <summary>
