@@ -9,12 +9,24 @@ Each launch was watched, the cause of the failure read out of the chronicle, one
 and the game relaunched. Every round found something, and the causes were all different — which
 is the argument for running it rather than reading it.
 
+Twenty launches over the session. The early ones each found a distinct killer:
+
 | Run | Outcome | What it turned out to be |
 |---|---|---|
 | 1 | died day 3 | drafted the last standing colonist while three lay downed |
 | 2 | died day 3 | six room shells, none finished, no bed ever placed |
 | 3 | reached day 4, scored 0.591 | deadlocked on RimWorld's name-your-colony prompt |
-| 4 | running | — |
+| 4 | 3 colonists → 1 | a regression from run 3's own fix: a hungry colony barred from building its kitchen |
+| 5 | day 4, scored 0.584 | the naming deadlock again — faction named, settlement not |
+| 6 | died day 1 | dealt fourteen hostiles at 990 threat against strength 96; unwinnable, but it drafted and stood down seven times in seven hours |
+| 7 | died day 2, 25d food | met a raid at 0.68x on a bare 0.35 gene bar |
+| 10 | **day 7, training round running** | first run to clear the day-4 wall and complete trials |
+| 18 | **10.1 days of food, nobody down** | healthiest colony of the session |
+
+The naming prompt took three attempts because the first two aimed at plausible causes rather
+than confirmed ones — the wrong object, then the wrong predicate. What settled it was three
+lines printing what the code had actually found and actually done. That is the cheapest
+diagnostic there is and it should have been in the first attempt.
 
 **Three of the four were the same shape.** A threshold read one quantity when the outcome
 depended on a second one nobody had modelled:
