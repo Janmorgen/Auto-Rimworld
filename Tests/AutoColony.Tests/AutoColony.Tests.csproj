@@ -29,6 +29,7 @@
     <Compile Include="../../Source/AutoColony/Learning/EvolutionEngine.cs" Link="Production/EvolutionEngine.cs" />
     <Compile Include="../../Source/AutoColony/Learning/StrategyArchive.cs" Link="Production/StrategyArchive.cs" />
     <Compile Include="../../Source/AutoColony/Learning/PlayerModel.cs" Link="Production/PlayerModel.cs" />
+    <Compile Include="../../Source/AutoColony/Core/AcMath.cs" Link="Production/AcMath.cs" />
     <Compile Include="../../Source/AutoColony/Core/AcLog.cs" Link="Production/AcLog.cs" />
     <Compile Include="../../Source/AutoColony/Core/ColonyMetrics.cs" Link="Production/ColonyMetrics.cs" />
     <Compile Include="../../Source/AutoColony/Core/ColonyEvaluator.cs" Link="Production/ColonyEvaluator.cs" />

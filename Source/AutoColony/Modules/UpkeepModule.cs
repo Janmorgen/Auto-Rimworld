@@ -26,13 +26,13 @@ namespace AutoColony.Modules
         // costs a room walk per colonist for something that changes over days.
         public override int IntervalTicks { get { return 15000; } }
 
-        readonly List<string> unhandled = new List<string>();
+        /// <summary>None of this is worth doing while the colony is burning.</summary>
+        public override bool Discretionary { get { return true; } }
+
+        readonly List<UnmetComplaint> unhandled = new List<UnmetComplaint>();
 
         protected override void Act(DirectorContext ctx)
         {
-            // Nothing discretionary while the colony is burning or being shot at.
-            if (ctx.state.EmergencyAtHome) return;
-            if (ctx.plan != null && ctx.plan.EmergencyActive) return;
 
             // Withdraw anything the colony asked for and no longer wants, before asking for more.
             if (CancelStaleOrders(ctx)) return;
@@ -105,22 +105,25 @@ namespace AutoColony.Modules
         /// </summary>
         void Report(DirectorContext ctx, float means, int defectCount)
         {
-            unhandled.Sort();
+            // Worst first: this list is read to decide what to teach the director next, and the
+            // biggest single penalty is the answer to that question.
+            unhandled.Sort(delegate(UnmetComplaint a, UnmetComplaint b)
+            {
+                return b.mood.CompareTo(a.mood);
+            });
 
-            // Hand the same finding to the scorer. The chronicle line is for whoever reads it
+            // The same finding, handed to the scorer. The chronicle line is for whoever reads it
             // later; this is what lets the epoch's fitness know the colony spent a fortnight
             // miserable about something nobody had taught the director to fix.
             if (ctx.director != null && ctx.director.accumulator != null)
             {
-                float total = 0f, worstMood = 0f;
-                string worst = "";
-                for (int i = 0; i < unhandled.Count; i++)
-                {
-                    float mood = MoodOf(unhandled[i]);
-                    total += mood;
-                    if (mood > worstMood) { worstMood = mood; worst = NameOf(unhandled[i]); }
-                }
-                ctx.director.accumulator.NoteUnmetComplaints(total, worst, worstMood);
+                float total = 0f;
+                for (int i = 0; i < unhandled.Count; i++) total += unhandled[i].mood;
+
+                ctx.director.accumulator.NoteUnmetComplaints(
+                    total,
+                    unhandled.Count > 0 ? unhandled[0].thought : "",
+                    unhandled.Count > 0 ? unhandled[0].mood : 0f);
             }
 
             string report = string.Format(
@@ -135,26 +138,6 @@ namespace AutoColony.Modules
             Chronicle.Record(ChronicleCategory.Vitals, report);
         }
 
-        /// <summary>
-        /// The mood cost out of an entry like "EnvironmentCold (-4.0)". The survey formats these
-        /// for a reader; parsing them back is cheap and keeps one list serving both purposes.
-        /// </summary>
-        static float MoodOf(string entry)
-        {
-            int open = entry.LastIndexOf('(');
-            int close = entry.LastIndexOf(')');
-            if (open < 0 || close <= open) return 0f;
-
-            float mood;
-            if (!float.TryParse(entry.Substring(open + 1, close - open - 1), out mood)) return 0f;
-            return mood < 0f ? -mood : mood;
-        }
-
-        static string NameOf(string entry)
-        {
-            int open = entry.LastIndexOf('(');
-            return open > 0 ? entry.Substring(0, open).Trim() : entry;
-        }
 
         bool Apply(DirectorContext ctx, ColonyDefect defect)
         {

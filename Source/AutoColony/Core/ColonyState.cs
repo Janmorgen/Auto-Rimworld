@@ -193,7 +193,7 @@ namespace AutoColony
                     if (fire == null || !fire.Spawned) continue;
 
                     float distSq = (fire.Position - origin).LengthHorizontalSquared;
-                    float dist = Mathf_Sqrt(distSq);
+                    float dist = AcMath.Sqrt(distSq);
                     if (nearestFireDistance < 0f || dist < nearestFireDistance) nearestFireDistance = dist;
 
                     // Anything inside the home area counts however far out the area reaches.
@@ -218,10 +218,6 @@ namespace AutoColony
             }
         }
 
-        static float Mathf_Sqrt(float v)
-        {
-            return (float)System.Math.Sqrt(v);
-        }
 
         /// <summary>Colonists able to take orders: alive, not downed, not in a mental break.</summary>
         public List<Pawn> ableColonists = new List<Pawn>();

@@ -280,7 +280,7 @@ namespace AutoColony.Modules
         /// </summary>
         static int BedsPerRoom(DirectorContext ctx)
         {
-            int preferred = Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4);
+            int preferred = AcMath.Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4);
             return BuildingMeans.BedsPerRoom(Means(ctx), preferred, ctx.state.colonists);
         }
 
@@ -749,21 +749,11 @@ namespace AutoColony.Modules
                     // three and quietly stop the room ever being furnished.
                     if (thing.Position != cell) continue;
 
-                    if (thing.def == def) { found++; continue; }
-
-                    var blueprint = thing as Blueprint;
-                    if (blueprint != null && blueprint.def.entityDefToBuild == def) { found++; continue; }
-
-                    var frame = thing as Frame;
-                    if (frame != null && frame.def.entityDefToBuild == def) found++;
+                    if (PlacementUtil.BuildTargetOf(thing) == def) found++;
                 }
             }
             return found;
         }
 
-        static int Clamp(int v, int min, int max)
-        {
-            return v < min ? min : (v > max ? max : v);
-        }
     }
 }

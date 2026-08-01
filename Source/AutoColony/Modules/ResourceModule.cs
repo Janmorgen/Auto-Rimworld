@@ -28,7 +28,7 @@ namespace AutoColony.Modules
 
         protected override void Act(DirectorContext ctx)
         {
-            var origin = ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
+            var origin = ctx.Origin;
 
             // Something is burning or shooting at the colony. Sending people out to fell trees
             // or chase animals now spends the exact labour needed at home, and walks it out of
@@ -60,7 +60,7 @@ namespace AutoColony.Modules
             // As with mining: what the plan needs raises the standing target. A wood-fired
             // generator burns its fuel continuously, so wanting power is also wanting wood.
             float target = ctx.Gene(Genes.WoodTarget);
-            if (ctx.plan != null) target = Max(target, ctx.plan.Needs.For("WoodLog"));
+            if (ctx.plan != null) target = AcMath.Max(target, ctx.plan.Needs.For("WoodLog"));
             if (ctx.state.wood >= target) return 0;
 
             float aggression = ctx.Gene(Genes.ChopAggression);
@@ -97,8 +97,8 @@ namespace AutoColony.Modules
             float componentTarget = ctx.Gene(Genes.ComponentsTarget);
             if (ctx.plan != null)
             {
-                target = Max(target, ctx.plan.Needs.For("Steel"));
-                componentTarget = Max(componentTarget, ctx.plan.Needs.For("ComponentIndustrial"));
+                target = AcMath.Max(target, ctx.plan.Needs.For("Steel"));
+                componentTarget = AcMath.Max(componentTarget, ctx.plan.Needs.For("ComponentIndustrial"));
             }
 
             bool needSteel = ctx.state.steel < target;
@@ -167,15 +167,15 @@ namespace AutoColony.Modules
             if (daysOfFood >= foodTarget) return 0;
 
             // 0 when comfortably stocked, 1 when the larder is empty.
-            float urgency = foodTarget > 0f ? Clamp01(1f - daysOfFood / foodTarget) : 1f;
+            float urgency = foodTarget > 0f ? AcMath.Clamp01(1f - daysOfFood / foodTarget) : 1f;
 
             float aggression = ctx.Gene(Genes.HuntAggression);
-            float effective = Clamp01(aggression + urgency * 0.5f);
+            float effective = AcMath.Clamp01(aggression + urgency * 0.5f);
             if (effective < 0.15f) return 0;
 
             // Desperation is mostly about how empty the larder is, nudged by how bold the
             // strategy is in general.
-            float desperation = Clamp01(urgency * 0.8f + aggression * 0.2f);
+            float desperation = AcMath.Clamp01(urgency * 0.8f + aggression * 0.2f);
             float strength = CombatAssessment.ColonyStrength(ctx.state);
 
             int radius = GatherRadius + (int)(urgency * 60f);
@@ -210,7 +210,7 @@ namespace AutoColony.Modules
             for (int i = 0; i < candidates.Count && done < budget; i++)
             {
                 var animal = candidates[i];
-                float threat = FightsBack(animal) ? CombatAssessment.ThreatValue(animal) : 0f;
+                float threat = ThreatOf(animal);
 
                 if (!CombatAssessment.ShouldEngage(strength, threat, desperation))
                 {
@@ -248,7 +248,7 @@ namespace AutoColony.Modules
                     daysOfFood,
                     taken.Count > 0 ? Describe(taken) : "nothing",
                     declined.Count > 0 ? "; passed over " + Describe(declined) : "",
-                    CombatAssessment.Explain(strength, LargestDeclined(), desperation)));
+                    CombatAssessment.Explain(strength, largestDeclined, desperation)));
             }
 
             return done;
@@ -270,10 +270,6 @@ namespace AutoColony.Modules
             return FightsBack(animal) ? CombatAssessment.ThreatValue(animal) : 0f;
         }
 
-        float LargestDeclined()
-        {
-            return largestDeclined;
-        }
 
         void Tally(Dictionary<string, int> into, Pawn animal)
         {
@@ -298,11 +294,6 @@ namespace AutoColony.Modules
             return sb.ToString();
         }
 
-        static float Max(float a, float b) { return a > b ? a : b; }
 
-        static float Clamp01(float v)
-        {
-            return v < 0f ? 0f : (v > 1f ? 1f : v);
-        }
     }
 }

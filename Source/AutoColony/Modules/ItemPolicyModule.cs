@@ -34,7 +34,7 @@ namespace AutoColony.Modules
 
         protected override void Act(DirectorContext ctx)
         {
-            var origin = ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
+            var origin = ctx.Origin;
             bool threatened = ctx.state.danger != StoryDanger.None && ctx.state.hostilePawns > 0;
 
             if (threatened && ctx.Gene(Genes.ItemClaimDuringDanger) < 0.5f)

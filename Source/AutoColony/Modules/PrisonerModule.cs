@@ -26,6 +26,9 @@ namespace AutoColony.Modules
         public override string Name { get { return "Prisoners"; } }
         public override int IntervalTicks { get { return 2500; } }
 
+        /// <summary>None of this is worth doing while the colony is burning.</summary>
+        public override bool Discretionary { get { return true; } }
+
         protected override void Act(DirectorContext ctx)
         {
             ApplyDispositions(ctx);
@@ -49,11 +52,6 @@ namespace AutoColony.Modules
         /// </summary>
         void TryCapture(DirectorContext ctx)
         {
-            // Never during an emergency. Walking an unarmed colonist into a firefight to pick
-            // someone up is how a colony turns one casualty into two, and this hands out an
-            // ordered job — it will pull someone off firefighting to do it.
-            if (ctx.state.EmergencyAtHome) return;
-            if (ctx.plan != null && ctx.plan.EmergencyActive) return;
 
             float recruitBias = ctx.Gene(Genes.ColonistRecruitBias);
             var downed = DownedStrangers(ctx.map);

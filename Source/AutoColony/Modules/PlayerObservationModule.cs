@@ -124,7 +124,7 @@ namespace AutoColony.Modules
             foreach (var kv in roomSizes)
             {
                 // Genes describe a square room's outer edge; rooms report interior area.
-                sizeTotal += Mathf_Sqrt(kv.Value) + 2f;
+                sizeTotal += AcMath.Sqrt(kv.Value) + 2f;
             }
 
             model.bedsPerRoomSum += bedsTotal / bedsPerRoom.Count;
@@ -132,10 +132,6 @@ namespace AutoColony.Modules
             model.roomSamples++;
         }
 
-        static float Mathf_Sqrt(int v)
-        {
-            return (float)System.Math.Sqrt(v);
-        }
 
         void ObservePolicy(DirectorContext ctx, PlayerModel model)
         {

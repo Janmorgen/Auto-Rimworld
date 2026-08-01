@@ -19,6 +19,21 @@ namespace AutoColony
         /// </summary>
         public Goals.ColonyPlan plan;
 
+        /// <summary>
+        /// Where the colony is, for anything that measures distance from it.
+        ///
+        /// The fallback to map centre was written out at eight call sites and three of them had
+        /// already dropped the `layout != null` guard — the kind of drift a shared accessor
+        /// makes impossible.
+        /// </summary>
+        public Verse.IntVec3 Origin
+        {
+            get
+            {
+                return layout != null && layout.established ? layout.origin : map.Center;
+            }
+        }
+
         public float Gene(string key)
         {
             return genome != null ? genome.Get(key) : 0f;
@@ -59,6 +74,14 @@ namespace AutoColony
         /// <summary>Modules that only matter once a colony exists can skip early ticks.</summary>
         public virtual bool RequiresColonists { get { return true; } }
 
+        /// <summary>
+        /// Whether this module's work can wait while something is on fire or shooting.
+        ///
+        /// Declared rather than remembered: three modules had copied the same pair of guards
+        /// into the top of their own Act, and they had already drifted apart.
+        /// </summary>
+        public virtual bool Discretionary { get { return false; } }
+
         public bool enabled = true;
         public int failures;
         public int lastRunTick = -999999;
@@ -77,6 +100,7 @@ namespace AutoColony
         {
             lastRunTick = tick;
             if (RequiresColonists && (ctx.state == null || !ctx.state.Valid)) return;
+            if (Discretionary && Deferred(ctx)) return;
 
             try
             {
@@ -89,6 +113,13 @@ namespace AutoColony
                 if (failures >= MaxFailures)
                     AcLog.Error("Module '" + Name + "' disabled for this session after repeated failures.");
             }
+        }
+
+        /// <summary>True while the colony has something more pressing than this module.</summary>
+        static bool Deferred(DirectorContext ctx)
+        {
+            if (ctx.state.EmergencyAtHome) return true;
+            return ctx.plan != null && ctx.plan.EmergencyActive;
         }
 
         protected void Note(string what)

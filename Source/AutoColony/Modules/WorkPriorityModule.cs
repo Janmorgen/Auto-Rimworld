@@ -52,7 +52,7 @@ namespace AutoColony.Modules
             var s = ctx.state;
 
             float foodTarget = ctx.Gene(Genes.FoodDaysPerColonist);
-            float foodShortfall = foodTarget > 0f ? Clamp01(1f - s.daysOfFood / foodTarget) : 0f;
+            float foodShortfall = foodTarget > 0f ? AcMath.Clamp01(1f - s.daysOfFood / foodTarget) : 0f;
 
             // Emergencies first: fire and untreated casualties outrank everything.
             // Only fires that could reach the colony justify dropping everything; a distant
@@ -84,7 +84,7 @@ namespace AutoColony.Modules
             // the easiest thing on the map to lose. Getting them into storage is preventative
             // rather than tidy, so it outranks ordinary hauling as the map dries out.
             float fireRisk = FireRisk.Assess(ctx.map, s);
-            float outdoorPressure = s.itemsOutdoors > 0 ? Clamp01(s.itemsOutdoors / 40f) : 0f;
+            float outdoorPressure = s.itemsOutdoors > 0 ? AcMath.Clamp01(s.itemsOutdoors / 40f) : 0f;
             Need("Hauling", 1.1f + fireRisk * outdoorPressure * 2f);
             Need("Smithing", 1f);
             Need("Tailoring", 1f + Shortfall(s.textiles, ctx.Gene(Genes.TextilesTarget)) * 0.5f);
@@ -116,13 +116,9 @@ namespace AutoColony.Modules
         static float Shortfall(int have, float target)
         {
             if (target <= 0f) return 0f;
-            return Clamp01(1f - have / target);
+            return AcMath.Clamp01(1f - have / target);
         }
 
-        static float Clamp01(float v)
-        {
-            return v < 0f ? 0f : (v > 1f ? 1f : v);
-        }
 
         bool AssignFor(Pawn pawn, List<WorkTypeDef> workTypes, DirectorContext ctx)
         {
@@ -136,7 +132,7 @@ namespace AutoColony.Modules
             float passionW = ctx.Gene(Genes.WorkPassionWeight);
             float needW = ctx.Gene(Genes.WorkNeedWeight);
             float spread = ctx.Gene(Genes.WorkSpread);
-            int bands = Clamp(ctx.GeneInt(Genes.WorkBands), 1, 4);
+            int bands = AcMath.Clamp(ctx.GeneInt(Genes.WorkBands), 1, 4);
 
             var scored = new List<KeyValuePair<WorkTypeDef, float>>();
 
@@ -204,10 +200,6 @@ namespace AutoColony.Modules
             return true;
         }
 
-        static int Clamp(int v, int min, int max)
-        {
-            return v < min ? min : (v > max ? max : v);
-        }
 
         static int Round(float f)
         {

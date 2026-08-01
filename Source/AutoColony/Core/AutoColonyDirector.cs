@@ -60,6 +60,7 @@ namespace AutoColony
         int moduleCursor;
         ColonyState lastState;
         ColonyMetrics lastMetrics = ColonyMetrics.Neutral();
+        int lastPlanTick = -999999;
         int lastStateTick = -999999;
         int lastVitalsTick = -999999;
 
@@ -267,15 +268,27 @@ namespace AutoColony
             if (nextEpochTick < 0) BeginEpoch(tick);
 
             ctx.genome = ActiveGenome;
-            ctx.plan = planner.Plan(ctx);
 
-            // Only when the answer changes, otherwise this would say the same thing forever.
-            var description = ctx.plan.Describe();
-            if (description != lastPlanDescription)
+            // Re-planned with the snapshot, not with the frame.
+            //
+            // The plan is derived almost entirely from `ctx.state`, which only changes every
+            // StateInterval ticks — so running it per tick recomputed the same answer about
+            // twelve hundred times over, and each pass allocated a plan, walked ten goals,
+            // read the weather for the fire model and did a string lookup per level of the
+            // research tree. Every module that reads it runs at 600 ticks or slower.
+            if (ctx.plan == null || tick - lastPlanTick >= StateInterval)
             {
-                lastPlanDescription = description;
-                Chronicle.Record(ChronicleCategory.Economy, "working towards — " + description +
-                    (ctx.plan.Focus != null ? "  [" + ctx.plan.Focus.Explain(ctx) + "]" : ""));
+                lastPlanTick = tick;
+                ctx.plan = planner.Plan(ctx);
+
+                // Only when the answer changes, otherwise this would say the same thing forever.
+                var description = ctx.plan.Describe();
+                if (description != lastPlanDescription)
+                {
+                    lastPlanDescription = description;
+                    Chronicle.Record(ChronicleCategory.Economy, "working towards — " + description +
+                        (ctx.plan.Focus != null ? "  [" + ctx.plan.Focus.Explain(ctx) + "]" : ""));
+                }
             }
 
             RunNextDueModule(tick, settings);

@@ -90,7 +90,7 @@ namespace AutoColony
                 placed++;
             }
 
-            int beds = SpawnBeds(map, 4);
+            int beds = HarnessSetup.SpawnBeds(map, 4);
 
             Chronicle.Record(ChronicleCategory.System, string.Format(
                 "SELFTEST: cleared short-term goals — {0} meal stacks into the stockpile, {1} beds",
@@ -98,29 +98,6 @@ namespace AutoColony
             return true;
         }
 
-        static int SpawnBeds(Map map, int count)
-        {
-            var bedDef = AcDefs.Bed;
-            if (bedDef == null) return 0;
-
-            var wood = AcDefs.Thing("WoodLog");
-            var origin = map.mapPawns.FreeColonists.Count > 0
-                ? map.mapPawns.FreeColonists[0].Position
-                : map.Center;
-
-            int placed = 0;
-            foreach (var cell in GenRadial.RadialCellsAround(origin, 20, true))
-            {
-                if (placed >= count) break;
-                if (!GenSpawn.CanSpawnAt(bedDef, cell, map, Rot4.North)) continue;
-
-                var bed = ThingMaker.MakeThing(bedDef, wood);
-                GenSpawn.Spawn(bed, cell, map, Rot4.North);
-                bed.SetFaction(Faction.OfPlayer);
-                placed++;
-            }
-            return placed;
-        }
 
         // ---------------------------------------------------------------- setup
 
@@ -151,40 +128,16 @@ namespace AutoColony
                 Chronicle.Record(ChronicleCategory.System, "SELFTEST: Electricity was already finished");
             }
 
-            var spot = map.mapPawns.FreeColonists.Count > 0
-                ? map.mapPawns.FreeColonists[0].Position
-                : map.Center;
+            var spot = HarnessSetup.ColonistOrigin(map);
 
-            Drop(map, spot, "Steel", 600);
-            Drop(map, spot, "ComponentIndustrial", 20);
-            Drop(map, spot, "WoodLog", 600);
-            Drop(map, spot, "MealSurvivalPack", 60);
+            HarnessSetup.Scatter(map, spot, "Steel", 600);
+            HarnessSetup.Scatter(map, spot, "ComponentIndustrial", 20);
+            HarnessSetup.Scatter(map, spot, "WoodLog", 600);
+            HarnessSetup.Scatter(map, spot, "MealSurvivalPack", 60);
             Chronicle.Record(ChronicleCategory.System, "SELFTEST: dropped materials near " + spot);
             return true;
         }
 
-        static void Drop(Map map, IntVec3 near, string defName, int count)
-        {
-            var def = AcDefs.Thing(defName);
-            if (def == null) return;
-
-            int perStack = def.stackLimit > 0 ? def.stackLimit : 75;
-            int remaining = count;
-
-            foreach (var cell in GenRadial.RadialCellsAround(near, 12, true))
-            {
-                if (remaining <= 0) break;
-                if (!cell.InBounds(map) || !cell.Standable(map)) continue;
-                if (cell.GetFirstItem(map) != null) continue;
-
-                var thing = ThingMaker.MakeThing(def, null);
-                thing.stackCount = remaining < perStack ? remaining : perStack;
-                remaining -= thing.stackCount;
-
-                GenSpawn.Spawn(thing, cell, map);
-                thing.SetForbidden(false, false);
-            }
-        }
 
         // ---------------------------------------------------------------- probes
 
@@ -318,12 +271,10 @@ namespace AutoColony
             var consumerDef = AcDefs.ElectricStove;
             if (generatorDef == null || consumerDef == null) return;
 
-            var origin = map.mapPawns.FreeColonists.Count > 0
-                ? map.mapPawns.FreeColonists[0].Position
-                : map.Center;
+            var origin = HarnessSetup.ColonistOrigin(map);
 
-            var generator = PlaceWorking(map, generatorDef, origin, 6, 14);
-            var consumer = PlaceWorking(map, consumerDef, origin, 18, 26);
+            var generator = HarnessSetup.PlaceFinished(map, generatorDef, origin, 6, 14);
+            var consumer = HarnessSetup.PlaceFinished(map, consumerDef, origin, 18, 26);
 
             if (generator == null || consumer == null)
             {
@@ -352,23 +303,6 @@ namespace AutoColony
                 consumerPower != null && consumerPower.PowerNet != null));
         }
 
-        /// <summary>Stands a finished, player-owned building on the first spot that will take it.</summary>
-        static Thing PlaceWorking(Map map, ThingDef def, IntVec3 origin, int minDist, int maxDist)
-        {
-            foreach (var cell in GenRadial.RadialCellsAround(origin, maxDist, true))
-            {
-                if ((cell - origin).LengthHorizontal < minDist) continue;
-                if (!cell.InBounds(map)) continue;
-                if (!GenSpawn.CanSpawnAt(def, cell, map, Rot4.North)) continue;
-                if (cell.Roofed(map)) continue;
-
-                var thing = ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
-                GenSpawn.Spawn(thing, cell, map, Rot4.North);
-                thing.SetFaction(Faction.OfPlayer);
-                return thing;
-            }
-            return null;
-        }
 
         // ---------------------------------------------------------------- commentary
 
@@ -412,25 +346,6 @@ namespace AutoColony
 
             float rain = map.weatherManager != null ? map.weatherManager.RainRate : 0f;
 
-            // What the upkeep survey can see, and what it means to do about it.
-            var unhandled = new List<string>();
-            var director = Current.Game != null ? Current.Game.GetComponent<AutoColonyDirector>() : null;
-            var layout = director != null ? director.layout : null;
-            var defects = Upkeep.DefectSurvey.Survey(map, s, layout, unhandled);
-
-            var top = new System.Text.StringBuilder();
-            for (int i = 0; i < defects.Count && i < 3; i++)
-            {
-                if (top.Length > 0) top.Append("; ");
-                top.Append(defects[i].remedy).Append(' ').Append(defects[i].what)
-                   .Append(" p=").Append(defects[i].Priority.ToString("0.00"));
-            }
-
-            Chronicle.Record(ChronicleCategory.System, string.Format(
-                "SELFTEST upkeep: means {0:0.00} (material {1}), {2} defects [{3}]{4}",
-                Upkeep.BuildingMeans.Assess(s.usableMaterial, s.colonists), s.usableMaterial,
-                defects.Count, top.Length > 0 ? top.ToString() : "none",
-                unhandled.Count > 0 ? "  unfixable: " + string.Join(", ", unhandled.ToArray()) : ""));
 
             Chronicle.Record(ChronicleCategory.System, string.Format(
                 "SELFTEST day {0}: generators {1} ({2} running, {3:0}W, fuel {4}), coolers {5}, " +

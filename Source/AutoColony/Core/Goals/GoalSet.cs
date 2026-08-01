@@ -55,7 +55,7 @@ namespace AutoColony.Goals
 
         public override float Urgency(DirectorContext ctx)
         {
-            return 1f - Clamp01(ctx.state.daysOfFood / 2f);
+            return 1f - AcMath.Clamp01(ctx.state.daysOfFood / 2f);
         }
 
         public override string Explain(DirectorContext ctx)
@@ -63,7 +63,6 @@ namespace AutoColony.Goals
             return ctx.state.daysOfFood.ToString("0.0") + " days of food";
         }
 
-        static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
     }
 
     // ------------------------------------------------------------------ short term
@@ -84,7 +83,7 @@ namespace AutoColony.Goals
         public override float Urgency(DirectorContext ctx)
         {
             if (ctx.state.colonists == 0) return 0f;
-            return 1f - Clamp01(ctx.state.colonistBeds / (float)ctx.state.colonists);
+            return 1f - AcMath.Clamp01(ctx.state.colonistBeds / (float)ctx.state.colonists);
         }
 
         public override string Explain(DirectorContext ctx)
@@ -92,7 +91,6 @@ namespace AutoColony.Goals
             return ctx.state.colonistBeds + " beds for " + ctx.state.colonists + " colonists";
         }
 
-        static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
     }
 
     /// <summary>Somewhere covered to put things, so they stop rotting in the rain.</summary>
@@ -111,7 +109,7 @@ namespace AutoColony.Goals
         public override float Urgency(DirectorContext ctx)
         {
             // Items rotting under open sky are what makes this urgent rather than tidy.
-            return 0.4f + Clamp01(ctx.state.itemsOutdoors / 60f) * 0.6f;
+            return 0.4f + AcMath.Clamp01(ctx.state.itemsOutdoors / 60f) * 0.6f;
         }
 
         public override string Explain(DirectorContext ctx)
@@ -119,7 +117,6 @@ namespace AutoColony.Goals
             return ctx.state.itemsOutdoors + " items outdoors";
         }
 
-        static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
     }
 
     /// <summary>A comfortable buffer of food rather than hand to mouth.</summary>
@@ -139,7 +136,7 @@ namespace AutoColony.Goals
         {
             float target = ctx.Gene(Genes.FoodDaysPerColonist);
             if (target <= 0f) return 0f;
-            return 1f - Clamp01(ctx.state.daysOfFood / target);
+            return 1f - AcMath.Clamp01(ctx.state.daysOfFood / target);
         }
 
         public override string Explain(DirectorContext ctx)
@@ -148,7 +145,6 @@ namespace AutoColony.Goals
                    ctx.Gene(Genes.FoodDaysPerColonist).ToString("0") + " days";
         }
 
-        static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
     }
 
     // ------------------------------------------------------------------ long term
@@ -239,7 +235,8 @@ namespace AutoColony.Goals
         public override string Name { get { return Id; } }
         public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
         public override RoomRole? WantsRoom { get { return RoomRole.Freezer; } }
-        public override string[] Requires { get { return new[] { PowerGoal.Id }; } }
+        public override string[] Requires { get { return NeedsPower; } }
+        static readonly string[] NeedsPower = { PowerGoal.Id };
         public override string[] RequiresResearch { get { return Research; } }
         static readonly string[] Research = { "AirConditioning" };
 
@@ -257,8 +254,8 @@ namespace AutoColony.Goals
             // Worth more the more food there is to spoil, and in a hot climate.
             float heat = 0.3f;
             if (ctx.map.mapTemperature != null)
-                heat = Clamp01((ctx.map.mapTemperature.OutdoorTemp - 5f) / 30f);
-            return Clamp01(0.3f + heat * 0.7f);
+                heat = AcMath.Clamp01((ctx.map.mapTemperature.OutdoorTemp - 5f) / 30f);
+            return AcMath.Clamp01(0.3f + heat * 0.7f);
         }
 
         public override void DeclareNeeds(DirectorContext ctx, MaterialNeeds needs)
@@ -275,7 +272,6 @@ namespace AutoColony.Goals
                        : "?") + "C";
         }
 
-        static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
     }
 
     /// <summary>Static defences, so the next raid is met by more than bodies.</summary>
@@ -284,7 +280,8 @@ namespace AutoColony.Goals
         public const string Id = "Fortify";
         public override string Name { get { return Id; } }
         public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
-        public override string[] Requires { get { return new[] { PowerGoal.Id }; } }
+        public override string[] Requires { get { return NeedsPower; } }
+        static readonly string[] NeedsPower = { PowerGoal.Id };
         public override string[] RequiresResearch { get { return Research; } }
         static readonly string[] Research = { "GunTurrets" };
 
@@ -297,7 +294,7 @@ namespace AutoColony.Goals
         public override float Urgency(DirectorContext ctx)
         {
             // Raids scale with wealth, so the richer the colony the more this matters.
-            return Clamp01(ctx.state.wealthTotal / 60000f);
+            return AcMath.Clamp01(ctx.state.wealthTotal / 60000f);
         }
 
         public override void DeclareNeeds(DirectorContext ctx, MaterialNeeds needs)
@@ -314,6 +311,5 @@ namespace AutoColony.Goals
                    ", wealth " + ctx.state.wealthTotal.ToString("N0");
         }
 
-        static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
     }
 }

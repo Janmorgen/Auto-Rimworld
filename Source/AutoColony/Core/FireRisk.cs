@@ -34,10 +34,10 @@ namespace AutoColony
             if (map == null) return 0.3f;
 
             float risk = 0.3f;
-            if (map.fireWatcher != null) risk = Clamp01(map.fireWatcher.FireDanger);
+            if (map.fireWatcher != null) risk = AcMath.Clamp01(map.fireWatcher.FireDanger);
 
             // Rain puts ordinary fires out and stops them starting.
-            float rain = map.weatherManager != null ? Clamp01(map.weatherManager.RainRate) : 0f;
+            float rain = map.weatherManager != null ? AcMath.Clamp01(map.weatherManager.RainRate) : 0f;
             risk *= 1f - rain;
 
             // Heat dries everything out; the game's own danger figure already leans on this,
@@ -54,11 +54,11 @@ namespace AutoColony
                 // colony — and the director lays its own conduit runs across open ground, so
                 // this is a hazard it creates rather than one it merely encounters.
                 if (rain > 0f && state.unroofedPowered > 0)
-                    risk = Max(risk, Clamp01(rain * Clamp01(state.unroofedPowered / 12f)));
+                    risk = AcMath.Max(risk, AcMath.Clamp01(rain * AcMath.Clamp01(state.unroofedPowered / 12f)));
 
                 // A fire burning now is evidence, not a forecast.
-                if (state.firesNearBase > 0) risk = Max(risk, 0.9f);
-                else if (state.fires > 0) risk = Max(risk, 0.6f);
+                if (state.firesNearBase > 0) risk = AcMath.Max(risk, 0.9f);
+                else if (state.fires > 0) risk = AcMath.Max(risk, 0.6f);
 
                 // Raiders are the usual reason a base catches: they bring incendiaries and
                 // they shoot things that burn.
@@ -66,9 +66,9 @@ namespace AutoColony
             }
 
             if (map.fireWatcher != null && map.fireWatcher.LargeFireDangerPresent)
-                risk = Max(risk, 0.85f);
+                risk = AcMath.Max(risk, 0.85f);
 
-            return Clamp01(risk);
+            return AcMath.Clamp01(risk);
         }
 
         /// <summary>
@@ -82,7 +82,7 @@ namespace AutoColony
         {
             float baseline = ctx.Gene(Genes.BaseStonePreference);
             float aversion = ctx.Gene(Genes.FireRiskAversion);
-            return Clamp01(baseline + risk * aversion);
+            return AcMath.Clamp01(baseline + risk * aversion);
         }
 
         /// <summary>
@@ -93,14 +93,9 @@ namespace AutoColony
         /// </summary>
         public static float StorageStonePreference(DirectorContext ctx, float risk)
         {
-            return Clamp01(StonePreference(ctx, risk) + 0.35f);
+            return AcMath.Clamp01(StonePreference(ctx, risk) + 0.35f);
         }
 
-        static float Max(float a, float b) { return a > b ? a : b; }
 
-        static float Clamp01(float v)
-        {
-            return v < 0f ? 0f : (v > 1f ? 1f : v);
-        }
     }
 }

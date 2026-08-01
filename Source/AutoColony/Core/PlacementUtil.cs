@@ -13,21 +13,34 @@ namespace AutoColony
     /// </summary>
     public static class PlacementUtil
     {
+        /// <summary>
+        /// What this thing is or is going to become: itself, or whatever a blueprint or frame is
+        /// on its way to building. Null for anything that is neither.
+        ///
+        /// "Is there one of these here?" and "is there going to be?" are the same question almost
+        /// everywhere in the director, and the three-case unwrap behind it was written out at
+        /// four separate call sites.
+        /// </summary>
+        public static ThingDef BuildTargetOf(Thing thing)
+        {
+            if (thing == null) return null;
+
+            var blueprint = thing as Blueprint;
+            if (blueprint != null) return blueprint.def.entityDefToBuild as ThingDef;
+
+            var frame = thing as Frame;
+            if (frame != null) return frame.def.entityDefToBuild as ThingDef;
+
+            return thing.def;
+        }
+
         /// <summary>True if the cell already holds a building, blueprint, or frame.</summary>
         public static bool HasConstructionAt(Map map, IntVec3 cell, ThingDef def)
         {
             var things = cell.GetThingList(map);
             for (int i = 0; i < things.Count; i++)
             {
-                var t = things[i];
-                if (t == null) continue;
-                if (t.def == def) return true;
-
-                var bp = t as Blueprint;
-                if (bp != null && bp.def.entityDefToBuild == def) return true;
-
-                var frame = t as Frame;
-                if (frame != null && frame.def.entityDefToBuild == def) return true;
+                if (BuildTargetOf(things[i]) == def) return true;
             }
             return false;
         }
@@ -102,23 +115,13 @@ namespace AutoColony
             gotPreferred = true;
             if (def == null || !def.MadeFromStuff) return null;
 
-            var order = new List<string>();
-            if (stonePreference >= 0.5f)
-            {
-                order.AddRange(AcDefs.StoneBlockStuff);
-                order.AddRange(AcDefs.WoodyStuff);
-            }
-            else
-            {
-                order.AddRange(AcDefs.WoodyStuff);
-                order.AddRange(AcDefs.StoneBlockStuff);
-            }
-            order.AddRange(AcDefs.MetalStuff);
+            // Both orderings are known at compile time; this is called several times per room.
+            var order = stonePreference >= 0.5f ? StoneFirst : WoodFirst;
 
             int needed = def.CostStuffCount > 0 ? def.CostStuffCount : 1;
             bool preferStone = stonePreference >= 0.5f;
 
-            for (int i = 0; i < order.Count; i++)
+            for (int i = 0; i < order.Length; i++)
             {
                 var stuff = AcDefs.Thing(order[i]);
                 if (stuff == null || stuff.stuffProps == null) continue;
@@ -136,6 +139,16 @@ namespace AutoColony
             // Nothing comfortably affordable; fall back to whatever the game would default to
             // so early colonies can still put up their first walls.
             return GenStuff.DefaultStuffFor(def);
+        }
+
+        static readonly string[] StoneFirst = Concat(AcDefs.StoneBlockStuff, AcDefs.WoodyStuff, AcDefs.MetalStuff);
+        static readonly string[] WoodFirst = Concat(AcDefs.WoodyStuff, AcDefs.StoneBlockStuff, AcDefs.MetalStuff);
+
+        static string[] Concat(params string[][] parts)
+        {
+            var all = new List<string>();
+            for (int i = 0; i < parts.Length; i++) all.AddRange(parts[i]);
+            return all.ToArray();
         }
 
         /// <summary>

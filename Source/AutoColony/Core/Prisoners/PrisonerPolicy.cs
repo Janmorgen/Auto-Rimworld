@@ -44,8 +44,8 @@ namespace AutoColony.Prisoners
         public static Disposition Decide(float value, float resistance, float daysOfFood,
                                          float recruitBias, bool canRecruit, bool executionAllowed)
         {
-            value = Clamp01(value);
-            recruitBias = Clamp01(recruitBias);
+            value = AcMath.Clamp01(value);
+            recruitBias = AcMath.Clamp01(recruitBias);
 
             bool hungry = daysOfFood < HungryBelowDays;
             bool worthKeeping = value * (0.4f + recruitBias) >= 0.25f;
@@ -86,7 +86,7 @@ namespace AutoColony.Prisoners
 
             // Even a poor prospect is worth taking when the colony is keen and can afford it;
             // a colony with no appetite for recruits should not be collecting people.
-            return Clamp01(value) * (0.3f + Clamp01(recruitBias)) >= 0.2f;
+            return AcMath.Clamp01(value) * (0.3f + AcMath.Clamp01(recruitBias)) >= 0.2f;
         }
 
         /// <summary>
@@ -117,21 +117,20 @@ namespace AutoColony.Prisoners
         {
             if (incapableOfEverything) return 0f;
 
-            float skill = Clamp01(bestSkill / 16f) * 0.6f + Clamp01(averageSkill / 10f) * 0.4f;
+            float skill = AcMath.Clamp01(bestSkill / 16f) * 0.6f + AcMath.Clamp01(averageSkill / 10f) * 0.4f;
 
             // Injury discounts, it does not decide. Anyone worth this judgement is lying on the
             // ground bleeding — that is the only state in which the question comes up — so
             // scaling straight by current health refused nearly everybody for being in exactly
             // the condition you find them in. They heal; the skills are what they keep.
-            float worth = skill * (0.6f + 0.4f * Clamp01(health));
+            float worth = skill * (0.6f + 0.4f * AcMath.Clamp01(health));
 
             // A pacifist is still a cook, a doctor and a grower — worth less in a fight, not
             // worth nothing.
             if (violentWorkDisabled) worth *= 0.8f;
 
-            return Clamp01(worth);
+            return AcMath.Clamp01(worth);
         }
 
-        static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
     }
 }

@@ -49,7 +49,7 @@ namespace AutoColony.Upkeep
         static readonly List<Thought> thoughtBuffer = new List<Thought>();
 
         public static List<ColonyDefect> Survey(Map map, ColonyState state, BaseLayout layout,
-                                                List<string> unhandled)
+                                                List<UnmetComplaint> unhandled)
         {
             var defects = new List<ColonyDefect>();
             if (map == null || state == null) return defects;
@@ -76,7 +76,7 @@ namespace AutoColony.Upkeep
         /// <paramref name="unhandled"/> rather than dropped, because the ones the director
         /// cannot yet fix are exactly the list worth reading before deciding what to build next.
         /// </summary>
-        static Dictionary<DefectKind, float> GatherComplaints(ColonyState state, List<string> unhandled)
+        static Dictionary<DefectKind, float> GatherComplaints(ColonyState state, List<UnmetComplaint> unhandled)
         {
             var worst = new Dictionary<DefectKind, float>();
 
@@ -102,8 +102,8 @@ namespace AutoColony.Upkeep
                     DefectKind kind;
                     if (!Complaints.TryMap(group.def.defName, out kind))
                     {
-                        if (unhandled != null && severity >= 0.2f)
-                            unhandled.Add(group.def.defName + " (" + offset.ToString("0.0") + ")");
+                        if (unhandled != null && severity >= Complaints.ReportableSeverity)
+                            unhandled.Add(new UnmetComplaint(group.def.defName, offset));
                         continue;
                     }
 
@@ -340,15 +340,9 @@ namespace AutoColony.Upkeep
                 {
                     var thing = things[i];
                     if (thing == null) continue;
-                    if (thing.TryGetComp<CompGlower>() != null) return true;
-
-                    // A lamp already on its way counts, or the room is re-lit every pass.
-                    var blueprint = thing as Blueprint;
-                    if (blueprint != null && blueprint.def.entityDefToBuild is ThingDef &&
-                        ((ThingDef)blueprint.def.entityDefToBuild).HasComp(typeof(CompGlower))) return true;
-                    var frame = thing as Frame;
-                    if (frame != null && frame.def.entityDefToBuild is ThingDef &&
-                        ((ThingDef)frame.def.entityDefToBuild).HasComp(typeof(CompGlower))) return true;
+                    // A lamp already on its way counts too, or the room is re-lit every pass.
+                    var target = PlacementUtil.BuildTargetOf(thing);
+                    if (target != null && target.HasComp(typeof(CompGlower))) return true;
                 }
             }
             return false;

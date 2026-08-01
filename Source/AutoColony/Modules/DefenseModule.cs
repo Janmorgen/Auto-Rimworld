@@ -22,6 +22,9 @@ namespace AutoColony.Modules
         // Checked often: a raid landing needs a response in game-minutes, not game-hours.
         public override int IntervalTicks { get { return 600; } }
 
+        /// <summary>True once a response has begun, until the threat is genuinely over.</summary>
+        bool engaged;
+
         readonly List<Pawn> drafted = new List<Pawn>();
 
         /// <summary>
@@ -70,9 +73,6 @@ namespace AutoColony.Modules
         /// storyteller is not low danger to a wooden base. Any hostile now draws a response
         /// unless the strategy has been tuned never to draft.
         /// </summary>
-        /// <summary>True once a response has begun, until the threat is genuinely over.</summary>
-        bool engaged;
-
         bool ThreatActive(DirectorContext ctx)
         {
             if (ctx.state.hostilePawns <= 0) { engaged = false; return false; }
@@ -125,7 +125,7 @@ namespace AutoColony.Modules
         /// </summary>
         static bool HostilesWithin(DirectorContext ctx, int ofBase, int ofColonist)
         {
-            var origin = ctx.layout != null && ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
+            var origin = ctx.Origin;
             int baseSq = ofBase * ofBase;
             int colonistSq = ofColonist * ofColonist;
 
@@ -169,7 +169,7 @@ namespace AutoColony.Modules
 
             var home = map.areaManager.Home;
             var fires = map.listerThings.ThingsOfDef(fireDef);
-            var origin = ctx.layout != null && ctx.layout.established ? ctx.layout.origin : map.Center;
+            var origin = ctx.Origin;
             float radius = ctx.Gene(Genes.FireResponseRadius);
             float radiusSq = radius * radius;
             int claimed = 0;
@@ -380,8 +380,7 @@ namespace AutoColony.Modules
 
         static IntVec3 NearestHostileCell(DirectorContext ctx)
         {
-            var origin = ctx.layout != null && ctx.layout.established
-                ? ctx.layout.origin : ctx.map.Center;
+            var origin = ctx.Origin;
 
             IntVec3 nearest = IntVec3.Invalid;
             float bestDist = float.MaxValue;
@@ -451,7 +450,7 @@ namespace AutoColony.Modules
 
             if (!CanAfford(ctx, turretDef)) return;
 
-            var origin = ctx.layout.established ? ctx.layout.origin : ctx.map.Center;
+            var origin = ctx.Origin;
             var stuff = PlacementUtil.ChooseStuff(ctx.map, turretDef,
                 FireRisk.StonePreference(ctx, FireRisk.Assess(ctx.map, ctx.state)));
 

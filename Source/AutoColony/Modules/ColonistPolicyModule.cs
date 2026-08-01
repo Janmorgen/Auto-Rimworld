@@ -27,7 +27,7 @@ namespace AutoColony.Modules
 
         void ApplyColonistSettings(DirectorContext ctx)
         {
-            var care = (MedicalCareCategory)Clamp(ctx.GeneInt(Genes.ColonistMedCare), 0, 4);
+            var care = (MedicalCareCategory)AcMath.Clamp(ctx.GeneInt(Genes.ColonistMedCare), 0, 4);
             bool selfTend = ctx.Gene(Genes.ColonistSelfTend) >= 0.5f;
             int changed = 0;
 
@@ -64,9 +64,5 @@ namespace AutoColony.Modules
             if (changed > 0) Note("updated policy on " + changed + " settings");
         }
 
-        static int Clamp(int v, int min, int max)
-        {
-            return v < min ? min : (v > max ? max : v);
-        }
     }
 }

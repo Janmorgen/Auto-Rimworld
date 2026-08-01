@@ -91,7 +91,8 @@ namespace AutoColony
                 else if (scenario == "manhunters") FireIncident(map, "ManhunterPack", 400f);
                 else if (scenario == "infestation") FireIncident(map, "Infestation", 500f);
                 else if (scenario == "starve") RemoveAllFood(map);
-                else if (scenario == "strip") StripMaterials(map);
+                else if (scenario == "strip") Chronicle.Record(ChronicleCategory.System,
+                    "SCENARIO: removed " + HarnessSetup.StripMaterials(map) + " building material");
                 else Chronicle.Record(ChronicleCategory.System, "SCENARIO: unknown '" + scenario + "'");
             }
             catch (Exception e)
@@ -129,7 +130,7 @@ namespace AutoColony
             // The colony must be fed for either route to be on the table at all: a starving one
             // is in a standing emergency, and neither capturing nor rescuing is something to do
             // while there is nothing to eat. Setup, not the behaviour under test.
-            FeedColony(map);
+            HarnessSetup.StockpileFood(map);
 
             var faction = hostile
                 ? Find.FactionManager.RandomEnemyFaction(false, false, true)
@@ -161,9 +162,7 @@ namespace AutoColony
             var kind = PawnKindDefOf.Villager;
             var pawn = PawnGenerator.GeneratePawn(kind, faction);
 
-            var origin = map.mapPawns.FreeColonists.Count > 0
-                ? map.mapPawns.FreeColonists[0].Position
-                : map.Center;
+            var origin = HarnessSetup.ColonistOrigin(map);
 
             IntVec3 spot;
             if (!CellFinder.TryFindRandomSpawnCellForPawnNear(origin, map, out spot, 12))
@@ -183,66 +182,45 @@ namespace AutoColony
                 hostile ? "hostile" : "neutral", pawn.LabelShortCap, spot));
         }
 
-        /// <summary>Stands a finished bed near the colonists, prisoner-marked if asked.</summary>
+        /// <summary>
+        /// Throws a 3x3 walled cell with a door around a spot, so a prisoner bed inside it is in
+        /// a room the game will accept. Returns false if the ground will not take it.
+        /// </summary>
+        /// <summary>
+        /// Stands a bed near the colonists, inside a walled cell when it is for prisoners.
+        ///
+        /// The cell is not decoration: the game will not carry anyone to a prisoner bed that is
+        /// not in a room enclosing it, which is exactly why the planner has to build a Prison
+        /// *room* rather than drop a bed somewhere.
+        /// </summary>
         static void SpawnBed(Map map, bool forPrisoners)
         {
             var def = AcDefs.Bed;
             if (def == null) return;
 
-            var origin = map.mapPawns.FreeColonists.Count > 0
-                ? map.mapPawns.FreeColonists[0].Position
-                : map.Center;
+            var origin = HarnessSetup.ColonistOrigin(map);
 
             foreach (var cell in GenRadial.RadialCellsAround(origin, 14, true))
             {
                 if (!GenSpawn.CanSpawnAt(def, cell, map, Rot4.North)) continue;
-
-                // A prisoner bed standing in the open is not a prison. The game will not let
-                // anyone be carried to one unless it sits in a room that actually encloses it,
-                // so the walls are part of the setup — which is exactly why the planner has to
-                // build a Prison *room* rather than just drop a bed somewhere.
                 if (forPrisoners && !BuildCellAround(map, cell)) continue;
 
-                var bed = (Building_Bed)ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
+                var bed = HarnessSetup.PlaceFinished(map, def, cell, 0, 0) as Building_Bed;
+                if (bed == null) continue;
 
-                // Owned *before* it spawns. SpawnSetup is what registers a building with its
-                // room and with the faction-dependent systems around it, so a bed that spawns
-                // ownerless registers as nobody's and setting the faction afterwards never
-                // revisits that — which is why a marked bed in an eligible room still would not
-                // make the room a prison.
-                bed.SetFactionDirect(Faction.OfPlayer);
-                if (forPrisoners) bed.ForOwnerType = BedOwnerType.Prisoner;
-
-                GenSpawn.Spawn(bed, cell, map, Rot4.North);
-
-                // Rebuild *after* the bed is in. Spawning it dirties the regions again, and
-                // marking a bed while the room around it is stale asks the question of the wrong
-                // room — which is how a walled cell with a door still failed to be a prison.
-                map.regionAndRoomUpdater.RebuildAllRegionsAndRooms();
-
-                // Marked later, not now. The walls went up this instant, and a room cannot settle
-                // in the tick it is created — the game rebuilds regions on its own schedule, and
-                // anything asked before that gets an answer about the room that was there before.
-                // The real planner never hits this because colonists take hours to build a wall.
                 if (forPrisoners) spawnedPrisonBed = bed;
 
                 var room = bed.GetRoom();
                 Chronicle.Record(ChronicleCategory.System, string.Format(
-                    "SCENARIO: placed a {0} bed at {1} — ForPrisoners={2}, room={3}, cells={4}, " +
-                    "outdoors={5}, prisonCell={6}",
-                    forPrisoners ? "prisoner" : "colonist", cell, bed.ForPrisoners,
+                    "SCENARIO: placed a {0} bed at {1} — room={2}, cells={3}, outdoors={4}",
+                    forPrisoners ? "prisoner" : "colonist", cell,
                     room != null ? "yes" : "NONE",
                     room != null ? room.CellCount : 0,
-                    room != null && room.PsychologicallyOutdoors,
-                    room != null && room.IsPrisonCell));
+                    room != null && room.PsychologicallyOutdoors));
                 return;
             }
         }
 
-        /// <summary>
-        /// Throws a 3x3 walled cell with a door around a spot, so a prisoner bed inside it is in
-        /// a room the game will accept. Returns false if the ground will not take it.
-        /// </summary>
         static bool BuildCellAround(Map map, IntVec3 centre)
         {
             var wall = AcDefs.Wall;
@@ -276,46 +254,6 @@ namespace AutoColony
             // great outdoors, and the answer is no.
             map.regionAndRoomUpdater.RebuildAllRegionsAndRooms();
             return true;
-        }
-
-        /// <summary>
-        /// Puts food where the colony can count it.
-        ///
-        /// <c>daysOfFood</c> comes off <c>ResourceCounter</c>, which sees only what is in a
-        /// stockpile — so meals dropped on the ground read as nothing and the colony stays in a
-        /// food emergency however much is lying about. The zone has to exist first.
-        /// </summary>
-        static void FeedColony(Map map)
-        {
-            var meal = AcDefs.Thing("MealSurvivalPack");
-            if (meal == null || map.zoneManager == null) return;
-
-            var origin = map.mapPawns.FreeColonists.Count > 0
-                ? map.mapPawns.FreeColonists[0].Position
-                : map.Center;
-
-            var zone = new Zone_Stockpile(StorageSettingsPreset.DefaultStockpile, map.zoneManager);
-            map.zoneManager.RegisterZone(zone);
-
-            int filled = 0;
-            foreach (var cell in GenRadial.RadialCellsAround(origin, 8, true))
-            {
-                if (filled >= 6) break;
-                if (!cell.InBounds(map) || !GenGrid.Standable(cell, map)) continue;
-                if (cell.GetFirstItem(map) != null) continue;
-                if (map.zoneManager.ZoneAt(cell) != null) continue;
-
-                zone.AddCell(cell);
-
-                var stack = ThingMaker.MakeThing(meal, null);
-                stack.stackCount = meal.stackLimit;
-                GenSpawn.Spawn(stack, cell, map);
-                stack.SetForbidden(false, false);
-                filled++;
-            }
-
-            Chronicle.Record(ChronicleCategory.System,
-                "SCENARIO: stockpiled " + filled + " stacks of meals");
         }
 
         static void FireIncident(Map map, string defName, float points)
@@ -353,9 +291,7 @@ namespace AutoColony
         /// <summary>Fires against the base itself, which is the case the director must answer.</summary>
         static void StartFires(Map map)
         {
-            var origin = map.mapPawns.FreeColonists.Count > 0
-                ? map.mapPawns.FreeColonists[0].Position
-                : map.Center;
+            var origin = HarnessSetup.ColonistOrigin(map);
 
             int lit = 0;
             foreach (var cell in GenRadial.RadialCellsAround(origin, 8, true))
@@ -405,29 +341,6 @@ namespace AutoColony
             Chronicle.Record(ChronicleCategory.System, "SCENARIO: removed " + removed + " food");
         }
 
-        /// <summary>Takes the building materials away, to see what a destitute colony does.</summary>
-        static void StripMaterials(Map map)
-        {
-            int removed = 0;
-            var names = new List<string> { "WoodLog", "Steel" };
-            names.AddRange(AcDefs.StoneBlockStuff);
-
-            for (int i = 0; i < names.Count; i++)
-            {
-                var def = AcDefs.Thing(names[i]);
-                if (def == null) continue;
-
-                var stacks = new List<Thing>(map.listerThings.ThingsOfDef(def));
-                for (int s = 0; s < stacks.Count; s++)
-                {
-                    if (stacks[s] == null || !stacks[s].Spawned) continue;
-                    removed += stacks[s].stackCount;
-                    stacks[s].Destroy(DestroyMode.Vanish);
-                }
-            }
-            Chronicle.Record(ChronicleCategory.System, "SCENARIO: removed " + removed + " building material");
-        }
-
         static Building_Bed spawnedPrisonBed;
 
         /// <summary>
@@ -445,18 +358,8 @@ namespace AutoColony
             spawnedPrisonBed = null;
             if (bed == null || !bed.Spawned) return;
 
-            bed.ForOwnerType = BedOwnerType.Prisoner;
-
+            HarnessSetup.MarkAsPrisonBed(bed);
             var room = bed.GetRoom();
-            if (room != null)
-            {
-                // Both notifications. Notify_BedTypeChanged alone left IsPrisonCell false even
-                // with the bed marked and the room eligible; what actually made it take, when
-                // done by hand in game, was reinstalling the bed — which is a despawn and a
-                // respawn, and that is the notification respawning sends.
-                room.Notify_BedTypeChanged();
-                room.Notify_ContainedThingSpawnedOrDespawned(bed);
-            }
 
             Chronicle.Record(ChronicleCategory.System, string.Format(
                 "SCENARIO: marked the prisoner bed once its room settled — ForPrisoners={0}, " +

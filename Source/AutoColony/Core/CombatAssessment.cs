@@ -99,7 +99,7 @@ namespace AutoColony
             if (pawn.health != null && pawn.health.summaryHealth != null)
                 health = pawn.health.summaryHealth.SummaryHealthPercent;
 
-            return power * Clamp(health, 0.25f, 1f);
+            return power * AcMath.Clamp(health, 0.25f, 1f);
         }
 
         /// <summary>
@@ -112,14 +112,14 @@ namespace AutoColony
         public static bool ShouldEngage(float colonyStrength, float threat, float desperation)
         {
             if (threat <= 0f) return true;
-            float required = Lerp(ComfortableRatio, DesperateRatio, Clamp(desperation, 0f, 1f));
+            float required = Lerp(ComfortableRatio, DesperateRatio, AcMath.Clamp(desperation, 0f, 1f));
             return colonyStrength >= threat * required;
         }
 
         /// <summary>Human-readable form of the same judgement, for the chronicle.</summary>
         public static string Explain(float colonyStrength, float threat, float desperation)
         {
-            float required = Lerp(ComfortableRatio, DesperateRatio, Clamp(desperation, 0f, 1f));
+            float required = Lerp(ComfortableRatio, DesperateRatio, AcMath.Clamp(desperation, 0f, 1f));
             return string.Format(
                 System.Globalization.CultureInfo.InvariantCulture,
                 "strength {0:0} vs threat {1:0}, need {2:0.0}x at desperation {3:0.00}",
@@ -163,7 +163,7 @@ namespace AutoColony
             try
             {
                 if (pawn.health == null || pawn.health.capacities == null) return 1f;
-                return Clamp(pawn.health.capacities.GetLevel(def), 0f, 1f);
+                return AcMath.Clamp(pawn.health.capacities.GetLevel(def), 0f, 1f);
             }
             catch (System.Exception)
             {
@@ -176,9 +176,5 @@ namespace AutoColony
             return a + (b - a) * t;
         }
 
-        static float Clamp(float v, float min, float max)
-        {
-            return v < min ? min : (v > max ? max : v);
-        }
     }
 }

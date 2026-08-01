@@ -36,6 +36,31 @@ namespace AutoColony.Upkeep
         Overbuilt
     }
 
+    /// <summary>
+    /// Something the colony is unhappy about that the director has no answer for.
+    ///
+    /// Carried as a value rather than a formatted line. The survey used to hand the module
+    /// strings like "EnvironmentCold (-4.0)" and the module parsed the number back out to feed
+    /// the scorer — an undocumented format contract spanning two files, and a sort that ordered
+    /// alphabetically when the consumer wanted the worst first.
+    /// </summary>
+    public struct UnmetComplaint
+    {
+        public string thought;
+        public float mood;      // magnitude, always positive
+
+        public UnmetComplaint(string thought, float mood)
+        {
+            this.thought = thought;
+            this.mood = mood < 0f ? -mood : mood;
+        }
+
+        public override string ToString()
+        {
+            return thought + " (-" + mood.ToString("0.0") + ")";
+        }
+    }
+
     /// <summary>What to actually do about a defect.</summary>
     public enum RemedyKind
     {
@@ -99,11 +124,9 @@ namespace AutoColony.Upkeep
             return byThought.TryGetValue(thoughtDefName, out kind);
         }
 
-        public static bool Known(string thoughtDefName)
-        {
-            DefectKind ignored;
-            return TryMap(thoughtDefName, out ignored);
-        }
+
+        /// <summary>Below this a complaint is background noise, not worth reporting.</summary>
+        public const float ReportableSeverity = 0.2f;
 
         /// <summary>How much a mood penalty of this size matters, 0 to 1.</summary>
         public static float Severity(float moodOffset)

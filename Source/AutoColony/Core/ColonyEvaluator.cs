@@ -244,8 +244,8 @@ namespace AutoColony
 
             // --- survival: the dominant term. Losing colonists is the worst outcome. ---
             int deaths = acc.DeathsThisEpoch;
-            float survival = Clamp01(1f - (deaths / (float)startPop) * 1.5f);
-            survival *= Clamp01(1f - acc.DownedFraction * 0.5f);
+            float survival = AcMath.Clamp01(1f - (deaths / (float)startPop) * 1.5f);
+            survival *= AcMath.Clamp01(1f - acc.DownedFraction * 0.5f);
             if (end.colonists == 0) survival = 0f;
             breakdown.Add(new ScoreTerm("Survival", survival, WSurvival));
 
@@ -255,38 +255,38 @@ namespace AutoColony
             {
                 double ratio = end.wealthTotal / (double)start.wealthTotal;
                 // +50% wealth over an epoch maps to 1.0, flat maps to 0.5, shrinking to below.
-                wealthGrowth = Clamp01(0.5f + (float)(Math.Log(ratio) / Math.Log(1.5)) * 0.5f);
+                wealthGrowth = AcMath.Clamp01(0.5f + (float)(Math.Log(ratio) / Math.Log(1.5)) * 0.5f);
             }
-            float popGrowth = Clamp01(0.5f + (end.colonists - start.colonists) * 0.25f);
+            float popGrowth = AcMath.Clamp01(0.5f + (end.colonists - start.colonists) * 0.25f);
             float growth = wealthGrowth * 0.6f + popGrowth * 0.4f;
             breakdown.Add(new ScoreTerm("Growth", growth, WGrowth));
 
             // --- food security: worst reserve reached, not the comfortable endpoint ---
             float worstFood = acc.samples > 0 ? acc.minDaysOfFood : end.daysOfFood;
-            float food = Clamp01(worstFood / FoodSecureDays);
+            float food = AcMath.Clamp01(worstFood / FoodSecureDays);
             breakdown.Add(new ScoreTerm("Food security", food, WFood));
 
             // --- mood: time-averaged, penalised by how often someone was breaking ---
-            float mood = Clamp01(acc.AvgMood) * Clamp01(1f - acc.MentalBreakFraction * 0.7f);
+            float mood = AcMath.Clamp01(acc.AvgMood) * AcMath.Clamp01(1f - acc.MentalBreakFraction * 0.7f);
             breakdown.Add(new ScoreTerm("Mood", mood, WMood));
 
             // --- health ---
-            float health = Clamp01(acc.AvgHealth);
+            float health = AcMath.Clamp01(acc.AvgHealth);
             breakdown.Add(new ScoreTerm("Health", health, WHealth));
 
             // --- research throughput ---
             int projects = Math.Max(0, end.researchFinished - start.researchFinished);
-            float research = Clamp01(projects / 2f);
+            float research = AcMath.Clamp01(projects / 2f);
             breakdown.Add(new ScoreTerm("Research", research, WResearch));
 
             // --- infrastructure: everyone housed, with a little slack ---
             float bedRatio = end.colonists > 0 ? end.colonistBeds / (float)end.colonists : 1f;
-            float infra = Clamp01(bedRatio) * 0.7f + Clamp01(1f - acc.FireFraction) * 0.3f;
+            float infra = AcMath.Clamp01(bedRatio) * 0.7f + AcMath.Clamp01(1f - acc.FireFraction) * 0.3f;
             breakdown.Add(new ScoreTerm("Infrastructure", infra, WInfrastructure));
 
             // --- defense readiness, scaled by the threat wealth actually attracts ---
-            float expectedTurrets = Clamp(end.wealthTotal / 25000f, 0f, 8f);
-            float defense = expectedTurrets < 0.5f ? 1f : Clamp01(end.turrets / expectedTurrets);
+            float expectedTurrets = AcMath.Clamp(end.wealthTotal / 25000f, 0f, 8f);
+            float defense = expectedTurrets < 0.5f ? 1f : AcMath.Clamp01(end.turrets / expectedTurrets);
             breakdown.Add(new ScoreTerm("Defense", defense, WDefense));
 
             // --- conduct: time spent in crisis, and misery with no answer ---
@@ -295,8 +295,8 @@ namespace AutoColony
             // state. A colony permanently answering something immediate is never building, and
             // one carrying complaints it has no remedy for is losing mood it cannot recover
             // without being taught something new.
-            float calm = Clamp01(1f - acc.EmergencyFraction);
-            float contentment = Clamp01(1f - acc.AvgUnmetComplaints / MiseryCeiling);
+            float calm = AcMath.Clamp01(1f - acc.EmergencyFraction);
+            float contentment = AcMath.Clamp01(1f - acc.AvgUnmetComplaints / MiseryCeiling);
             float conduct = calm * 0.5f + contentment * 0.5f;
             breakdown.Add(new ScoreTerm("Conduct", conduct, WConduct));
 
@@ -306,17 +306,9 @@ namespace AutoColony
             // Hard failure state the weighted sum would otherwise soften too much.
             if (end.colonists == 0) score = 0f;
 
-            return Clamp01(score);
+            return AcMath.Clamp01(score);
         }
 
-        static float Clamp01(float v)
-        {
-            return v < 0f ? 0f : (v > 1f ? 1f : v);
-        }
 
-        static float Clamp(float v, float min, float max)
-        {
-            return v < min ? min : (v > max ? max : v);
-        }
     }
 }

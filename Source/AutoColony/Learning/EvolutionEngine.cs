@@ -319,19 +319,4 @@ namespace AutoColony.Learning
         }
     }
 
-    /// <summary>Local clamp helper so the learning layer stays free of UnityEngine references.</summary>
-    internal static class AcMath
-    {
-        public static float Clamp(float v, float min, float max)
-        {
-            if (v < min) return min;
-            if (v > max) return max;
-            return v;
-        }
-
-        public static float Clamp01(float v)
-        {
-            return Clamp(v, 0f, 1f);
-        }
-    }
 }

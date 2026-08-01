@@ -40,7 +40,7 @@ namespace AutoColony.Upkeep
             if (usableMaterial <= 0) return 0f;
 
             float roomsAffordable = usableMaterial / (float)RoomCost;
-            return Clamp01(roomsAffordable / colonists);
+            return AcMath.Clamp01(roomsAffordable / colonists);
         }
 
         public static bool Destitute(float means) { return means < DestituteBelow; }
@@ -64,7 +64,7 @@ namespace AutoColony.Upkeep
 
             // Between the two, scale from everyone-in-one-room to the preference.
             float t = (means - DestituteBelow) / (ComfortableAbove - DestituteBelow);
-            float beds = colonists + (preferred - colonists) * Clamp01(t);
+            float beds = colonists + (preferred - colonists) * AcMath.Clamp01(t);
 
             int rounded = (int)(beds + 0.5f);
             if (rounded < preferred) rounded = preferred > colonists ? colonists : preferred;
@@ -81,7 +81,7 @@ namespace AutoColony.Upkeep
         public static float SharingSeverity(float means, float moodSeverity)
         {
             if (Destitute(means)) return 0f;
-            return moodSeverity * Clamp01((means - DestituteBelow) / (1f - DestituteBelow));
+            return moodSeverity * AcMath.Clamp01((means - DestituteBelow) / (1f - DestituteBelow));
         }
 
         /// <summary>
@@ -96,11 +96,10 @@ namespace AutoColony.Upkeep
             if (surplusRooms <= 0) return 0f;
             if (means >= DestituteBelow) return 0f;
 
-            float shortage = Clamp01((DestituteBelow - means) / DestituteBelow);
+            float shortage = AcMath.Clamp01((DestituteBelow - means) / DestituteBelow);
             float scale = surplusRooms >= 2 ? 1f : 0.7f;
-            return Clamp01(shortage * scale);
+            return AcMath.Clamp01(shortage * scale);
         }
 
-        static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
     }
 }
