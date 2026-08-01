@@ -166,8 +166,11 @@ namespace AutoColony.Modules
             float daysOfFood = ctx.state.daysOfFood;
             if (daysOfFood >= foodTarget) return 0;
 
-            // 0 when comfortably stocked, 1 when the larder is empty.
-            float urgency = foodTarget > 0f ? AcMath.Clamp01(1f - daysOfFood / foodTarget) : 1f;
+            // 0 when comfortably stocked, 1 when the larder will be empty before anything
+            // decided now can reach it. Measured against the food left after the hunt-haul-
+            // butcher-cook lead rather than the food in the store, so escalation happens while
+            // there is still margin for the hunt to fail.
+            float urgency = FoodTiming.Urgency(daysOfFood, foodTarget);
 
             float aggression = ctx.Gene(Genes.HuntAggression);
             float effective = AcMath.Clamp01(aggression + urgency * 0.5f);
@@ -233,9 +236,11 @@ namespace AutoColony.Modules
                 map.designationManager.AddDesignation(new Designation(lastResort, des));
                 done++;
                 Chronicle.Record(ChronicleCategory.Hunt, string.Format(
-                    "LAST RESORT: nothing safe to hunt and {0:0.0} days of food left, so taking on {1} " +
-                    "(threat {2:0}) with strength {3:0}",
-                    daysOfFood, lastResort.LabelShortCap, ThreatOf(lastResort), strength));
+                    "LAST RESORT: nothing safe to hunt and {0:0.0} days of food left ({1:0.0} once " +
+                    "the {2:0.0}-day butcher-and-cook lead is allowed for), so taking on {3} " +
+                    "(threat {4:0}) with strength {5:0}",
+                    daysOfFood, FoodTiming.EffectiveDays(daysOfFood), FoodTiming.SupplyLeadDays,
+                    lastResort.LabelShortCap, ThreatOf(lastResort), strength));
                 return done;
             }
 
