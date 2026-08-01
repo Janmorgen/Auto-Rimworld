@@ -277,9 +277,47 @@ namespace AutoColony.Modules
         }
 
         /// <summary>Somewhere to play. Horseshoes needs no research and barely any material.</summary>
+        /// <summary>
+        /// Candidate joy buildings, easiest to place first.
+        ///
+        /// A game of Ur needs no research and no clear ground; horseshoes needs a throwing lane
+        /// and chess and poker need Complex Furniture. Ordered so the colony that most needs
+        /// cheering up — young, unresearched, living in one small room — is served by the first
+        /// entry rather than by none of them.
+        /// </summary>
+        static readonly string[] JoyBuildings =
+        {
+            "GameOfUrBoard", "ChessTable", "PokerTable", "HorseshoesPin", "BilliardsTable"
+        };
+
+        /// <summary>
+        /// Something to do that is not work.
+        ///
+        /// This asked for a horseshoes pin and nothing else, which carries
+        /// `PlaceWorker_WatchArea` — it needs a clear lane to throw down. Remedies are placed
+        /// inside the planned rooms, and a seven-by-seven room has a five-by-five interior with
+        /// beds in it, so every candidate cell was refused. The complaint was therefore attempted
+        /// and failed on every pass for the whole of a colony's life: seven times in six-hour
+        /// intervals in one run, with `Cheerless` at full severity throughout and the colony
+        /// eventually dying at zero mood.
+        ///
+        /// Chosen on what will actually stand in the space available, not on a def existing —
+        /// the same rule this codebase already applies to stoves and generators.
+        /// </summary>
         static bool AddRecreation(DirectorContext ctx)
         {
-            return PlaceInBase(ctx, AcDefs.Thing("HorseshoesPin"), 1);
+            for (int i = 0; i < JoyBuildings.Length; i++)
+            {
+                var def = AcDefs.Thing(JoyBuildings[i]);
+                if (def == null || !PlacementUtil.ResearchDone(def)) continue;
+                if (!PlaceInBase(ctx, def, 1)) continue;
+
+                Chronicle.Record(ChronicleCategory.Build,
+                    "recreation: placed a " + (def.label ?? def.defName) +
+                    " — the first joy building that would actually fit the space");
+                return true;
+            }
+            return false;
         }
 
         /// <summary>
