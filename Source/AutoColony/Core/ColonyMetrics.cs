@@ -24,6 +24,13 @@ namespace AutoColony
 
         // sustenance and economy
         public float daysOfFood;
+
+        /// <summary>
+        /// Outdoor temperature in Celsius. Carried into the record rather than only the state
+        /// because clothing, heating and cooling are all now driven by it, and a decision whose
+        /// input never appears in the log cannot be judged from the log.
+        /// </summary>
+        public float outdoorTemperature;
         public float wealthTotal;
         public int colonistBeds;
         public int turrets;

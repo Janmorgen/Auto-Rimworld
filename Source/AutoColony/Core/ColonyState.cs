@@ -586,6 +586,7 @@ namespace AutoColony
             m.avgMood = avgMood;
             m.avgHealth = avgHealth;
             m.daysOfFood = daysOfFood;
+            m.outdoorTemperature = outdoorTemperature;
             m.wealthTotal = wealthTotal;
             m.colonistBeds = colonistBeds;
             m.turrets = poweredTurrets;
