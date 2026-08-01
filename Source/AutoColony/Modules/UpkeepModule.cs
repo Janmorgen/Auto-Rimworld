@@ -40,7 +40,8 @@ namespace AutoColony.Modules
             unhandled.Clear();
             var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled);
 
-            ReportUnhandled();
+            Report(ctx, BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists),
+                   defects.Count);
             if (defects.Count == 0) return;
 
             for (int i = 0; i < defects.Count; i++)
@@ -91,20 +92,31 @@ namespace AutoColony.Modules
             return false;
         }
 
-        /// <summary>
-        /// Says what the colony is unhappy about that the director has no answer for.
-        ///
-        /// Without this the unfixable complaints vanish silently, and the next person deciding
-        /// what to teach it is guessing. With it, the chronicle names them.
-        /// </summary>
-        void ReportUnhandled()
-        {
-            if (unhandled.Count == 0) return;
+        string lastReport;
 
+        /// <summary>
+        /// A standing account of the colony's condition: what it can afford, what is wrong with
+        /// it, and what it is unhappy about that the director has no answer for.
+        ///
+        /// Recorded on the chronicle rather than behind the test harness, because this is the
+        /// line that makes a long unattended run diagnosable — whether upkeep is converging or
+        /// oscillating is invisible from the remedies alone. Only written when it changes, or an
+        /// established colony would repeat the same sentence four times a day forever.
+        /// </summary>
+        void Report(DirectorContext ctx, float means, int defectCount)
+        {
             unhandled.Sort();
-            Chronicle.Record(ChronicleCategory.Vitals,
-                "unhappy about things the director cannot fix yet: " +
-                string.Join(", ", unhandled.ToArray()));
+
+            string report = string.Format(
+                "upkeep — means {0:0.00} ({1} material), {2} defects{3}",
+                means, ctx.state.usableMaterial, defectCount,
+                unhandled.Count > 0
+                    ? "; cannot fix yet: " + string.Join(", ", unhandled.ToArray())
+                    : "");
+
+            if (report == lastReport) return;
+            lastReport = report;
+            Chronicle.Record(ChronicleCategory.Vitals, report);
         }
 
         bool Apply(DirectorContext ctx, ColonyDefect defect)
