@@ -283,9 +283,50 @@ namespace AutoColony.Modules
 
             if (candidates.Count == 0) return null;
 
+            candidates = OnlyWhatArrivesInTime(ctx, candidates, byName);
+
             var bandit = ctx.director.BanditFor(BanditId);
             string pick = bandit.Select(candidates, ctx.Gene(Genes.ResearchExplore));
             return pick != null && byName.ContainsKey(pick) ? byName[pick] : null;
+        }
+
+        /// <summary>
+        /// While the colony is short of food, drops the crops that cannot ripen in time.
+        ///
+        /// Rice takes three days to grow, potatoes six, corn eleven — and which is *best* depends
+        /// on biome and pressure, which is exactly why the choice is a bandit arm. But which is
+        /// best and which is survivable are different questions, and only the second one matters
+        /// with an empty larder. A colony sowed seventy-two cells of corn on day zero at 0.0 days
+        /// of food and starved on day two; the corn would have been ready on day eleven.
+        ///
+        /// So this narrows the arms rather than overriding the choice. The bandit still learns
+        /// which crop wins; it is simply not offered one the colony will not live to harvest.
+        /// </summary>
+        static List<string> OnlyWhatArrivesInTime(DirectorContext ctx, List<string> candidates,
+                                                  Dictionary<string, ThingDef> byName)
+        {
+            float urgency = FoodTiming.Urgency(ctx.state.daysOfFood,
+                                               ctx.Gene(Genes.FoodDaysPerColonist));
+            if (urgency < 0.5f) return candidates;   // comfortable: any crop is a fair bet
+
+            float fastest = float.MaxValue;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                float days = byName[candidates[i]].plant.growDays;
+                if (days < fastest) fastest = days;
+            }
+            if (fastest >= float.MaxValue) return candidates;
+
+            // Within half again the quickest thing available. Loose enough that the bandit keeps
+            // a real choice where several crops are comparable, tight enough to exclude the ones
+            // that are three or four times slower.
+            float limit = fastest * 1.5f;
+
+            var inTime = new List<string>();
+            for (int i = 0; i < candidates.Count; i++)
+                if (byName[candidates[i]].plant.growDays <= limit) inTime.Add(candidates[i]);
+
+            return inTime.Count > 0 ? inTime : candidates;
         }
 
         /// <summary>The best Plants skill in the colony, which is what caps what can be sown.</summary>
