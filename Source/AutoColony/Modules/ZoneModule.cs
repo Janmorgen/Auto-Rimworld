@@ -104,7 +104,24 @@ namespace AutoColony.Modules
 
             // Healroot needs Plants 8. Sowing it with nobody able to is a zone that stays bare
             // and says nothing about why — the same failure the crop filter was fixed for.
-            if (BestGrowingSkill(ctx) < healroot.plant.sowMinSkill) return;
+            //
+            // Said out loud once, because this is a thing the colony wants and cannot have, and
+            // that list is the roadmap. Silence here reads identically to the bug that stopped
+            // medicine being planted at all, which is exactly the confusion worth avoiding.
+            int skill = BestGrowingSkill(ctx);
+            if (skill < healroot.plant.sowMinSkill)
+            {
+                if (!medicineSkillReported)
+                {
+                    medicineSkillReported = true;
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "no herbal medicine: healroot needs Plants {0} and the best grower here " +
+                        "has {1}, so wounds will be treated with whatever can be bought or found",
+                        healroot.plant.sowMinSkill, skill));
+                }
+                return;
+            }
+            medicineSkillReported = false;
 
             var map = ctx.map;
             foreach (var zone in map.zoneManager.AllZones)
@@ -133,6 +150,9 @@ namespace AutoColony.Modules
 
         /// <summary>Enough healroot to keep a small colony in herbal medicine, not a cash crop.</summary>
         const int MedicinePlotCells = 24;
+
+        /// <summary>Set once the skill shortfall has been reported, so it is said once, not hourly.</summary>
+        bool medicineSkillReported;
 
         // ------------------------------------------------------------ growing
 
