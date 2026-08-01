@@ -242,10 +242,23 @@ namespace AutoColony.Modules
             // whether anyone suitable exists — so the question is who goes, not whether.
             var fighters = CombatAssessment.RankFighters(ctx.state.ableColonists);
 
+            // Somebody has to still be standing afterwards to tend whoever is not.
+            var medic = ChooseReservedMedic(ctx, fighters);
+
             for (int i = 0; i < fighters.Count; i++)
             {
                 var pawn = fighters[i];
                 if (pawn.drafter == null) continue;
+
+                if (pawn == medic)
+                {
+                    // Released rather than merely not drafted: they may have been in the line
+                    // when the casualty happened, and work priorities already put Doctor at the
+                    // top the moment anyone went down, so letting go of them is the whole order.
+                    if (pawn.drafter.Drafted) pawn.drafter.Drafted = false;
+                    drafted.Remove(pawn);
+                    continue;
+                }
 
                 float health = pawn.health != null && pawn.health.summaryHealth != null
                     ? pawn.health.summaryHealth.SummaryHealthPercent
@@ -285,6 +298,63 @@ namespace AutoColony.Modules
                     CombatAssessment.Explain(strength, threat, 1f) +
                     (winnable ? "" : " — not worth meeting in the open, holding the base instead")));
             }
+        }
+
+        /// <summary>Who was last held out of the fighting, so it is only reported when it changes.</summary>
+        Pawn reservedMedic;
+
+        /// <summary>
+        /// Picks the colonist to keep out of the fighting while somebody is down.
+        ///
+        /// The best medic, not the worst fighter: whoever is held back is going to be doing
+        /// medicine, and a colonist with no skill at it will lose the patient anyway. Combat
+        /// value breaks ties, so of two equally capable doctors the one the line can better
+        /// spare stays behind.
+        /// </summary>
+        Pawn ChooseReservedMedic(DirectorContext ctx, List<Pawn> fighters)
+        {
+            if (!CasualtyPolicy.ShouldReserveMedic(fighters.Count, ctx.state.colonistsDowned))
+            {
+                if (reservedMedic != null)
+                {
+                    Chronicle.Record(ChronicleCategory.Health,
+                        "nobody down any more; " + reservedMedic.LabelShortCap + " rejoins the line");
+                    reservedMedic = null;
+                }
+                return null;
+            }
+
+            Pawn best = null;
+            int bestSkill = -1;
+            float bestValue = float.MaxValue;
+
+            for (int i = 0; i < fighters.Count; i++)
+            {
+                var pawn = fighters[i];
+                if (pawn == null || pawn.drafter == null) continue;
+                if (pawn.WorkTagIsDisabled(WorkTags.Caring)) continue;
+
+                int skill = CombatAssessment.SkillLevel(pawn, SkillDefOf.Medicine);
+                float value = CombatAssessment.ColonistValue(pawn);
+
+                if (skill > bestSkill || (skill == bestSkill && value < bestValue))
+                {
+                    best = pawn;
+                    bestSkill = skill;
+                    bestValue = value;
+                }
+            }
+
+            if (best != null && best != reservedMedic)
+            {
+                reservedMedic = best;
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "{0} colonists down — holding {1} back from the fight to tend them " +
+                    "(medicine {2}, leaving {3} in the line)",
+                    ctx.state.colonistsDowned, best.LabelShortCap, bestSkill, fighters.Count - 1));
+            }
+
+            return best;
         }
 
         /// <summary>
@@ -413,6 +483,7 @@ namespace AutoColony.Modules
 
         void StandDown(DirectorContext ctx)
         {
+            reservedMedic = null;
             if (drafted.Count == 0) return;
 
             for (int i = 0; i < drafted.Count; i++)
