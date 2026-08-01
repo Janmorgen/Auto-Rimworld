@@ -90,7 +90,16 @@ namespace AutoColony.Modules
             float outdoorPressure = s.itemsOutdoors > 0 ? AcMath.Clamp01(s.itemsOutdoors / 40f) : 0f;
             Need("Hauling", 1.1f + fireRisk * outdoorPressure * 2f);
             Need("Smithing", 1f);
-            Need("Tailoring", 1f + Shortfall(s.textiles, ctx.Gene(Genes.TextilesTarget)) * 0.5f);
+            // Tailoring rose with the *cloth pile*, which says how much raw material is spare
+            // and nothing about whether anyone is cold. The apparel work added a bench, a bill,
+            // a material preference and a research prerequisite, and then left the last link
+            // out: with nobody assigned to sew, all of that is a workbench with a queue on it.
+            // Someone being underdressed is the thing that should pull a colonist to the bench.
+            float underdressed = s.colonists > 0
+                ? s.colonistsUnderdressed / (float)s.colonists
+                : 0f;
+            Need("Tailoring", 1f + Shortfall(s.textiles, ctx.Gene(Genes.TextilesTarget)) * 0.5f
+                                 + underdressed * 2f);
             Need("Crafting", 1f);
             Need("Art", s.avgMood < 0.5f ? 1.3f : 0.7f);
         }
