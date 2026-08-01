@@ -66,6 +66,33 @@ namespace AutoColony
         public int mentalBreakSamples;
         public int fireSamples;
         public int downedSamples;
+        public int emergencySamples;
+
+        // --- what the chronicle knows and the outcome figures do not ---
+
+        /// <summary>
+        /// Running total of the mood the colony was losing to things the director had no remedy
+        /// for, sampled whenever the upkeep survey ran.
+        ///
+        /// This is not the same measurement as average mood, which is the *effect* and saturates
+        /// — a colony pinned at zero looks identical whether one thing is wrong or nine. This is
+        /// the composition, and specifically the part nobody could act on. It is also the only
+        /// number here that says what to build next.
+        /// </summary>
+        public float unmetComplaintSum;
+        public int complaintSamples;
+
+        /// <summary>The complaint that cost the most across the epoch, and how much.</summary>
+        public string worstComplaint = "";
+        public float worstComplaintMood;
+
+        /// <summary>
+        /// Work the colony did and then undid — construction cancelled, furniture re-queued
+        /// because it had gone missing. Reported rather than scored: some of it is a raid's
+        /// fault rather than the director's, and penalising it would also punish the deliberate
+        /// consolidation a destitute colony is *supposed* to do.
+        /// </summary>
+        public int wastedActions;
 
         // Cumulative counters captured at epoch start, so deltas can be derived without
         // reaching back into the game for global statistics.
@@ -83,6 +110,12 @@ namespace AutoColony
             mentalBreakSamples = 0;
             fireSamples = 0;
             downedSamples = 0;
+            emergencySamples = 0;
+            unmetComplaintSum = 0f;
+            complaintSamples = 0;
+            worstComplaint = "";
+            worstComplaintMood = 0f;
+            wastedActions = 0;
 
             startDeaths = m.cumulativeDeaths;
             startRaids = m.cumulativeRaids;
@@ -100,6 +133,7 @@ namespace AutoColony
             if (m.colonistsInMentalState > 0) mentalBreakSamples++;
             if (m.fires > 0) fireSamples++;
             if (m.colonistsDowned > 0) downedSamples++;
+            if (m.inEmergency) emergencySamples++;
 
             latestDeaths = m.cumulativeDeaths;
             latestRaids = m.cumulativeRaids;
@@ -110,6 +144,28 @@ namespace AutoColony
         public float MentalBreakFraction { get { return samples > 0 ? (float)mentalBreakSamples / samples : 0f; } }
         public float FireFraction { get { return samples > 0 ? (float)fireSamples / samples : 0f; } }
         public float DownedFraction { get { return samples > 0 ? (float)downedSamples / samples : 0f; } }
+        public float EmergencyFraction { get { return samples > 0 ? (float)emergencySamples / samples : 0f; } }
+
+        /// <summary>Average mood lost per survey to problems with no remedy.</summary>
+        public float AvgUnmetComplaints
+        {
+            get { return complaintSamples > 0 ? unmetComplaintSum / complaintSamples : 0f; }
+        }
+
+        /// <summary>Records what the upkeep survey found it could not answer.</summary>
+        public void NoteUnmetComplaints(float totalMood, string worst, float worstMood)
+        {
+            complaintSamples++;
+            unmetComplaintSum += totalMood;
+
+            if (worstMood > worstComplaintMood && !string.IsNullOrEmpty(worst))
+            {
+                worstComplaint = worst;
+                worstComplaintMood = worstMood;
+            }
+        }
+
+        public void NoteWaste(int actions) { wastedActions += actions; }
 
         public int DeathsThisEpoch { get { return Math.Max(0, latestDeaths - startDeaths); } }
         public int RaidsThisEpoch { get { return Math.Max(0, latestRaids - startRaids); } }
@@ -123,6 +179,12 @@ namespace AutoColony
             Scribe_Values.Look(ref mentalBreakSamples, "mentalBreakSamples", 0);
             Scribe_Values.Look(ref fireSamples, "fireSamples", 0);
             Scribe_Values.Look(ref downedSamples, "downedSamples", 0);
+            Scribe_Values.Look(ref emergencySamples, "emergencySamples", 0);
+            Scribe_Values.Look(ref unmetComplaintSum, "unmetComplaintSum", 0f);
+            Scribe_Values.Look(ref complaintSamples, "complaintSamples", 0);
+            Scribe_Values.Look(ref worstComplaint, "worstComplaint", "");
+            Scribe_Values.Look(ref worstComplaintMood, "worstComplaintMood", 0f);
+            Scribe_Values.Look(ref wastedActions, "wastedActions", 0);
             Scribe_Values.Look(ref startDeaths, "startDeaths", 0);
             Scribe_Values.Look(ref startRaids, "startRaids", 0);
             Scribe_Values.Look(ref latestDeaths, "latestDeaths", 0);
@@ -143,14 +205,31 @@ namespace AutoColony
     /// </summary>
     public static class ColonyEvaluator
     {
-        const float WSurvival = 0.30f;
-        const float WGrowth = 0.20f;
-        const float WFood = 0.15f;
-        const float WMood = 0.12f;
-        const float WHealth = 0.08f;
-        const float WResearch = 0.07f;
-        const float WInfrastructure = 0.05f;
-        const float WDefense = 0.03f;
+        const float WSurvival = 0.28f;
+        const float WGrowth = 0.18f;
+        const float WFood = 0.14f;
+        const float WMood = 0.11f;
+        const float WHealth = 0.07f;
+        const float WResearch = 0.06f;
+        const float WInfrastructure = 0.04f;
+        const float WDefense = 0.02f;
+
+        /// <summary>
+        /// How the epoch was *run*, as opposed to how it came out.
+        ///
+        /// Everything above is an outcome, and outcomes hide conduct. Two colonies can close an
+        /// epoch with the same mood, food and wealth when one of them spent the fortnight
+        /// lurching between emergencies with a standing pile of misery nobody could answer —
+        /// and that is the one that dies next epoch, which the score had no way to say.
+        ///
+        /// Taken proportionally out of the other weights rather than added on top, so the score
+        /// stays in [0,1]. Scores from before this term are not directly comparable with scores
+        /// after it.
+        /// </summary>
+        const float WConduct = 0.10f;
+
+        /// <summary>Unmet mood this bad per survey counts as thoroughly mismanaged.</summary>
+        const float MiseryCeiling = 40f;
 
         /// <summary>Days of stored food that counts as fully secure.</summary>
         const float FoodSecureDays = 12f;
@@ -209,6 +288,17 @@ namespace AutoColony
             float expectedTurrets = Clamp(end.wealthTotal / 25000f, 0f, 8f);
             float defense = expectedTurrets < 0.5f ? 1f : Clamp01(end.turrets / expectedTurrets);
             breakdown.Add(new ScoreTerm("Defense", defense, WDefense));
+
+            // --- conduct: time spent in crisis, and misery with no answer ---
+            //
+            // Both come from what the director itself recorded while playing, not from the end
+            // state. A colony permanently answering something immediate is never building, and
+            // one carrying complaints it has no remedy for is losing mood it cannot recover
+            // without being taught something new.
+            float calm = Clamp01(1f - acc.EmergencyFraction);
+            float contentment = Clamp01(1f - acc.AvgUnmetComplaints / MiseryCeiling);
+            float conduct = calm * 0.5f + contentment * 0.5f;
+            breakdown.Add(new ScoreTerm("Conduct", conduct, WConduct));
 
             float score = 0f;
             for (int i = 0; i < breakdown.Count; i++) score += breakdown[i].Contribution;

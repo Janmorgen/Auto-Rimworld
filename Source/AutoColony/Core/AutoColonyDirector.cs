@@ -215,6 +215,12 @@ namespace AutoColony
                         ? evolution.Active.Get(Genes.FireResponseRadius)
                         : 45f);
                 lastMetrics = lastState.ToMetrics();
+
+                // What the planner is answering right now, carried into scoring. An outcome
+                // figure cannot tell a colony that spent the epoch building from one that spent
+                // it firefighting, and they are not equally well run.
+                lastMetrics.inEmergency = ctx.plan != null && ctx.plan.EmergencyActive;
+
                 if (settings.masterEnabled) accumulator.Observe(lastMetrics);
 
                 TrackColonists(lastState);
@@ -354,6 +360,18 @@ namespace AutoColony
             Chronicle.Record(ChronicleCategory.Learning, string.Format(
                 "epoch {0} scored {1:0.000} ({2}) — {3}",
                 evolution.epochIndex - 1, score, phaseBefore, DescribeBreakdown(breakdown)));
+
+            Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                "epoch {0} conduct — {1:0}% of it answering an emergency, {2:0.0} mood per survey " +
+                "lost to problems with no remedy{3}, {4} actions undone",
+                evolution.epochIndex - 1,
+                accumulator.EmergencyFraction * 100f,
+                accumulator.AvgUnmetComplaints,
+                string.IsNullOrEmpty(accumulator.worstComplaint)
+                    ? ""
+                    : " (worst: " + accumulator.worstComplaint + " at " +
+                      accumulator.worstComplaintMood.ToString("0.0") + ")",
+                accumulator.wastedActions));
 
             ContributeToArchive();
 

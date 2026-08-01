@@ -107,6 +107,22 @@ namespace AutoColony.Modules
         {
             unhandled.Sort();
 
+            // Hand the same finding to the scorer. The chronicle line is for whoever reads it
+            // later; this is what lets the epoch's fitness know the colony spent a fortnight
+            // miserable about something nobody had taught the director to fix.
+            if (ctx.director != null && ctx.director.accumulator != null)
+            {
+                float total = 0f, worstMood = 0f;
+                string worst = "";
+                for (int i = 0; i < unhandled.Count; i++)
+                {
+                    float mood = MoodOf(unhandled[i]);
+                    total += mood;
+                    if (mood > worstMood) { worstMood = mood; worst = NameOf(unhandled[i]); }
+                }
+                ctx.director.accumulator.NoteUnmetComplaints(total, worst, worstMood);
+            }
+
             string report = string.Format(
                 "upkeep — means {0:0.00} ({1} material), {2} defects{3}",
                 means, ctx.state.usableMaterial, defectCount,
@@ -117,6 +133,27 @@ namespace AutoColony.Modules
             if (report == lastReport) return;
             lastReport = report;
             Chronicle.Record(ChronicleCategory.Vitals, report);
+        }
+
+        /// <summary>
+        /// The mood cost out of an entry like "EnvironmentCold (-4.0)". The survey formats these
+        /// for a reader; parsing them back is cheap and keeps one list serving both purposes.
+        /// </summary>
+        static float MoodOf(string entry)
+        {
+            int open = entry.LastIndexOf('(');
+            int close = entry.LastIndexOf(')');
+            if (open < 0 || close <= open) return 0f;
+
+            float mood;
+            if (!float.TryParse(entry.Substring(open + 1, close - open - 1), out mood)) return 0f;
+            return mood < 0f ? -mood : mood;
+        }
+
+        static string NameOf(string entry)
+        {
+            int open = entry.LastIndexOf('(');
+            return open > 0 ? entry.Substring(0, open).Trim() : entry;
         }
 
         bool Apply(DirectorContext ctx, ColonyDefect defect)

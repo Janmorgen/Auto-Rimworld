@@ -29,6 +29,17 @@ namespace AutoColony
         public int turrets;
         public int fires;
 
+        /// <summary>
+        /// Whether the plan was answering something immediate at this moment — a fire, a raid,
+        /// an empty larder.
+        ///
+        /// An outcome figure cannot see this. Two colonies can finish an epoch with identical
+        /// mood, food and wealth while one of them spent the whole fortnight lurching from one
+        /// emergency to the next; that one is not being run as well, and it is the one about to
+        /// come apart.
+        /// </summary>
+        public bool inEmergency;
+
         // cumulative counters, differenced across an epoch
         public int researchFinished;
         public int cumulativeDeaths;
