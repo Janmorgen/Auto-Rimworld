@@ -198,15 +198,24 @@ namespace AutoColony
             float now = Time.realtimeSinceStartup;
             if (now - lastHeartbeatTime < HeartbeatSeconds) return;
 
-            int advanced = lastHeartbeatTick < 0 ? 0 : tick - lastHeartbeatTick;
+            // "+0 since last" is the signature of a stalled run, so the first beat after a
+            // reload must not print it — a trial rollback winds the tick backwards and would
+            // otherwise announce itself in exactly the words that mean "this game is not
+            // simulating". Two very different things had one appearance, in the one line whose
+            // whole job is telling them apart.
+            bool firstThisSession = lastHeartbeatTick < 0;
+            string progress = firstThisSession
+                ? "first beat this session"
+                : "+" + (tick - lastHeartbeatTick) + " since last";
+
             lastHeartbeatTime = now;
             lastHeartbeatTick = tick;
 
             Record(ChronicleCategory.System, string.Format(
                 CultureInfo.InvariantCulture,
-                "heartbeat {0} — tick {1} (+{2} since last){3}",
+                "heartbeat {0} — tick {1} ({2}){3}",
                 DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
-                tick, advanced,
+                tick, progress,
                 string.IsNullOrEmpty(status) ? "" : ", " + status));
             Flush();
         }
