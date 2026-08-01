@@ -119,6 +119,65 @@ namespace AutoColony.Goals
 
     }
 
+    /// <summary>
+    /// Land under cultivation, enough of it, and not all of it the same crop.
+    ///
+    /// Food arrives one of two ways and they are not equivalent. Hunting is faster and answers
+    /// an empty larder today, but it spends the colonists themselves to do it: nearly every
+    /// combat death across this project's test runs began with a colony reaching for meat
+    /// because nothing was planted, and the last-resort rule exists precisely because that
+    /// reach sometimes has to be made against an animal nobody should fight. A field carries no
+    /// such risk. It is slower, which is exactly why it belongs to the short term rather than
+    /// the immediate one — the time to plant is while there is still food in the store.
+    ///
+    /// Variety is part of the goal rather than a refinement of it. Blight takes an entire crop
+    /// at once, so a colony living off one large field is a single event from having nothing,
+    /// and staggered growing times spread the harvest instead of banking it all on one week.
+    /// </summary>
+    public class FarmGoal : ColonyGoal
+    {
+        public const string Id = "Plant fields";
+        public override string Name { get { return Id; } }
+        public override GoalHorizon Horizon { get { return GoalHorizon.ShortTerm; } }
+
+        /// <summary>Distinct crops worth having before variety stops mattering.</summary>
+        public const int WantedCrops = 2;
+
+        static int WantedCells(DirectorContext ctx)
+        {
+            return (int)(ctx.state.colonists * ctx.Gene(Genes.GrowingCellsPerColonist));
+        }
+
+        public override bool Satisfied(DirectorContext ctx)
+        {
+            int wanted = WantedCells(ctx);
+            if (wanted <= 0) return true;
+            return ctx.state.growingCells >= wanted &&
+                   ctx.state.distinctCrops >= WantedCrops;
+        }
+
+        public override float Urgency(DirectorContext ctx)
+        {
+            int wanted = WantedCells(ctx);
+            if (wanted <= 0) return 0f;
+
+            // Mostly about how much land is missing, but a colony that is also short of food
+            // wants the field sooner — that is the situation where hunting would otherwise be
+            // the only answer available.
+            float landShortfall = 1f - AcMath.Clamp01(ctx.state.growingCells / (float)wanted);
+            float hunger = 1f - AcMath.Clamp01(
+                ctx.state.daysOfFood / AcMath.Clamp(ctx.Gene(Genes.FoodDaysPerColonist), 1f, 30f));
+
+            return AcMath.Clamp01(landShortfall * 0.7f + hunger * 0.3f);
+        }
+
+        public override string Explain(DirectorContext ctx)
+        {
+            return ctx.state.growingCells + " of " + WantedCells(ctx) + " growing cells, " +
+                   ctx.state.distinctCrops + " of " + WantedCrops + " crops";
+        }
+    }
+
     /// <summary>A comfortable buffer of food rather than hand to mouth.</summary>
     public class FoodStockGoal : ColonyGoal
     {
@@ -126,6 +185,15 @@ namespace AutoColony.Goals
         public override string Name { get { return Id; } }
         public override GoalHorizon Horizon { get { return GoalHorizon.ShortTerm; } }
         public override RoomRole? WantsRoom { get { return RoomRole.Kitchen; } }
+
+        /// <summary>
+        /// Fields first. A buffer built by hunting is a buffer bought with the colonists' own
+        /// safety, and it has to be re-bought every time it runs down; a field keeps paying.
+        /// The prerequisite walk therefore turns "we want more food in store" into "plant
+        /// something" rather than into another hunt.
+        /// </summary>
+        static readonly string[] NeedsFields = { FarmGoal.Id };
+        public override string[] Requires { get { return NeedsFields; } }
 
         public override bool Satisfied(DirectorContext ctx)
         {

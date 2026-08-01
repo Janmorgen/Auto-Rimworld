@@ -28,8 +28,99 @@ namespace AutoColony.Modules
             if (!ctx.layout.established) return;
 
             EnsureGrowingZone(ctx);
+            EnsureCropVariety(ctx);
+            EnsureMedicinePlot(ctx);
             EnsureStockpile(ctx);
         }
+
+        /// <summary>
+        /// Puts a second crop in the ground once the first field exists.
+        ///
+        /// Blight destroys a whole crop at once, so a colony living off one large field of one
+        /// plant is a single event away from an empty larder — and an empty larder is what sends
+        /// colonists out to fight animals for meat, which is where most of the deaths in this
+        /// project's test runs actually came from. Different plants also ripen at different
+        /// rates, which spreads the harvest instead of staking the season on one week.
+        /// </summary>
+        void EnsureCropVariety(DirectorContext ctx)
+        {
+            if (ctx.state.growingCells <= 0) return;
+            if (ctx.state.distinctCrops >= Goals.FarmGoal.WantedCrops) return;
+
+            var map = ctx.map;
+
+            // Whatever is already in the ground; the second field must not repeat it.
+            var grown = new HashSet<string>();
+            foreach (var zone in map.zoneManager.AllZones)
+            {
+                var g = zone as Zone_Growing;
+                if (g == null) continue;
+                var plant = g.GetPlantDefToGrow();
+                if (plant != null) grown.Add(plant.defName);
+            }
+
+            var crop = ChooseCrop(ctx, grown);
+            if (crop == null) return;
+
+            int wanted = (int)(ctx.state.colonists * ctx.Gene(Genes.GrowingCellsPerColonist) * 0.4f);
+            if (wanted < 12) wanted = 12;
+
+            var cells = FindFertileCells(ctx, wanted);
+            if (cells.Count == 0) return;
+
+            var second = new Zone_Growing(map.zoneManager);
+            map.zoneManager.RegisterZone(second);
+            second.SetPlantDefToGrow(crop);
+            ctx.Credit(BanditId, crop.defName);
+            for (int i = 0; i < cells.Count; i++) second.AddCell(cells[i]);
+
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "second crop planted: {0} across {1} cells, so one blight cannot empty the larder",
+                crop.label ?? crop.defName, cells.Count));
+        }
+
+        /// <summary>
+        /// A herbal medicine plot.
+        ///
+        /// Healroot is the one crop that is not food and still keeps colonists alive. Without it
+        /// a colony treats wounds with nothing at all until it can buy or make real medicine,
+        /// and every infection is then a coin toss — which matters here more than it looks,
+        /// because a colonist who dies of an untreated wound is also the colonist who was going
+        /// to tend everyone else. It needs no research and grows on ordinary soil.
+        /// </summary>
+        void EnsureMedicinePlot(DirectorContext ctx)
+        {
+            var healroot = AcDefs.Thing("Plant_HealrootWild") ?? AcDefs.Thing("Plant_Healroot");
+            if (healroot == null || healroot.plant == null || !healroot.plant.Sowable) return;
+            if (!PlacementUtil.ResearchDone(healroot)) return;
+
+            var map = ctx.map;
+            foreach (var zone in map.zoneManager.AllZones)
+            {
+                var g = zone as Zone_Growing;
+                if (g == null) continue;
+                var plant = g.GetPlantDefToGrow();
+                if (plant != null && plant.defName == healroot.defName) return;   // already have one
+            }
+
+            // Only once the colony is feeding itself. Medicine matters, but not before dinner.
+            if (ctx.state.growingCells <= 0) return;
+
+            var cells = FindFertileCells(ctx, MedicinePlotCells);
+            if (cells.Count == 0) return;
+
+            var plot = new Zone_Growing(map.zoneManager);
+            map.zoneManager.RegisterZone(plot);
+            plot.SetPlantDefToGrow(healroot);
+            for (int i = 0; i < cells.Count; i++) plot.AddCell(cells[i]);
+
+            Chronicle.Record(ChronicleCategory.Economy,
+                "healroot plot sown across " + cells.Count + " cells — herbal medicine without " +
+                "research or a trader, so wounds stop being treated with nothing");
+        }
+
+        /// <summary>Enough healroot to keep a small colony in herbal medicine, not a cash crop.</summary>
+        const int MedicinePlotCells = 24;
 
         // ------------------------------------------------------------ growing
 
@@ -109,10 +200,23 @@ namespace AutoColony.Modules
             return false;
         }
 
-        ThingDef ChooseCrop(DirectorContext ctx)
+        ThingDef ChooseCrop(DirectorContext ctx) { return ChooseCrop(ctx, null); }
+
+        /// <summary>
+        /// Picks something to sow, optionally excluding what is already in the ground.
+        ///
+        /// The list is deliberately wider than rice. Rice is fastest and yields least, corn is
+        /// the reverse, potatoes tolerate poor soil — which is best depends on the biome, the
+        /// season and how hungry the colony is, so it stays a bandit arm rather than a constant.
+        /// What is filtered out is only what cannot be sown here at all: unresearched crops, and
+        /// ones needing a grower better than anyone the colony has.
+        /// </summary>
+        ThingDef ChooseCrop(DirectorContext ctx, HashSet<string> exclude)
         {
             var candidates = new List<string>();
             var byName = new Dictionary<string, ThingDef>();
+
+            int bestGrowing = BestGrowingSkill(ctx);
 
             var all = DefDatabase<ThingDef>.AllDefsListForReading;
             for (int i = 0; i < all.Count; i++)
@@ -120,9 +224,16 @@ namespace AutoColony.Modules
                 var def = all[i];
                 if (def.plant == null || !def.plant.Sowable) continue;
                 if (def.plant.harvestedThingDef == null) continue;
-                // Food crops only; drugs and textiles are managed elsewhere.
+                // Food crops only; drugs and textiles are managed elsewhere. Healroot has its
+                // own plot, since it is medicine rather than dinner.
                 if (!def.plant.harvestedThingDef.IsNutritionGivingIngestible) continue;
-                if (def.plant.sowMinSkill > 6) continue;
+
+                // Skill and research are hard limits, not preferences: a crop nobody can sow is
+                // a field that stays bare, and the colony would never find out why.
+                if (def.plant.sowMinSkill > bestGrowing) continue;
+                if (!PlacementUtil.ResearchDone(def)) continue;
+
+                if (exclude != null && exclude.Contains(def.defName)) continue;
 
                 candidates.Add(def.defName);
                 byName[def.defName] = def;
@@ -133,6 +244,21 @@ namespace AutoColony.Modules
             var bandit = ctx.director.BanditFor(BanditId);
             string pick = bandit.Select(candidates, ctx.Gene(Genes.ResearchExplore));
             return pick != null && byName.ContainsKey(pick) ? byName[pick] : null;
+        }
+
+        /// <summary>The best Plants skill in the colony, which is what caps what can be sown.</summary>
+        static int BestGrowingSkill(DirectorContext ctx)
+        {
+            int best = 0;
+            var colonists = ctx.state.allColonists;
+            for (int i = 0; i < colonists.Count; i++)
+            {
+                var pawn = colonists[i];
+                if (pawn == null) continue;
+                int level = CombatAssessment.SkillLevel(pawn, SkillDefOf.Plants);
+                if (level > best) best = level;
+            }
+            return best;
         }
 
         // ------------------------------------------------------------ stockpile

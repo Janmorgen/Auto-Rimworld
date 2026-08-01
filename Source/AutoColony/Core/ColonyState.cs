@@ -127,6 +127,19 @@ namespace AutoColony
         /// </summary>
         public int itemsOutdoors;
 
+        /// <summary>
+        /// Cells the colony has under cultivation, and how many distinct crops are growing in
+        /// them.
+        ///
+        /// A field is the only food supply that does not have to be fought for. Hunting answers
+        /// hunger faster but spends the colonists themselves to do it, and most of the combat
+        /// deaths in this project's test runs trace back to a colony reaching for meat because
+        /// nothing was planted. The variety matters separately: blight takes a whole crop at
+        /// once, so a colony living off a single field is one event from an empty larder.
+        /// </summary>
+        public int growingCells;
+        public int distinctCrops;
+
         // --- research ---
         public int researchFinished;
         public bool hasResearchBench;
@@ -375,6 +388,8 @@ namespace AutoColony
                 CapturePower(s, lister);
             }
 
+            CaptureFields(s, map);
+
             var things = map.listerThings;
             if (things != null)
             {
@@ -404,6 +419,30 @@ namespace AutoColony
         /// enough for a generator: a roofed solar panel reports on and produces nothing, which is
         /// exactly the failure this was written to make visible.
         /// </summary>
+        /// <summary>
+        /// What the colony has planted, counted in cells rather than zones — one large field and
+        /// three small ones feed the same number of people, and the goal layer cares about the
+        /// area under cultivation.
+        /// </summary>
+        static void CaptureFields(ColonyState s, Map map)
+        {
+            var zones = map.zoneManager != null ? map.zoneManager.AllZones : null;
+            if (zones == null) return;
+
+            var crops = new HashSet<string>();
+            for (int i = 0; i < zones.Count; i++)
+            {
+                var grow = zones[i] as Zone_Growing;
+                if (grow == null) continue;
+
+                s.growingCells += grow.Cells.Count;
+
+                var plant = grow.GetPlantDefToGrow();
+                if (plant != null) crops.Add(plant.defName);
+            }
+            s.distinctCrops = crops.Count;
+        }
+
         static void CapturePower(ColonyState s, ListerBuildings lister)
         {
             var coolerDef = AcDefs.Cooler;
