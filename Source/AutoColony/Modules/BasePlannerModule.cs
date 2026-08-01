@@ -100,6 +100,30 @@ namespace AutoColony.Modules
                         Note("re-queuing lost walls for " + room.role + " room");
                         return;
                     }
+
+                    // Somewhere to sleep does not need walls.
+                    //
+                    // Everything else here waits for the shell for a reason — a stove or a
+                    // generator standing in the rain is a fire, which is a trap this codebase
+                    // has already paid for once. A bed is not. Meanwhile the wait costs about
+                    // -11 mood a survey in SleptOnGround, SleptOutside and NeedComfort, from the
+                    // first night until the walls close, which measured one to two full days
+                    // across these runs and killed a colony outright at 0.00 mood.
+                    //
+                    // Beds are a bedroom's only furniture, so furnishing it early leaves nothing
+                    // to add later and needs no extra bookkeeping: the shell carries on being
+                    // built around them.
+                    if (room.role == RoomRole.Bedroom &&
+                        ctx.state.colonistBeds < ctx.state.colonists)
+                    {
+                        QueueFurniture(ctx, room);
+                        room.furnitureQueued = true;
+                        Chronicle.Record(ChronicleCategory.Build,
+                            "beds queued in the bedroom before its walls are up — sleeping on the " +
+                            "ground costs mood every night and a bed does not need a roof to help");
+                        return;
+                    }
+
                     continue;
                 }
 
