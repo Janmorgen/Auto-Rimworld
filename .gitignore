@@ -14,3 +14,6 @@ Assemblies/*.pdb
 # Test build output
 Tests/**/bin/
 Tests/**/obj/
+
+# Claude Code local state: worktrees and personal settings
+.claude/

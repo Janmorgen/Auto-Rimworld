@@ -9,7 +9,7 @@ Branch `feat/autonomous-colony-director`, pushed, **not merged to `main`**. `mai
 original HelloWorld template commit. Merge with `git checkout main && git merge --ff-only
 feat/autonomous-colony-director` when you want it there.
 
-The mod runs in RimWorld 1.6.4871. 71 offline tests pass. It has been played against generated
+The mod runs in RimWorld 1.6.4871. 97 offline tests pass. It has been played against generated
 colonies and against a real save (`AutoColony_trial_baseline`, the colony "Botein-IV").
 
 ## The direction this was heading
@@ -33,6 +33,28 @@ free of game types, so it is covered offline.
 
 **If you extend this, add goals rather than special cases in modules.** The arbitration is
 worth keeping in one place.
+
+## Defects — the other half of that
+
+Goals say what the colony *lacks*. `Core/Upkeep/` says what it *has wrong*, which nothing covered
+before: every construction path only ever added, and the one repair path fired only when a room's
+key furniture was missing. A stove standing in the rain is not missing.
+
+`DefectSurvey` names specific targets — a `Thing` or a `Room`, never a tally — and draws on two
+sources. The colonists' own thoughts say what is costing mood, so the colony answers its measured
+experience rather than a rule someone guessed. Direct inspection catches what nobody complains
+about because it has not hurt yet; an unroofed generator costs nothing until it rains.
+
+**Complaints it cannot fix are reported, not dropped.** That list is the to-do list — a live run
+named `EnvironmentCold`, `AteWithoutTable`, `NeedComfort`, `NeedBeauty` and
+`NightOwlDuringTheDay`. Adding a case is a row in `Complaints` plus a `RemedyKind`.
+
+**Sharing is not a fault.** `BuildingMeans` scales the whole question on material per colonist: a
+destitute colony puts every bed in one room and is not nagged about it, a comfortable one
+separates them. The converse matters as much — a colony that built out and then fell on hard
+times is not short of resources, it is standing inside them, so `Reclaim` takes surplus rooms back
+down for the ~120 units of material in each shell. The two are mutually exclusive by test;
+without that the colony would oscillate between spreading out and consolidating forever.
 
 ## Verified in game
 
@@ -97,16 +119,21 @@ long enough to do the whole thing in one go.
 
 ## What to do next, roughly in order
 
-1. **Apparel and heating.** A cold snap still has no answer: no warm clothes are crafted or
-   assigned, no heaters exist. This killed a colony once already and is the largest survival
-   gap. It is now cheap: `Heater` needs only Electricity, so this is a goal requiring `Power`
-   with `RequiresResearch` of Electricity, plus a capability check on a *working* heater — and
-   `PowerChainSelfTest` already has the probe harness to prove it without playing a colony into
-   a cold snap.
-2. **Cut the search's dimensionality.** ~50 genes against tens of epochs. A live colony
+1. **Apparel and heating.** Still the largest survival gap, and now confirmed by the colony
+   itself rather than by argument: `EnvironmentCold (-4.0)` came top of the unfixable-complaints
+   list on a live run. `Heater` needs only Electricity, so this is a goal requiring `Power` with
+   `RequiresResearch` of Electricity, a capability check on a *working* heater, and an
+   `EnvironmentCold` row in `Complaints`. The probe harness proves it without playing a colony
+   into a cold snap.
+2. **The rest of what the colony asked for.** The same run named `AteWithoutTable` (no dining
+   table), `NeedComfort` (nothing comfortable to sit on), `NeedBeauty`, and
+   `NightOwlDuringTheDay` — that last one a scheduling problem rather than a building one, which
+   is worth noting because it shows the survey finds things no construction module could fix.
+   Each is a row in `Complaints` plus a remedy.
+3. **Cut the search's dimensionality.** ~50 genes against tens of epochs. A live colony
    measured score noise at ±0.061, roughly three times the ~0.02 where offline tests show the
    sequential search going flat. Grouping work-type weights by category is the obvious cut.
-3. **Combat positioning.** Everyone rallies to one point; no cover, no chokepoints, and no
+4. **Combat positioning.** Everyone rallies to one point; no cover, no chokepoints, and no
    doctor held back when someone is downed.
 
 ## Traps worth knowing before you touch it
@@ -128,6 +155,12 @@ long enough to do the whole thing in one go.
   colony has researched, so the first one always wins and the rest are dead code. It cost the
   colony its early kitchen. Choose on capability — researched, powered, affordable — not on the
   def existing.
+- **Neighbouring rooms share a wall on purpose.** The layout budges them together to keep the
+  base cheap, so anything demolishing a room cell by cell will breach the room next door and
+  open it to the sky unless it skips cells another room also claims.
+- **A pending blueprint is not a destroyed building.** Any "this is missing, re-place it" check
+  has to treat a `Blueprint` or `Frame` as present, and has to scan the room's *interior* —
+  furniture stands inside, so a walls-only guard re-queues every pass and places duplicates.
 - **Rain sets unroofed electrical things on fire**, via `ShortCircuitUtility`, and adds an
   explosion when the net holds charged batteries. Conduit run across open ground is the usual
   victim, so this is a hazard the director manufactures. `FireRisk` used to treat rain as pure
@@ -145,7 +178,7 @@ long enough to do the whole thing in one go.
 
 ```bash
 cd Source/AutoColony && dotnet build          # → Assemblies/AutoColony.dll
-cd Tests/AutoColony.Tests && dotnet test      # 71 tests, learning layer and goal plumbing
+cd Tests/AutoColony.Tests && dotnet test      # 97 tests, learning layer, goals and upkeep policy
 ```
 
 Offline tests cover anything free of `Map` and `Pawn`; everything else needs a colony. Launch
