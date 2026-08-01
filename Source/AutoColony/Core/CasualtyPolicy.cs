@@ -53,5 +53,39 @@ namespace AutoColony
             if (downedColonists <= 0 || ableFighters <= 0) return 1f;
             return 1f + (float)downedColonists / ableFighters;
         }
+
+        /// <summary>
+        /// The advantage worth having before abandoning a defensible position.
+        ///
+        /// Half again the enemy's strength. A doorway is worth a great deal — raiders have to
+        /// come through it one at a time, into prepared fire — and giving that up for an even
+        /// fight is a poor trade whatever the raw numbers say.
+        /// </summary>
+        public const float MinimumToLeaveCover = 1.5f;
+
+        /// <summary>
+        /// The advantage the colony insists on before meeting a threat in the open.
+        ///
+        /// Answering a raid is never optional, but meeting it *outside* is — and it is elective
+        /// exactly when there is somewhere better to meet it. Hunting has always been judged
+        /// this way, a comfortable colony demanding roughly two to one before an elective fight;
+        /// defence was judged on a bare gene whose default lets a colony charge a threat three
+        /// times its strength. One did, at 0.68 against a bar of 0.35, and three of its four
+        /// colonists were on the floor within the hour.
+        ///
+        /// With nowhere to withdraw to the gene stands unaltered, because a colony with no walls
+        /// yet is not choosing between two options — the fight is coming to it either way.
+        /// </summary>
+        /// The floor is applied first and the casualty multiplier on top of it, not the other way
+        /// round. Taking the larger of the two would let the floor swallow the multiplier — a
+        /// colony with three of four down would demand no more than one with nobody down, which
+        /// is the opposite of the point.
+        public static float RequiredAdvantage(float geneRatio, int ableFighters,
+                                              int downedColonists, bool hasRefuge)
+        {
+            float required = geneRatio;
+            if (hasRefuge && required < MinimumToLeaveCover) required = MinimumToLeaveCover;
+            return required * EngagementCaution(ableFighters, downedColonists);
+        }
     }
 }

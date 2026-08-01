@@ -260,11 +260,16 @@ namespace AutoColony.Modules
             // between it and nobody left to tend or feed anyone, so they hold cover on odds they
             // would have met in the open at full strength.
             float caution = CasualtyPolicy.EngagementCaution(fighters.Count, ctx.state.colonistsDowned);
-            float required = ctx.Gene(Genes.DefenseEngageRatio) * caution;
+            var refuge = Refuge(ctx);
+            bool hasRefuge = refuge.IsValid && refuge != RallyPoint(ctx);
+
+            float required = CasualtyPolicy.RequiredAdvantage(
+                ctx.Gene(Genes.DefenseEngageRatio), fighters.Count,
+                ctx.state.colonistsDowned, hasRefuge);
 
             bool winnable = threat <= 0f || strength / threat >= required;
 
-            var rally = winnable ? RallyPoint(ctx) : Refuge(ctx);
+            var rally = winnable ? RallyPoint(ctx) : refuge;
             float retreatAt = ctx.Gene(Genes.DefenseRetreatHealth);
             int mobilised = 0;
 
@@ -330,7 +335,7 @@ namespace AutoColony.Modules
                     caution > 1f
                         ? " (" + ctx.state.colonistsDowned + " already down, so the bar is " +
                           caution.ToString("0.0") + "x higher)"
-                        : "",
+                        : (hasRefuge ? " (a room to hold, so the open is elective)" : ""),
                     winnable ? "" : " — not worth meeting in the open, holding the base instead"));
             }
         }

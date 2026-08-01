@@ -200,6 +200,38 @@ namespace AutoColony.Tests
         }
 
         [Fact]
+        public void ARoomToHoldMakesTheOpenElective()
+        {
+            // The fight that lost run 7: a 0.68x advantage cleared a bare gene bar of 0.35 and
+            // downed three of four colonists. With a room to withdraw into it is refused.
+            float required = CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, hasRefuge: true);
+            Assert.True(0.68f < required);
+            Assert.Equal(CasualtyPolicy.MinimumToLeaveCover, required, 3);
+        }
+
+        [Fact]
+        public void WithNowhereToWithdrawToTheGeneStands()
+        {
+            // A colony with no walls yet is not choosing between two options.
+            Assert.Equal(0.35f, CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, hasRefuge: false), 3);
+            Assert.True(0.68f > CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, hasRefuge: false));
+        }
+
+        [Fact]
+        public void AStrategyBolderThanTheCoverFloorIsNotHeldBackByIt()
+        {
+            // The floor is a minimum, not an override — a gene demanding more still demands it.
+            Assert.Equal(3f, CasualtyPolicy.RequiredAdvantage(3f, 4, 0, hasRefuge: true), 3);
+        }
+
+        [Fact]
+        public void CasualtiesStillRaiseTheBarAboveTheCoverFloor()
+        {
+            Assert.True(CasualtyPolicy.RequiredAdvantage(0.35f, 1, 3, hasRefuge: true) >
+                        CasualtyPolicy.MinimumToLeaveCover);
+        }
+
+        [Fact]
         public void TheBarRisesWithHowMuchOfTheColonyIsAlreadyDown()
         {
             Assert.True(CasualtyPolicy.EngagementCaution(2, 1) < CasualtyPolicy.EngagementCaution(1, 1));
