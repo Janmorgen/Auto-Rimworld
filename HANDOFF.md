@@ -55,13 +55,59 @@ The observation work went in first, and it earned its keep in the same session:
 Offline tests: 134 → 165. Two of the new ones were written after the behaviour they describe was
 watched failing in game.
 
+## Then: systems the director could not see at all
+
+A second pass compared RimWorld's own `Data/Core/Defs` categories, and the wiki, against every
+system this codebase references. Whole categories had zero coverage. What went in, roughly in
+order of how tightly each was coupled to an observed death:
+
+- **Farming as a goal.** Food arrives two ways and they are not equivalent: hunting spends the
+  colonists themselves, and nearly every combat death this session began with a colony reaching
+  for meat because nothing was planted. `FarmGoal` is short-term and `FoodStockGoal` requires it,
+  so "we want more food" resolves into "plant something" rather than another hunt. Two distinct
+  crops, because blight takes a whole crop at once. Healroot for herbal medicine — no research,
+  ordinary soil, but Plants 8, which a three-colonist start usually lacks and now says so.
+- **Game conditions.** Toxic fallout, solar flare, eclipse, cold snap, heat wave, volcanic
+  winter, flashstorm — none of them changed behaviour by a line. Fallout inverts the correct
+  play: it poisons anything not under a roof, so elective outdoor work stops and everyone is
+  confined to a roofed allowed area, released the moment it passes.
+- **Temperature, and clothing.** Comfortable is 16–26°C; ten degrees past either edge is
+  hypothermia or heatstroke, fatal at full severity. Cold had one answer (a heater needing a
+  generator) so a pre-power colony had none — a campfire needs neither power nor research. Heat
+  was mapped to nothing at all. And apparel was missing at four links at once: no tailor bench,
+  apparel worth zero in `DesiredCount`, no material preference, and the good garments behind
+  Complex Clothing that nothing had reason to research.
+- **Medical.** A downed colonist cannot be rescued without a free bed, and bed rest multiplies
+  immunity gain while an untended infection races immunity to 100%. The colonies that died
+  "everyone down, `beds 0`" were dying of that; it had been read as a mood problem.
+- **Sieges.** Besiegers build mortars at range and do not come to the door, so the cover rule
+  added earlier the same day is actively wrong against them and is now suppressed during one.
+- **Wealth drives raid points.** Building buys larger attacks. `ThreatForecast` interpolates the
+  published anchors and compares against real fighting strength, so Fortify urgency reflects
+  whether the colony is winning or losing that race rather than merely how rich it is.
+
+### Verifying what a test colony cannot reach
+
+A `-quicktest` colony lives about a week in a temperate biome, so it can never see a freezing
+winter, and the game will not raise toxic fallout before day 60. `PowerChainSelfTest` was
+extended to construct those states directly, and immediately earned it: the clothing goal was
+**inert**, because `Satisfied` asked whether a workshop existed rather than whether anyone was
+warm. Adding the probes also exposed that new short-term goals with no defaults in the probe
+fixture had silently rerouted every power probe in the file — all still passing, testing nothing.
+
+**Three separate versions of the same fault turned up in one day**: a fitness term that scored
+exactly zero forever, a goal that could never fire, and probes that no longer probed. None
+failed; all reported success. When a number never moves across runs, that is the symptom.
+
+Offline tests: 165 → 193.
+
 ## Where things stand
 
 Branch `feat/autonomous-colony-director`, pushed, **not merged to `main`**. `main` is still the
 original HelloWorld template commit. Merge with `git checkout main && git merge --ff-only
 feat/autonomous-colony-director` when you want it there.
 
-The mod runs in RimWorld 1.6.4871. 165 offline tests pass. It has been played against generated
+The mod runs in RimWorld 1.6.4871. 193 offline tests pass. It has been played against generated
 colonies and against a real save (`AutoColony_trial_baseline`, the colony "Botein-IV").
 
 ## The direction this was heading
@@ -234,8 +280,6 @@ slow, so it is worth fixing first.
 - **Touch the schedule at all.** `NightOwlDuringTheDay (-10)` is one of the largest recurring
   penalties and is fixable purely by assigning that colonist a night shift. The schedule tab is
   untouched by any module.
-- **Craft or assign apparel.** `ApparelDamaged`, `SoakingWet` and `EnvironmentCold` recur in
-  every cycle's unmet list.
 - **Answer a kidnapping.** A downed colonist carried off by raiders is simply gone; there is no
   pursuit and no ransom.
 - **Route conduit under cover.** The director lays long runs across open ground, which
@@ -246,9 +290,6 @@ slow, so it is worth fixing first.
 
 ## What to do next, roughly in order
 
-1. **Apparel.** Warm clothes are still never crafted or assigned. Heating landed (a `Heater`
-   remedy gated on a working generator) but clothing did not, and a cold snap is answered only
-   indoors.
 2. **The rest of what the colony asks for.** Burial, recreation, tables and heating are done.
    Still unanswered on the live list: `NeedComfort` (chairs need `ComplexFurniture` research),
    `NeedRoomSize`, `SleepDisturbed`, `NightOwlDuringTheDay` (a scheduling problem, not a building
