@@ -90,9 +90,21 @@ namespace AutoColony.Modules
         /// </summary>
         void EnsureMedicinePlot(DirectorContext ctx)
         {
-            var healroot = AcDefs.Thing("Plant_HealrootWild") ?? AcDefs.Thing("Plant_Healroot");
+            // `Plant_Healroot`, named outright rather than picked with `??` from a list.
+            //
+            // The first version wrote `Thing("Plant_HealrootWild") ?? Thing("Plant_Healroot")`,
+            // which is the fallback trap this codebase already documents and had already been
+            // bitten by once: the wild def resolves perfectly well, so `??` never reaches the
+            // second name — and the wild variant is not sowable, so the whole method returned
+            // early every pass and no medicine was ever planted. `??` chooses on a def existing,
+            // never on it being usable.
+            var healroot = AcDefs.Thing("Plant_Healroot");
             if (healroot == null || healroot.plant == null || !healroot.plant.Sowable) return;
             if (!PlacementUtil.ResearchDone(healroot)) return;
+
+            // Healroot needs Plants 8. Sowing it with nobody able to is a zone that stays bare
+            // and says nothing about why — the same failure the crop filter was fixed for.
+            if (BestGrowingSkill(ctx) < healroot.plant.sowMinSkill) return;
 
             var map = ctx.map;
             foreach (var zone in map.zoneManager.AllZones)
