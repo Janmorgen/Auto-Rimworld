@@ -61,6 +61,18 @@ namespace AutoColony
         }
 
         /// <summary>
+        /// Marks the chronicle with which trial is speaking, or clears it for live play. Every
+        /// line a trial writes is about a world that is going to be thrown away, and that has to
+        /// be visible to anyone — or anything — reading the log as it happens.
+        /// </summary>
+        static void MarkChronicle()
+        {
+            Chronicle.Tag = Active && Candidates != null && Candidates.Count > 0
+                ? "trial " + (TrialIndex + 1) + "/" + Candidates.Count
+                : "";
+        }
+
+        /// <summary>
         /// Training repeatedly reloads the game, which is incompatible with permadeath and
         /// pointless without a colony to snapshot.
         /// </summary>
@@ -111,6 +123,11 @@ namespace AutoColony
             ReloadPending = false;
 
             ApplyTrialSeed();
+            MarkChronicle();
+
+            Chronicle.Record(ChronicleCategory.Learning, "training round " + RoundIndex +
+                             " begins: " + Candidates.Count + " candidates on seed " + TrialSeed +
+                             " — everything below until the round ends is an experiment");
 
             AcLog.Message("Training round " + RoundIndex + " begins: " + Candidates.Count +
                           " candidates on seed " + TrialSeed + ".");
@@ -154,6 +171,7 @@ namespace AutoColony
                           " scored " + score.ToString("0.000"));
 
             TrialIndex++;
+            MarkChronicle();
             if (TrialIndex < Candidates.Count) return false;
 
             // Round complete: pick the best-scoring candidate.
@@ -182,6 +200,7 @@ namespace AutoColony
             TrialIndex = 0;
             Candidates = new List<StrategyGenome>();
             Scores = new List<float>();
+            MarkChronicle();
         }
 
         /// <summary>
@@ -215,7 +234,61 @@ namespace AutoColony
         public static void OnGameLoaded()
         {
             ReloadPending = false;
-            if (Active) ApplyTrialSeed();
+            MarkChronicle();
+            if (!Active) return;
+
+            ApplyTrialSeed();
+            Chronicle.Record(ChronicleCategory.Learning,
+                             "trial begins — " + DescribeDivergence());
+        }
+
+        /// <summary>
+        /// Names the genes this candidate holds furthest from the incumbent's.
+        ///
+        /// Candidates were visibly behaving differently over the overnight run — one engaged at
+        /// a 0.375 ratio where another withdrew from the same raid — and nothing anywhere said
+        /// *which* number caused it, so the behaviour could never be traced back to the search.
+        /// Candidate 0 is always the incumbent, which makes it the reference every other
+        /// candidate is a perturbation of.
+        /// </summary>
+        static string DescribeDivergence()
+        {
+            var candidate = CurrentCandidate;
+            if (candidate == null || Candidates.Count == 0) return "no candidate";
+            if (TrialIndex == 0) return "the incumbent, unchanged";
+
+            var incumbent = Candidates[0];
+            if (incumbent == null) return "no incumbent to compare against";
+
+            var specs = Genes.All;
+            var scored = new List<KeyValuePair<string, float>>();
+            for (int i = 0; i < specs.Count; i++)
+            {
+                var spec = specs[i];
+                if (spec == null || spec.Range <= 0f) continue;
+
+                // Normalised by the gene's own range, so a food target in days and a ratio in
+                // the unit interval can be ranked against each other.
+                float delta = (candidate.Get(spec.Key) - incumbent.Get(spec.Key)) / spec.Range;
+                if (delta < 0f) delta = -delta;
+                if (delta < 0.01f) continue;
+                scored.Add(new KeyValuePair<string, float>(spec.Key, delta));
+            }
+
+            if (scored.Count == 0) return "identical to the incumbent";
+            scored.Sort((a, b) => b.Value.CompareTo(a.Value));
+
+            var sb = new System.Text.StringBuilder("differs from the incumbent most in ");
+            int n = scored.Count < 3 ? scored.Count : 3;
+            for (int i = 0; i < n; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                string name = scored[i].Key;
+                sb.Append(name).Append(' ')
+                  .Append(incumbent.Get(name).ToString("0.###")).Append(" → ")
+                  .Append(candidate.Get(name).ToString("0.###"));
+            }
+            return sb.ToString();
         }
 
         /// <summary>Abandons training entirely, e.g. when the player switches it off.</summary>

@@ -215,6 +215,9 @@ namespace AutoColony
 
             int tick = Find.TickManager.TicksGame;
 
+            // Throttled inside, so calling it per tick costs one comparison.
+            Chronicle.Heartbeat(tick, HeartbeatStatus());
+
             if (tick - lastStateTick >= StateInterval)
             {
                 lastStateTick = tick;
@@ -306,6 +309,19 @@ namespace AutoColony
         }
 
         /// <summary>
+        /// The shortest useful description of what the run is doing, for the heartbeat. Enough
+        /// that a watcher seeing one line every two minutes knows whether to look closer.
+        /// </summary>
+        string HeartbeatStatus()
+        {
+            return string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "day {0}, {1} colonists, {2:0.0}d food, {3}",
+                lastMetrics.day, lastMetrics.colonists, lastMetrics.daysOfFood,
+                TrainingSession.Active ? TrainingSession.StatusLine : "playing live");
+        }
+
+        /// <summary>
         /// Runs at most one due module per tick. Spreading the work this way keeps the
         /// director's per-tick cost flat as modules are added.
         /// </summary>
@@ -391,9 +407,15 @@ namespace AutoColony
                 evolution.epochIndex - 1, score, phaseBefore,
                 evolution.incumbentScore, evolution.sigma, evolution.Incumbent.generation));
 
+            // How much epoch there was, alongside what it scored. The degenerate-epoch bug —
+            // 58 of 62 scores identical, because every trial re-scored an epoch that had already
+            // elapsed — was only caught because those scores shared a timestamp. Carrying the
+            // sample count and elapsed days would have made it obvious on the first line.
             Chronicle.Record(ChronicleCategory.Learning, string.Format(
-                "epoch {0} scored {1:0.000} ({2}) — {3}",
-                evolution.epochIndex - 1, score, phaseBefore, DescribeBreakdown(breakdown)));
+                "epoch {0} scored {1:0.000} ({2}) over {3} days from {4} samples — {5}",
+                evolution.epochIndex - 1, score, phaseBefore,
+                lastMetrics.day - epochStart.day, accumulator.samples,
+                DescribeBreakdown(breakdown)));
 
             Chronicle.Record(ChronicleCategory.Learning, string.Format(
                 "epoch {0} conduct — {1:0}% of it answering an emergency, {2:0.0} mood per survey " +
@@ -527,8 +549,13 @@ namespace AutoColony
 
             AcLog.Message("Colony lost on day " + lastMetrics.day + ". Strategy scored " +
                           score.ToString("0.000") + "; recorded so the search learns from it.");
-            Chronicle.Record(ChronicleCategory.Death, "COLONY LOST — no colonists remain. Final score " +
-                             score.ToString("0.000") + " — " + DescribeBreakdown(breakdown));
+
+            // The cause, not just the score. Everything needed to say why was already in memory
+            // at this moment and used to be thrown away, so every post-mortem was reconstructed
+            // by hand from the preceding fifty lines of log.
+            Chronicle.Record(ChronicleCategory.Death, Postmortem.Describe(LossEvidenceNow()));
+            Chronicle.Record(ChronicleCategory.Death, "final score " + score.ToString("0.000") +
+                             " — " + DescribeBreakdown(breakdown));
             Chronicle.Flush();
 
             if (TrainingSession.Active)
@@ -539,6 +566,26 @@ namespace AutoColony
 
             evolution.OnEpochComplete(score, lastMetrics.day);
             ContributeToArchive();
+        }
+
+        /// <summary>Gathers what is known about the colony at the moment it ended.</summary>
+        LossEvidence LossEvidenceNow()
+        {
+            var e = new LossEvidence();
+            e.day = lastMetrics.day;
+            e.samples = accumulator.samples;
+            e.daysOfFood = lastMetrics.daysOfFood;
+            e.minDaysOfFood = accumulator.samples > 0 ? accumulator.minDaysOfFood : lastMetrics.daysOfFood;
+            e.avgMood = accumulator.AvgMood;
+            e.avgHealth = accumulator.AvgHealth;
+            e.downedFraction = accumulator.DownedFraction;
+            e.fireFraction = accumulator.FireFraction;
+            e.mentalBreakFraction = accumulator.MentalBreakFraction;
+            e.deaths = accumulator.DeathsThisEpoch;
+            e.raids = accumulator.RaidsThisEpoch;
+            e.worstComplaint = accumulator.worstComplaint;
+            e.worstComplaintMood = accumulator.worstComplaintMood;
+            return e;
         }
 
         /// <summary>

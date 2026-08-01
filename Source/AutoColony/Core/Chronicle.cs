@@ -34,6 +34,12 @@ namespace AutoColony
         public ChronicleCategory category;
         public string message;
 
+        /// <summary>
+        /// What this line belongs to, when it is not the colony being played — currently
+        /// "trial 2/4". Empty for ordinary live play.
+        /// </summary>
+        public string tag;
+
         public string Stamp
         {
             get { return "day " + day + " " + hour.ToString("00") + "h"; }
@@ -41,7 +47,9 @@ namespace AutoColony
 
         public override string ToString()
         {
-            return Stamp.PadRight(12) + category.ToString().ToUpperInvariant().PadRight(9) + message;
+            return Stamp.PadRight(12)
+                 + (string.IsNullOrEmpty(tag) ? "" : "[" + tag + "] ")
+                 + category.ToString().ToUpperInvariant().PadRight(9) + message;
         }
     }
 
@@ -87,6 +95,17 @@ namespace AutoColony
         static readonly List<string> pending = new List<string>();
         static bool headerWritten;
 
+        /// <summary>
+        /// Marks every line written while something other than the live colony is being played.
+        ///
+        /// A training trial is indistinguishable from the real colony in the record, and
+        /// "COLONY LOST" appeared sixteen times in one overnight run — every one of which had
+        /// to be checked by hand against whether a reload followed, to tell a deliberate
+        /// experiment from a disaster worth intervening in. That check very nearly produced a
+        /// wrong intervention, so the distinction belongs on the line itself.
+        /// </summary>
+        public static string Tag = "";
+
         public static IReadOnlyList<ChronicleEntry> Recent { get { return recent; } }
 
         public static string FilePath
@@ -114,6 +133,7 @@ namespace AutoColony
             var entry = new ChronicleEntry();
             entry.category = category;
             entry.message = message;
+            entry.tag = Tag;
 
             try
             {
@@ -154,6 +174,43 @@ namespace AutoColony
                 m.daysOfFood, m.wealthTotal, m.colonistBeds, m.fires));
         }
 
+        /// <summary>Real seconds between heartbeats.</summary>
+        const float HeartbeatSeconds = 120f;
+
+        static float lastHeartbeatTime = float.NegativeInfinity;
+        static int lastHeartbeatTick = -1;
+
+        /// <summary>
+        /// Says the run is still alive, on a wall-clock schedule, whatever else is happening.
+        ///
+        /// Nothing in the record distinguished "quiet" from "stopped": entries carry in-game
+        /// stamps only, so a stalled process and a healthy uneventful colony look identical from
+        /// outside, and a monitor matching on process name alone reported a dead game as healthy
+        /// for half an hour. Carrying the wall clock and the tick together answers both halves —
+        /// a stale timestamp means the process is gone, a fresh one with an unchanged tick means
+        /// it is up but not simulating.
+        ///
+        /// The cadence is unconditional on purpose. A heartbeat that only fired when the log was
+        /// otherwise quiet would make its own absence ambiguous again.
+        /// </summary>
+        public static void Heartbeat(int tick, string status)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now - lastHeartbeatTime < HeartbeatSeconds) return;
+
+            int advanced = lastHeartbeatTick < 0 ? 0 : tick - lastHeartbeatTick;
+            lastHeartbeatTime = now;
+            lastHeartbeatTick = tick;
+
+            Record(ChronicleCategory.System, string.Format(
+                CultureInfo.InvariantCulture,
+                "heartbeat {0} — tick {1} (+{2} since last){3}",
+                DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+                tick, advanced,
+                string.IsNullOrEmpty(status) ? "" : ", " + status));
+            Flush();
+        }
+
         public static void Flush()
         {
             if (pending.Count == 0) return;
@@ -170,7 +227,13 @@ namespace AutoColony
                 {
                     headerWritten = true;
                     sb.AppendLine();
-                    sb.AppendLine("=== session start ===");
+                    // The savedata folder is what tells two RimWorld processes on one machine
+                    // apart; the command line is otherwise the only way, and a watcher that
+                    // matches on the process name alone will happily report someone else's game
+                    // as yours. The wall clock anchors the in-game stamps on every line below.
+                    sb.AppendLine("=== session start " +
+                        DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+                        " savedata " + SaveDataFolder() + " ===");
                 }
                 for (int i = 0; i < pending.Count; i++) sb.AppendLine(pending[i]);
 
@@ -185,6 +248,12 @@ namespace AutoColony
                 pending.Clear();
                 lastFlushTime = Time.realtimeSinceStartup;
             }
+        }
+
+        static string SaveDataFolder()
+        {
+            try { return GenFilePaths.SaveDataFolderPath; }
+            catch (Exception) { return "unknown"; }
         }
 
         static void RotateIfLarge(string path)
@@ -207,6 +276,9 @@ namespace AutoColony
         {
             headerWritten = false;
             recent.Clear();
+            // A trial reload winds the clock back, so the next heartbeat's tick delta would be
+            // negative and read as a fault rather than as the rollback it is.
+            lastHeartbeatTick = -1;
             Record(ChronicleCategory.System, "session begins for colony '" + (colonyName ?? "unknown") + "'");
         }
 
