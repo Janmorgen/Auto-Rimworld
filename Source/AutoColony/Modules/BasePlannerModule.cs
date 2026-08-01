@@ -111,10 +111,17 @@ namespace AutoColony.Modules
 
             MarkPrisonBeds(ctx);
 
-            // Opening a building project is not how a fire or a raid is answered, and the
-            // labour it claims is the labour the emergency needs. Everything already reserved
-            // carries on above; this only stops the colony taking on something new.
-            if (ctx.plan != null && ctx.plan.EmergencyActive) return;
+            // Opening a building project is not how a fire or a raid is answered, and the labour
+            // it claims is the labour the emergency needs. Everything already reserved carries on
+            // above; this only stops the colony taking on something new.
+            //
+            // Deliberately keyed on something physically happening at the colony rather than on
+            // `plan.EmergencyActive`, which is true for *any* immediate goal — "Feed the colony"
+            // among them. Written that way first, it deadlocked outright: a hungry colony was
+            // barred from building, including from building the kitchen its own hunger goal was
+            // asking for, so it stayed hungry and stayed barred. Three colonists to one, no room
+            // ever queued, food at 0.0 for the whole run.
+            if (ctx.state.firesNearBase > 0 || ctx.state.hostilesNearBase > 0) return;
 
             // Only as many rooms at once as there are hands to finish them.
             //
