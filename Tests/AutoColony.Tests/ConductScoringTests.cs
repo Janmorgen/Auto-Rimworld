@@ -53,6 +53,58 @@ namespace AutoColony.Tests
             return default(ScoreTerm);
         }
 
+        // ------------------------------------------------------------ an epoch nobody watched
+
+        [Fact]
+        public void AnEpochWithNoSamplesIsNotWorthScoring()
+        {
+            // The overnight failure: a snapshot taken with an already-elapsed epoch made every
+            // trial close on its first tick, re-scoring an accumulator with nothing in it. Fifty
+            // eight of sixty two scores came out identical and the search learned nothing.
+            var acc = new EpochAccumulator();
+            acc.ResetFor(Healthy());
+            Assert.False(acc.Scorable);
+        }
+
+        [Fact]
+        public void AFewSamplesAreStillNotEnough()
+        {
+            var end = Healthy();
+            var acc = Calm(end, EpochAccumulator.MinSamplesToScore - 1);
+            Assert.False(acc.Scorable);
+        }
+
+        [Fact]
+        public void AnObservedEpochIsScorable()
+        {
+            var end = Healthy();
+            Assert.True(Calm(end, EpochAccumulator.MinSamplesToScore).Scorable);
+            Assert.True(Calm(end, 500).Scorable);
+        }
+
+        [Fact]
+        public void AnEmptyAccumulatorScoresIdenticallyEveryTime()
+        {
+            // Why the guard exists rather than trusting the number: with no samples every term
+            // falls back on a default, so two completely different colonies score the same.
+            var poor = Healthy();
+            poor.wealthTotal = 500f; poor.avgMood = 0.05f; poor.daysOfFood = 0f;
+
+            var rich = Healthy();
+            rich.wealthTotal = 90000f; rich.avgMood = 0.95f; rich.daysOfFood = 30f;
+
+            var a = new EpochAccumulator(); a.ResetFor(poor);
+            var b = new EpochAccumulator(); b.ResetFor(rich);
+
+            // Same mood/health/emergency inputs from defaults — the terms that differ are only
+            // the end-state ones, so the accumulator contributes nothing to tell them apart.
+            Assert.Equal(a.AvgMood, b.AvgMood, 4);
+            Assert.Equal(a.AvgHealth, b.AvgHealth, 4);
+            Assert.Equal(a.EmergencyFraction, b.EmergencyFraction, 4);
+            Assert.False(a.Scorable);
+            Assert.False(b.Scorable);
+        }
+
         // ------------------------------------------------------------ the weights still add up
 
         [Fact]

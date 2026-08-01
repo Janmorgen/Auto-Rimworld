@@ -152,6 +152,15 @@ namespace AutoColony
             EnsureModules();
             Chronicle.BeginSession(ColonyName());
             TimeControl.NotifyGameLoaded();
+
+            // A save can carry an epoch deadline that had already passed when it was written.
+            // Left alone it closes on the first tick after loading. Clearing it defers to the
+            // normal "no epoch running" path, which starts one once there are fresh metrics.
+            if (nextEpochTick >= 0 && Find.TickManager != null &&
+                Find.TickManager.TicksGame >= nextEpochTick)
+            {
+                nextEpochTick = -1;
+            }
             // A load may be the game coming back up mid-training round; re-apply the seed so
             // this trial sees the same world as its siblings.
             TrainingSession.OnGameLoaded();
@@ -342,6 +351,18 @@ namespace AutoColony
 
         void CloseEpoch(int tick)
         {
+            // An epoch nobody watched is not a result. With no samples the evaluator falls back
+            // on its defaults and returns the same number every time, which is indistinguishable
+            // from a real score to everything downstream — the engine, the bandits, the archive.
+            // Start a fresh one instead and let it actually run.
+            if (!accumulator.Scorable)
+            {
+                AcLog.Verbose("Epoch closed with only " + accumulator.samples +
+                              " samples — restarting it rather than scoring nothing.");
+                BeginEpoch(tick);
+                return;
+            }
+
             List<ScoreTerm> breakdown;
             float score = ColonyEvaluator.Evaluate(epochStart, lastMetrics, accumulator, out breakdown);
 
@@ -388,16 +409,20 @@ namespace AutoColony
 
             ContributeToArchive();
 
+            // The new epoch starts BEFORE the snapshot, not after.
+            //
+            // BeginRound writes a save, and this method only runs because the epoch was already
+            // due — so snapshotting first captured a game whose epoch had elapsed and whose
+            // accumulator still held the finished epoch's samples. Every trial then reloaded
+            // that, closed an epoch on its first tick, and re-scored the epoch that had already
+            // been scored. An overnight run produced 58 identical scores out of 62 that way, and
+            // the search saw nothing else for six hours.
+            BeginEpoch(tick);
+
             // With training on, the cycle alternates: one epoch played live so the colony
             // actually advances, then a round of trials replayed over the next stretch.
-            if (AutoColonyMod.Settings.trainingMode &&
-                TrainingSession.BeginRound(evolution, AutoColonyMod.Settings.trialCandidates))
-            {
-                BeginEpoch(tick);
-                return;
-            }
-
-            BeginEpoch(tick);
+            if (AutoColonyMod.Settings.trainingMode)
+                TrainingSession.BeginRound(evolution, AutoColonyMod.Settings.trialCandidates);
         }
 
         static string ColonyName()

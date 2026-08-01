@@ -139,6 +139,18 @@ namespace AutoColony
             latestRaids = m.cumulativeRaids;
         }
 
+        /// <summary>
+        /// Fewest observations an epoch needs before its score means anything.
+        ///
+        /// A full epoch is hundreds of samples. Anything near zero and every term falls back on
+        /// a default — same inputs, same output, every time — so the number looks like a result
+        /// and carries no information.
+        /// </summary>
+        public const int MinSamplesToScore = 8;
+
+        /// <summary>Whether this epoch was observed enough to be worth scoring at all.</summary>
+        public bool Scorable { get { return samples >= MinSamplesToScore; } }
+
         public float AvgMood { get { return samples > 0 ? moodSum / samples : 0.5f; } }
         public float AvgHealth { get { return samples > 0 ? healthSum / samples : 1f; } }
         public float MentalBreakFraction { get { return samples > 0 ? (float)mentalBreakSamples / samples : 0f; } }
