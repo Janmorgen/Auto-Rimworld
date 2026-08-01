@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AutoColony.Learning;
 using RimWorld;
@@ -117,6 +118,34 @@ namespace AutoColony.Modules
                 engaged = true;
                 return true;
             }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether the hostiles on the map are besieging rather than assaulting.
+        ///
+        /// Read off the lord that is actually directing them rather than guessed from what they
+        /// are carrying, because a siege is defined by its intent: they will sit at range, build
+        /// mortars, and be resupplied for days. Every other raid archetype eventually walks into
+        /// the base, which is what makes a doorway worth holding against them and not against
+        /// this one.
+        /// </summary>
+        static bool Besieged(DirectorContext ctx)
+        {
+            try
+            {
+                var lords = ctx.map.lordManager != null ? ctx.map.lordManager.lords : null;
+                if (lords == null) return false;
+
+                for (int i = 0; i < lords.Count; i++)
+                {
+                    var lord = lords[i];
+                    if (lord == null || lord.faction == null) continue;
+                    if (!lord.faction.HostileTo(Faction.OfPlayer)) continue;
+                    if (lord.LordJob is LordJob_Siege) return true;
+                }
+            }
+            catch (Exception) { }
             return false;
         }
 
@@ -263,6 +292,16 @@ namespace AutoColony.Modules
             var refuge = Refuge(ctx);
             bool hasRefuge = refuge.IsValid && refuge != RallyPoint(ctx);
 
+            // A siege makes holding a room the wrong answer, which is the one case where the
+            // rule above inverts.
+            //
+            // Besiegers do not come to the door. They build mortars at range and shell the base,
+            // resupplied indefinitely, and only assault once their mortars are gone or they have
+            // taken losses. Waiting behind a wall for that is waiting to be shelled, so a room
+            // is not cover here and must not raise the bar for going out to meet them.
+            bool besieged = Besieged(ctx);
+            if (besieged) hasRefuge = false;
+
             float required = CasualtyPolicy.RequiredAdvantage(
                 ctx.Gene(Genes.DefenseEngageRatio), fighters.Count,
                 ctx.state.colonistsDowned, hasRefuge);
@@ -332,10 +371,13 @@ namespace AutoColony.Modules
                     winnable ? "engaging with" : "WITHDRAWING",
                     mobilised, rally, strength, threat,
                     threat > 0f ? strength / threat : 999f, required,
-                    caution > 1f
-                        ? " (" + ctx.state.colonistsDowned + " already down, so the bar is " +
-                          caution.ToString("0.0") + "x higher)"
-                        : (hasRefuge ? " (a room to hold, so the open is elective)" : ""),
+                    besieged
+                        ? " (a siege — they shell from range and will not come to the door, so " +
+                          "there is no cover to hold)"
+                        : caution > 1f
+                            ? " (" + ctx.state.colonistsDowned + " already down, so the bar is " +
+                              caution.ToString("0.0") + "x higher)"
+                            : (hasRefuge ? " (a room to hold, so the open is elective)" : ""),
                     winnable ? "" : " — not worth meeting in the open, holding the base instead"));
             }
         }

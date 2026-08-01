@@ -101,6 +101,25 @@ namespace AutoColony.Modules
                         return;
                     }
 
+                    // A bed is also the only way a downed colonist gets off the floor.
+                    //
+                    // RimWorld's Rescue job needs a free bed to carry someone to; with none, a
+                    // downed colonist stays where they fell. That matters far more than the mood
+                    // penalty, because resting in a bed multiplies immunity gain and heals about
+                    // 14 HP a day, and an untended infection races immunity to 100% — the first
+                    // to arrive decides whether the pawn lives. Colonies in this session died
+                    // exactly there: everyone down, nobody rescuable, `beds 0` in the record.
+                    if (ctx.state.colonistsDowned > 0 && ctx.state.colonistBeds <= 0 &&
+                        room.role == RoomRole.Bedroom)
+                    {
+                        QueueFurniture(ctx, room);
+                        room.furnitureQueued = true;
+                        Chronicle.Record(ChronicleCategory.Health,
+                            ctx.state.colonistsDowned + " colonists down and no bed to carry them " +
+                            "to — placing beds now; a rescue needs somewhere to rescue them to");
+                        return;
+                    }
+
                     // Somewhere to sleep does not need walls.
                     //
                     // Everything else here waits for the shell for a reason — a stove or a
