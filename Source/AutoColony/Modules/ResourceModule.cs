@@ -20,6 +20,9 @@ namespace AutoColony.Modules
 
         bool yieldedToEmergency;
 
+        /// <summary>Set while gathering is suspended for a map-wide condition, so it is said once.</summary>
+        bool yieldedToCondition;
+
         /// <summary>Designations added per pass, per activity.</summary>
         const int MaxPerPass = 25;
 
@@ -46,6 +49,35 @@ namespace AutoColony.Modules
                 return;
             }
             yieldedToEmergency = false;
+
+            // The sky itself is the hazard.
+            //
+            // Toxic fallout poisons anything under open sky, and the director's standing answer
+            // to an empty larder is to send somebody out after an animal — which during fallout
+            // poisons the hunter and the meat together, and never once looks like combat in the
+            // record. Nothing here could see a game condition at all before this, so a colony
+            // carried on chopping, mining and hunting straight through it.
+            //
+            // Only the elective errands stop. Fires and raids are still answered outdoors,
+            // because those are not optional and refusing them costs more than the fallout.
+            if (Conditions.ConditionResponse.SuspendElectiveOutdoorWork(ctx.state.conditions))
+            {
+                if (!yieldedToCondition)
+                {
+                    yieldedToCondition = true;
+                    Chronicle.Record(ChronicleCategory.Economy,
+                        "holding off gathering: " +
+                        Conditions.ConditionResponse.Describe(ctx.state.conditions) +
+                        " — outside is the hazard, so chopping, mining and hunting wait");
+                }
+                return;
+            }
+            if (yieldedToCondition)
+            {
+                yieldedToCondition = false;
+                Chronicle.Record(ChronicleCategory.Economy,
+                    "conditions have passed; gathering resumes");
+            }
 
             int chopped = MaybeChopWood(ctx, origin);
             int mined = MaybeMine(ctx, origin);

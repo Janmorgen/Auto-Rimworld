@@ -23,6 +23,110 @@ namespace AutoColony.Modules
         protected override void Act(DirectorContext ctx)
         {
             ApplyColonistSettings(ctx);
+            ApplyShelterRestriction(ctx);
+        }
+
+        /// <summary>The area colonists are confined to while the open sky is dangerous.</summary>
+        Area_Allowed shelterArea;
+        bool confined;
+
+        /// <summary>
+        /// Keeps everyone under a roof while a condition makes being outdoors the hazard.
+        ///
+        /// Toxic fallout gives toxic buildup to any pawn *not under a roof*, at 40% a day, and a
+        /// roof is the whole of the protection — so refusing to designate hunts is not enough on
+        /// its own. Colonists go outside for a hundred other reasons, and each errand costs them
+        /// poison. RimWorld's own answer to this is the allowed area, so that is what the
+        /// director uses: a region of roofed cells inside the home area, applied while the
+        /// condition lasts and released the moment it passes.
+        ///
+        /// Releasing matters as much as applying. A colony left confined after the fallout ends
+        /// would quietly starve inside its own base, having stopped farming, hauling and hunting
+        /// for good — which is a worse failure than the one being prevented, and precisely the
+        /// kind of standing order this codebase already learned to withdraw elsewhere.
+        /// </summary>
+        void ApplyShelterRestriction(DirectorContext ctx)
+        {
+            bool wantConfined = Conditions.ConditionResponse.OutsideIsDangerous(ctx.state.conditions);
+
+            if (!wantConfined)
+            {
+                if (!confined) return;
+
+                confined = false;
+                for (int i = 0; i < ctx.state.allColonists.Count; i++)
+                {
+                    var ps = ctx.state.allColonists[i].playerSettings;
+                    if (ps != null) ps.AreaRestrictionInPawnCurrentMap = null;
+                }
+                Chronicle.Record(ChronicleCategory.Health,
+                    "conditions passed — colonists released from shelter, free to work outdoors again");
+                return;
+            }
+
+            var area = EnsureShelterArea(ctx);
+            if (area == null) return;
+
+            int moved = 0;
+            for (int i = 0; i < ctx.state.allColonists.Count; i++)
+            {
+                var ps = ctx.state.allColonists[i].playerSettings;
+                if (ps == null) continue;
+                if (ps.AreaRestrictionInPawnCurrentMap == area) continue;
+                ps.AreaRestrictionInPawnCurrentMap = area;
+                moved++;
+            }
+
+            if (moved > 0 || !confined)
+            {
+                confined = true;
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "{0} — confining {1} colonists to {2} roofed cells; a roof is the whole of the " +
+                    "protection and every errand outside costs them poison",
+                    Conditions.ConditionResponse.Describe(ctx.state.conditions),
+                    moved, area.TrueCount));
+            }
+        }
+
+        /// <summary>
+        /// Builds or refreshes the roofed area. Rebuilt each time the condition starts, because
+        /// the base grows and an area drawn around last season's walls would strand people
+        /// outside the rooms built since.
+        /// </summary>
+        Area_Allowed EnsureShelterArea(DirectorContext ctx)
+        {
+            if (shelterArea != null && shelterArea.TrueCount > 0 && confined) return shelterArea;
+
+            var map = ctx.map;
+            if (map.areaManager == null || map.roofGrid == null) return null;
+
+            if (shelterArea == null || !map.areaManager.AllAreas.Contains(shelterArea))
+            {
+                if (!map.areaManager.TryMakeNewAllowed(out shelterArea)) return null;
+                shelterArea.SetLabel("Under cover");
+            }
+
+            int roofed = 0;
+            var home = map.areaManager.Home;
+            foreach (var cell in map.AllCells)
+            {
+                bool under = map.roofGrid.Roofed(cell) && cell.Walkable(map) &&
+                             (home == null || home[cell]);
+                shelterArea[cell] = under;
+                if (under) roofed++;
+            }
+
+            // Nowhere to shelter is worth saying rather than silently confining people to an
+            // empty area, which would stop them working without protecting them from anything.
+            if (roofed == 0)
+            {
+                Chronicle.Record(ChronicleCategory.Health,
+                    "conditions call for shelter but the colony has no roofed walkable space — " +
+                    "leaving everyone free rather than penning them into nothing");
+                return null;
+            }
+
+            return shelterArea;
         }
 
         void ApplyColonistSettings(DirectorContext ctx)

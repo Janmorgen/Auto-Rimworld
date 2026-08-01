@@ -140,6 +140,13 @@ namespace AutoColony
         public int growingCells;
         public int distinctCrops;
 
+        /// <summary>
+        /// Map-wide conditions in force. Nothing in the director could see these at all, which
+        /// meant toxic fallout — a condition whose whole nature is that being outdoors kills
+        /// you — changed the colony's behaviour not one bit.
+        /// </summary>
+        public Conditions.ActiveConditions conditions;
+
         // --- research ---
         public int researchFinished;
         public bool hasResearchBench;
@@ -389,6 +396,7 @@ namespace AutoColony
             }
 
             CaptureFields(s, map);
+            CaptureConditions(s, map);
 
             var things = map.listerThings;
             if (things != null)
@@ -441,6 +449,35 @@ namespace AutoColony
                 if (plant != null) crops.Add(plant.defName);
             }
             s.distinctCrops = crops.Count;
+        }
+
+        /// <summary>
+        /// Reads the map-wide conditions in force. Looked up by defName rather than through
+        /// <c>GameConditionDefOf</c> so a missing or renamed condition degrades to "not active"
+        /// instead of throwing on a version the mod was not built against.
+        /// </summary>
+        static void CaptureConditions(ColonyState s, Map map)
+        {
+            var manager = map.gameConditionManager;
+            if (manager == null) return;
+
+            s.conditions.toxicFallout = IsActive(manager, map, "ToxicFallout");
+            s.conditions.solarFlare = IsActive(manager, map, "SolarFlare");
+            s.conditions.eclipse = IsActive(manager, map, "Eclipse");
+            s.conditions.coldSnap = IsActive(manager, map, "ColdSnap");
+            s.conditions.heatWave = IsActive(manager, map, "HeatWave");
+            s.conditions.volcanicWinter = IsActive(manager, map, "VolcanicWinter");
+            s.conditions.flashstorm = IsActive(manager, map, "Flashstorm");
+        }
+
+        static bool IsActive(GameConditionManager manager, Map map, string defName)
+        {
+            try
+            {
+                var def = DefDatabase<GameConditionDef>.GetNamedSilentFail(defName);
+                return def != null && manager.ConditionIsActive(def);
+            }
+            catch (Exception) { return false; }
         }
 
         static void CapturePower(ColonyState s, ListerBuildings lister)

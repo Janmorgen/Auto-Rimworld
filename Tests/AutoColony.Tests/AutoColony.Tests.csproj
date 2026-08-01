@@ -36,6 +36,7 @@
     <Compile Include="../../Source/AutoColony/Core/FoodTiming.cs" Link="Production/FoodTiming.cs" />
     <Compile Include="../../Source/AutoColony/Core/Postmortem.cs" Link="Production/Postmortem.cs" />
     <Compile Include="../../Source/AutoColony/Core/CasualtyPolicy.cs" Link="Production/CasualtyPolicy.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Conditions/ConditionResponse.cs" Link="Production/ConditionResponse.cs" />
     <Compile Include="../../Source/AutoColony/Core/Goals/ResearchChain.cs" Link="Production/ResearchChain.cs" />
     <Compile Include="../../Source/AutoColony/Core/Upkeep/Defects.cs" Link="Production/Defects.cs" />
     <Compile Include="../../Source/AutoColony/Core/Upkeep/BuildingMeans.cs" Link="Production/BuildingMeans.cs" />
