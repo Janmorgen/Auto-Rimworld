@@ -140,6 +140,67 @@ long enough to do the whole thing in one go.
 - Production bills beyond butchering, defence positioning under a real firefight, and any
   behaviour over in-game years rather than days.
 
+## What ten hours of unattended running showed
+
+A long overnight run — 16 colony cycles, no exceptions, no code changes — produced a clearer
+list of gaps than any amount of reading. Two kinds: things the director cannot **do**, and
+things it cannot **see about itself**. The second kind is what made diagnosing the first kind
+slow, so it is worth fixing first.
+
+### Observation — what the director records about itself
+
+- **Decisions are logged; outcomes are not.** The chronicle says `WITHDRAWING 2 to (114,0,138)`
+  and never says whether anyone arrived. The scenario harness's one-line roster —
+  `Nytro[drafted]=Goto  Bowman[drafted]=AttackMelee` — was more diagnostic than anything in the
+  chronicle, and it is the line that proved drafted colonists were standing idle. It belongs in
+  the chronicle proper, throttled, not in a test-only harness.
+- **A training trial is indistinguishable from the live colony.** `COLONY LOST` appeared sixteen
+  times overnight and every one needed a manual check of whether a `session begins` followed
+  before it could be read. That very nearly caused a wrong intervention. Trials should mark
+  their lines — `[trial 2/4]` — so a reader, or a watching agent, can tell a deliberate
+  experiment from a real disaster.
+- **Nothing distinguishes "quiet" from "stopped".** Non-urgent entries are buffered, so a
+  healthy colony can write nothing for many minutes. A periodic heartbeat — even just flushing
+  vitals — would make a stalled or exited run obvious instead of ambiguous.
+- **A colony loss reports a score, not a cause.** Every post-mortem this run was reconstructed
+  by hand from the preceding fifty lines. Everything needed is already in memory at that moment:
+  final food, mood, downed count, last threat, the unmet-complaint list. One line —
+  `COLONY LOST — starvation: 0.0 days food for 6h, last hunt declined at strength 4` — would
+  replace all of that reconstruction.
+- **Epoch scores do not say how much epoch there was.** The degenerate-epoch bug was only
+  visible because 58 scores shared a timestamp. Had the score line carried its sample count and
+  elapsed days it would have been obvious on the first one.
+- **Behaviour cannot be traced to a gene.** Candidates were visibly different — one engaged at a
+  0.375 ratio where another withdrew — but nothing said *which* parameter differed. Logging the
+  few genes furthest from the incumbent when a challenger starts would connect the behaviour to
+  the number that caused it.
+- **Instances are indistinguishable from outside.** Two RimWorld processes on one machine cannot
+  be told apart without inspecting their command line; a savedata path in the chronicle header
+  would make any external watcher unambiguous. (Written from experience: a monitor matching on
+  process name alone reported a stopped game as healthy for half an hour.)
+
+### Control — what the director cannot do
+
+- **React to hunger with enough lead time.** Escalation to last-resort hunting fires at around
+  one day of food, which leaves no margin for the hunt to fail, the meat to be hauled and a meal
+  to be cooked. Most losses this run were this, and the fix is timing rather than capability —
+  the search is already sampling it (candidates escalated at 0.0 days and at 3.0 days).
+- **Hold a doctor back.** Colonies died with every colonist downed and days of food in the
+  stockpile because nobody was left standing to carry it. Nothing reserves an able colonist when
+  someone goes down.
+- **Touch the schedule at all.** `NightOwlDuringTheDay (-10)` is one of the largest recurring
+  penalties and is fixable purely by assigning that colonist a night shift. The schedule tab is
+  untouched by any module.
+- **Craft or assign apparel.** `ApparelDamaged`, `SoakingWet` and `EnvironmentCold` recur in
+  every cycle's unmet list.
+- **Answer a kidnapping.** A downed colonist carried off by raiders is simply gone; there is no
+  pursuit and no ransom.
+- **Route conduit under cover.** The director lays long runs across open ground, which
+  manufactures the short-circuit fire risk it now correctly detects.
+- **Snapshot a trial from a healthy baseline.** Every candidate was scored on escaping a
+  near-hopeless position in two in-game days, which compresses the score distribution and wastes
+  most of the information a trial could carry.
+
 ## What to do next, roughly in order
 
 1. **Apparel.** Warm clothes are still never crafted or assigned. Heating landed (a `Heater`
@@ -150,15 +211,19 @@ long enough to do the whole thing in one go.
    `NeedRoomSize`, `SleepDisturbed`, `NightOwlDuringTheDay` (a scheduling problem, not a building
    one — worth noting because it shows the survey finds things no construction module could
    fix), and `ProsthophileNoProsthetic`. Each is a row in `Complaints` plus a remedy.
-3. **Make the consequential rules testable.** `CombatAssessment` and `FireRisk` are pure
+3. **Give the director eyes on itself.** The observation gaps above are what made every other
+   problem slow to find. A cause-of-death line, a trial marker, and sample counts on the epoch
+   score are each a few lines and would have turned a night of manual log archaeology into three
+   greps.
+4. **Make the consequential rules testable.** `CombatAssessment` and `FireRisk` are pure
    arithmetic behind a `Map` read, so fight-or-withdraw — now gene-driven — cannot be exercised
    offline. `Prisoners/` and `Upkeep/` show the pattern. The goal prerequisite walk in
    `GoalPlanner.Actionable` is the same algorithm as `ResearchChain` one level up, but inline and
    untested, and it lacks that one's cycle detection.
-4. **Cut the search's dimensionality.** ~50 genes against tens of epochs. A live colony
+5. **Cut the search's dimensionality.** ~50 genes against tens of epochs. A live colony
    measured score noise at ±0.061, roughly three times the ~0.02 where offline tests show the
    sequential search going flat. Grouping work-type weights by category is the obvious cut.
-5. **Combat positioning.** Everyone rallies to one point; no cover, no chokepoints, and no
+6. **Combat positioning.** Everyone rallies to one point; no cover, no chokepoints, and no
    doctor held back when someone is downed.
 
 ## Traps worth knowing before you touch it
@@ -176,6 +241,12 @@ long enough to do the whole thing in one go.
   that wants any of them should say so in `RequiresResearch`.
 - **A `-quicktest` colony starts with Electricity already researched**, which will quietly hide
   any research-gating bug. `ResearchManager.ResetAllProgress()` winds it back.
+- **Mod settings files are named `Mod_<modFolder>_<ModClass>.xml`** — here
+  `Mod_Auto-Rimworld_AutoColonyMod.xml` — with the values nested inside
+  `<ModSettings Class="AutoColony.AutoColonySettings">`. A file under any other name is ignored
+  in silence, which cost several test runs that appeared to ignore `epochDays` entirely.
+- **`pgrep -x RimWorldLinux` cannot tell two instances apart.** Match on the `-savedatafolder`
+  argument instead; a watcher that does not will happily report someone else's game as yours.
 - **`defA ?? defB` is not a fallback between buildings.** Every vanilla def resolves whatever the
   colony has researched, so the first one always wins and the rest are dead code. It cost the
   colony its early kitchen. Choose on capability — researched, powered, affordable — not on the
