@@ -88,6 +88,18 @@ namespace AutoColony.Learning
         public const string DefenseWealthRatio = "defense.wealthRatio";
         public const string DefenseDraftDanger = "defense.draftDanger";
         public const string DefenseRetreatHealth = "defense.retreatHealth";
+
+        /// <summary>
+        /// How favourable a fight has to look before the colony meets it in the open, as a ratio
+        /// of colony strength to threat.
+        ///
+        /// Deliberately a gene rather than a constant. There is no right answer to write down —
+        /// a colony with cover and rifles should hold ground a colony of three wounded farmers
+        /// should not — and it is exactly the kind of judgement the search can learn from
+        /// whether colonies that made it lived. Zero means never withdraw, which is what the
+        /// director did before it could.
+        /// </summary>
+        public const string DefenseEngageRatio = "defense.engageRatio";
         public const string DefenseTurretCount = "defense.turretCount";
         public const string FireResponseRadius = "defense.fireRadius";
         public const string FireRiskAversion = "defense.fireAversion";
@@ -152,6 +164,7 @@ namespace AutoColony.Learning
             Add(DefenseWealthRatio, 0f, 0.2f, 0.05f, "Defense", "Defense spend vs wealth");
             Add(DefenseDraftDanger, 0f, 2f, 1f, "Defense", "Danger level that triggers drafting");
             Add(DefenseRetreatHealth, 0.1f, 0.9f, 0.45f, "Defense", "Health fraction to retreat at");
+            Add(DefenseEngageRatio, 0f, 1.5f, 0.35f, "Defense", "Strength ratio needed to fight in the open");
             Add(DefenseTurretCount, 0f, 12f, 3f, "Defense", "Target turret count");
             // How far out a fire is still worth walking to. Too small and a fire creeps in;
             // too large and colonists cross the map for a blaze that was never coming.

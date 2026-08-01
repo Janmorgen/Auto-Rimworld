@@ -185,7 +185,20 @@ namespace AutoColony.Modules
 
         void HandleThreat(DirectorContext ctx)
         {
-            var rally = RallyPoint(ctx);
+            float strength = CombatAssessment.ColonyStrength(ctx.state);
+            float threat = HostileStrength(ctx);
+
+            // Whether this fight is worth having, rather than merely whether it is happening.
+            //
+            // The assessment used to be computed here purely to print it, and the colony charged
+            // regardless. It said "strength 2 vs threat 50" in its own log three times running
+            // while sending two broken colonists out to be downed, and they starved where they
+            // fell because nobody was left standing to carry food to them. Answering a raid is
+            // not optional; meeting it in the open is.
+            bool winnable = threat <= 0f ||
+                            strength / threat >= ctx.Gene(Genes.DefenseEngageRatio);
+
+            var rally = winnable ? RallyPoint(ctx) : Refuge(ctx);
             float retreatAt = ctx.Gene(Genes.DefenseRetreatHealth);
             int mobilised = 0;
 
@@ -218,17 +231,135 @@ namespace AutoColony.Modules
                 }
 
                 SendToRally(pawn, rally, ctx.map);
+
+                // Drafting is not fighting. A drafted colonist with no orders stands where it
+                // was put and shoots only what happens to walk into its line of sight — which
+                // is why two were mobilised against one raider and only one ever engaged.
+                if (winnable) Engage(ctx, pawn);
             }
 
             if (mobilised > 0)
             {
-                Note("drafted " + mobilised + " colonists against a threat");
+                Note((winnable ? "drafted " : "withdrew ") + mobilised + " colonists");
                 Chronicle.Record(ChronicleCategory.Threat, string.Format(
-                    "{0} hostiles (danger {1}); drafted {2} to {3} — {4}",
-                    ctx.state.hostilePawns, ctx.state.danger, mobilised, rally,
-                    CombatAssessment.Explain(CombatAssessment.ColonyStrength(ctx.state),
-                                             HostileStrength(ctx), 1f)));
+                    "{0} hostiles (danger {1}); {2} {3} to {4} — {5}",
+                    ctx.state.hostilePawns, ctx.state.danger,
+                    winnable ? "engaging with" : "WITHDRAWING",
+                    mobilised, rally,
+                    CombatAssessment.Explain(strength, threat, 1f) +
+                    (winnable ? "" : " — not worth meeting in the open, holding the base instead")));
             }
+        }
+
+        /// <summary>
+        /// Points a colonist at something and tells them to shoot it.
+        ///
+        /// Melee chases; ranged fires from where it stands, so anyone out of range is walked
+        /// closer first rather than left holding a rally point they cannot shoot from.
+        /// </summary>
+        static void Engage(DirectorContext ctx, Pawn pawn)
+        {
+            var target = NearestHostile(ctx, pawn);
+            if (target == null) return;
+
+            // Leave them alone if they are already on this target; re-issuing every pass would
+            // restart the attack and they would never actually loose a shot.
+            if (pawn.CurJob != null && pawn.CurJob.targetA.Thing == target &&
+                (pawn.CurJobDef == JobDefOf.AttackMelee || pawn.CurJobDef == JobDefOf.AttackStatic))
+                return;
+
+            var verb = pawn.CurrentEffectiveVerb;
+            bool melee = verb == null || verb.verbProps == null || verb.verbProps.IsMeleeAttack;
+
+            Job job;
+            if (melee)
+            {
+                job = JobMaker.MakeJob(JobDefOf.AttackMelee, target);
+            }
+            else if (verb.CanHitTarget(target))
+            {
+                job = JobMaker.MakeJob(JobDefOf.AttackStatic, target);
+            }
+            else
+            {
+                // Out of range: close the distance instead of standing there aiming at nothing.
+                var approach = CellFinder.RandomClosewalkCellNear(target.Position, ctx.map, 6);
+                if (!approach.IsValid) return;
+                job = JobMaker.MakeJob(JobDefOf.Goto, approach);
+            }
+
+            job.playerForced = true;
+            pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);
+        }
+
+        static Pawn NearestHostile(DirectorContext ctx, Pawn to)
+        {
+            Pawn best = null;
+            float bestDist = float.MaxValue;
+
+            var pawns = ctx.map.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                var p = pawns[i];
+                if (p == null || p.Dead || p.Downed) continue;
+                if (!p.HostileTo(Faction.OfPlayer)) continue;
+
+                float dist = (p.Position - to.Position).LengthHorizontalSquared;
+                if (dist < bestDist) { bestDist = dist; best = p; }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Somewhere to hold when the fight cannot be won in the open: the enclosed room
+        /// furthest from whatever is coming.
+        ///
+        /// Withdrawing is not standing down. Everyone stays drafted, so nobody wanders back out
+        /// to haul something, and raiders have to come through a doorway to reach them — which
+        /// is a far better fight than the one outside.
+        /// </summary>
+        static IntVec3 Refuge(DirectorContext ctx)
+        {
+            if (ctx.layout == null || ctx.layout.rooms.Count == 0) return RallyPoint(ctx);
+
+            var threatAt = NearestHostileCell(ctx);
+            IntVec3 best = IntVec3.Invalid;
+            float bestScore = float.NegativeInfinity;
+
+            for (int i = 0; i < ctx.layout.rooms.Count; i++)
+            {
+                var room = ctx.layout.rooms[i];
+                var centre = room.Center;
+                if (!centre.InBounds(ctx.map)) continue;
+                if (ctx.map.roofGrid == null || !ctx.map.roofGrid.Roofed(centre)) continue;
+
+                float score = threatAt.IsValid
+                    ? (centre - threatAt).LengthHorizontalSquared
+                    : 0f;
+                if (score > bestScore) { bestScore = score; best = centre; }
+            }
+
+            return best.IsValid ? best : RallyPoint(ctx);
+        }
+
+        static IntVec3 NearestHostileCell(DirectorContext ctx)
+        {
+            var origin = ctx.layout != null && ctx.layout.established
+                ? ctx.layout.origin : ctx.map.Center;
+
+            IntVec3 nearest = IntVec3.Invalid;
+            float bestDist = float.MaxValue;
+
+            var pawns = ctx.map.mapPawns.AllPawnsSpawned;
+            for (int i = 0; i < pawns.Count; i++)
+            {
+                var p = pawns[i];
+                if (p == null || p.Dead || !p.HostileTo(Faction.OfPlayer)) continue;
+
+                float dist = (p.Position - origin).LengthHorizontalSquared;
+                if (dist < bestDist) { bestDist = dist; nearest = p.Position; }
+            }
+            return nearest;
         }
 
         static void SendToRally(Pawn pawn, IntVec3 rally, Map map)
