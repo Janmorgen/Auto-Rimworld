@@ -178,8 +178,17 @@ namespace AutoColony
                     if (settlement == null || settlement.Faction != Faction.OfPlayer) continue;
 
                     found++;
-                    if (settlement.HasName) continue;
-                    settlement.Name = "Auto-Colony";
+
+                    // `namedByPlayer`, not `HasName`. A settlement always has a generated name,
+                    // so HasName is true from the start and skipping on it named nothing — the
+                    // prompt kept coming and the run kept deadlocking. What RimWorld actually
+                    // waits on is the player having *chosen* the name, and it asks once
+                    // `MinDaysPassedToNameSettlement` have passed rather than at save time,
+                    // which is why this lands on day four of any colony whether or not it
+                    // trains.
+                    if (settlement.namedByPlayer) continue;
+                    if (!settlement.HasName) settlement.Name = "Auto-Colony";
+                    settlement.namedByPlayer = true;
                     named++;
                 }
 
