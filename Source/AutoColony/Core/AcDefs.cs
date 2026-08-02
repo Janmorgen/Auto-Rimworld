@@ -46,6 +46,24 @@ namespace AutoColony
         /// on the ground and a rescue needs somewhere to carry them.
         /// </summary>
         public static ThingDef SleepingSpot { get { return Thing("SleepingSpot"); } }
+
+        /// <summary>
+        /// A patch of ground where butchering may happen. Free and instant, like every other
+        /// spot, and it is the difference between a field of corpses and food.
+        /// </summary>
+        public static ThingDef ButcherSpot { get { return Thing("ButcherSpot"); } }
+
+        /// <summary>
+        /// The cheapest thing to sit on: 25 of any material and no research whatsoever.
+        ///
+        /// Worth naming because the opposite was recorded as fact. `NeedComfort` was written up
+        /// as needing Complex Furniture, which is true of an armchair and of nothing a colony
+        /// actually needs — so the complaint went unanswered in every survey ever taken.
+        /// </summary>
+        public static ThingDef Stool { get { return Thing("Stool"); } }
+
+        /// <summary>The smallest table. A quarter the material of the one the director asked for.</summary>
+        public static ThingDef SmallTable { get { return Thing("Table1x2c"); } }
         public static ThingDef Sandbag { get { return Thing("Sandbags"); } }
         public static ThingDef TurretMini { get { return Thing("Turret_MiniTurret"); } }
         public static ThingDef Battery { get { return Thing("Battery"); } }

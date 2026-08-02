@@ -1702,7 +1702,20 @@ namespace AutoColony.Modules
                     break;
                 case RoomRole.Kitchen:
                     PlaceOne(ctx, room, StoveFor(ctx));
+
+                    // A butcher table, and a butcher spot regardless.
+                    //
+                    // The table is better in every way except the one that has repeatedly
+                    // mattered: it costs material and hours, and until it exists a corpse is not
+                    // food. Colonies here have hunted thirteen gazelles and starved at 0.0 days
+                    // with the meat lying in the field, and one carried 11.6 days of nutrition
+                    // around as carcasses nobody could process.
+                    //
+                    // The spot is free and has zero work, so it is placed outright rather than
+                    // queued, and butchering can start immediately. Both go in: the spot covers
+                    // the gap until the table lands, and costs nothing to leave afterwards.
                     PlaceOne(ctx, room, AcDefs.ButcherTable);
+                    PlaceOne(ctx, room, AcDefs.ButcherSpot);
                     break;
                 case RoomRole.Research:
                     PlaceOne(ctx, room, AcDefs.ResearchBench);

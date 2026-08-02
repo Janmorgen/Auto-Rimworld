@@ -186,6 +186,7 @@ namespace AutoColony.Modules
                 case RemedyKind.AddCooler: return AddCooler(ctx);
                 case RemedyKind.AddTable: return AddTable(ctx);
                 case RemedyKind.AddRecreation: return AddRecreation(ctx);
+                case RemedyKind.AddSeating: return AddSeating(ctx);
                 default: return false;
             }
         }
@@ -401,9 +402,38 @@ namespace AutoColony.Modules
         /// beds and a kitchen — so a colony that never got comfortable never got a table, and
         /// paid three mood per colonist at every meal indefinitely.
         /// </summary>
+        /// <summary>
+        /// Somewhere to eat that is not the floor.
+        ///
+        /// The big table is worth having and it is not worth waiting for. This asked only for
+        /// the 2x2, at fifty units of material, and a colony that could not spare fifty units
+        /// went on eating off the ground indefinitely — "nowhere to eat off a table" sat in the
+        /// unfixable column of survey after survey while the colony had wood for a smaller one.
+        ///
+        /// So the small table is the fallback rather than nothing. It seats fewer people and
+        /// costs twenty-eight, and eating at a bad table carries none of the penalty that eating
+        /// off the floor does.
+        /// </summary>
         static bool AddTable(DirectorContext ctx)
         {
-            return PlaceInBase(ctx, AcDefs.Thing("Table2x2c"), 1);
+            if (PlaceInBase(ctx, AcDefs.Thing("Table2x2c"), 1)) return true;
+            return PlaceInBase(ctx, AcDefs.SmallTable, 1);
+        }
+
+        /// <summary>
+        /// Somewhere to sit, one stool per colonist.
+        ///
+        /// This complaint has been in the "cannot fix yet" column of essentially every survey
+        /// this project has ever taken, on a belief that seating needed Complex Furniture — true
+        /// of an armchair, and of nothing the colony needs. A stool is twenty-five units of
+        /// whatever is in store and no research whatsoever.
+        ///
+        /// One each rather than one in total, because comfort is paid per colonist and a single
+        /// stool answers it for whoever reaches it first.
+        /// </summary>
+        static bool AddSeating(DirectorContext ctx)
+        {
+            return PlaceInBase(ctx, AcDefs.Stool, ctx.state.colonists);
         }
 
         /// <summary>Somewhere to play. Horseshoes needs no research and barely any material.</summary>

@@ -57,7 +57,18 @@ namespace AutoColony.Upkeep
         NoTable,
 
         /// <summary>Nothing to do. Recreation is cheap and the penalty compounds.</summary>
-        Cheerless
+        Cheerless,
+
+        /// <summary>
+        /// Nowhere to sit. Paid standing at a table, standing at a bench, and standing anywhere
+        /// else the colonist spends their day.
+        ///
+        /// Recorded here as unfixable for the whole life of this project, on the belief that
+        /// seating needed Complex Furniture. That is true of an armchair. A stool is twenty-five
+        /// units of anything and no research at all, and the complaint has been in the "cannot
+        /// fix yet" column of essentially every survey ever taken.
+        /// </summary>
+        Uncomfortable
     }
 
     /// <summary>
@@ -125,7 +136,10 @@ namespace AutoColony.Upkeep
         AddTable,
 
         /// <summary>Something to do that is not work.</summary>
-        AddRecreation
+        AddRecreation,
+
+        /// <summary>Somewhere to sit. A stool needs no research and almost no material.</summary>
+        AddSeating
     }
 
     /// <summary>
@@ -169,7 +183,10 @@ namespace AutoColony.Upkeep
             { "AteWithoutTable", DefectKind.NoTable },
 
             { "NeedJoy", DefectKind.Cheerless },
-            { "NeedBeauty", DefectKind.DrearyRoom }
+            { "NeedBeauty", DefectKind.DrearyRoom },
+
+            // A stool answers this and nothing ever offered one.
+            { "NeedComfort", DefectKind.Uncomfortable }
         };
 
         /// <summary>The defect a complaint points at, when it is one the director can act on.</summary>
@@ -222,6 +239,7 @@ namespace AutoColony.Upkeep
                 case DefectKind.ColdRoom: return RemedyKind.AddHeater;
                 case DefectKind.HotRoom: return RemedyKind.AddCooler;
                 case DefectKind.NoTable: return RemedyKind.AddTable;
+                case DefectKind.Uncomfortable: return RemedyKind.AddSeating;
                 case DefectKind.Cheerless: return RemedyKind.AddRecreation;
                 default: return RemedyKind.None;
             }
@@ -300,6 +318,7 @@ namespace AutoColony.Upkeep
             weights[(int)DefectKind.SharedBedroom] = 1.0f;
             weights[(int)DefectKind.NoTable] = 0.9f;       // small, but every colonist every meal
             weights[(int)DefectKind.Cheerless] = 0.7f;
+            weights[(int)DefectKind.Uncomfortable] = 0.7f; // small each time, paid all day long
             weights[(int)DefectKind.DrearyRoom] = 0.6f;
             return weights;
         }
