@@ -114,6 +114,21 @@ namespace AutoColony.Modules
                 var room = layout.rooms[i];
                 if (!room.wallsQueued)
                 {
+                    // Walls already going up from an earlier pass are walls already queued.
+                    //
+                    // Without this the planner re-ran the whole shell every pass while its own
+                    // blueprints stood waiting, placed nothing because every cell was taken by
+                    // those blueprints, and reported that it could not start the room — "28 ×
+                    // something is already queued there", which is what a room being built looks
+                    // like. The rule below wants something *going up*, and pending construction
+                    // is exactly that; it just could not see anything it had not placed itself
+                    // on this very pass.
+                    if (HasPendingConstructionIn(ctx.map, room))
+                    {
+                        room.wallsQueued = true;
+                        continue;
+                    }
+
                     // Only claim the room once something is actually going up. Marking it queued
                     // on a pass that placed nothing is what made the planner un-queue and re-queue
                     // it every three in-game hours, and burn the pass doing it.
@@ -860,13 +875,14 @@ namespace AutoColony.Modules
                 if (!rect.InBounds(map)) continue;
                 if (OverlapsExisting(layout, rect)) continue;
 
-                // Nor on top of a building somebody else already owns.
+                // Nor anywhere a wall could never stand: on somebody else's building, or on
+                // terrain that will not carry one.
                 //
                 // Overlap was only ever checked against the planner's own rooms, so the map
-                // itself never got a vote — and a map has ruins and abandoned settlements on it.
-                // One colony sited its kitchen squarely inside another faction's building: 20 of
-                // the 24 perimeter cells already held that faction's walls, and a cell with a
-                // wall in it will not take a wall blueprint.
+                // itself never got a vote — and a map has ruins, abandoned settlements and water
+                // on it. One colony sited its kitchen squarely inside another faction's building:
+                // 20 of the 24 perimeter cells already held that faction's walls, and a cell with
+                // a wall in it will not take a wall blueprint.
                 //
                 // What made it fatal rather than untidy is that the shell could then never be
                 // finished, and an unfinished room holds the whole planner. Four free cells took
@@ -874,7 +890,7 @@ namespace AutoColony.Modules
                 // ever; the concurrency limit counts it as the one room in progress and refuses
                 // to open another. That colony built nothing at all for five days, never had a
                 // bed, and lost two colonists on open ground with 1,422 units of wood in store.
-                if (PerimeterHeldByOthers(map, rect)) continue;
+                if (PerimeterUnbuildable(map, rect)) continue;
 
                 if (firstUsable < 0) firstUsable = slot;
 
@@ -1012,29 +1028,49 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
-        /// Whether somebody else's building already stands on this footprint's perimeter.
+        /// Whether this footprint has a perimeter cell no wall will ever stand in.
         ///
-        /// Only edifices count — the things that occupy a cell so completely that nothing can be
-        /// built in it. Loose items, plants and rubble are all clearable and are the ordinary
-        /// business of preparing a site.
+        /// Two causes, and what they share is that neither goes away by waiting or by working:
+        /// the shell stays unfinished for the life of the colony, and an unfinished room holds
+        /// the concurrency limit closed against every other room.
         ///
-        /// Anything with no faction is fair game too: unowned ruins can be deconstructed or built
-        /// around, and refusing every site with an old wall on it would rule out most of a map.
-        /// It is a building belonging to *someone* that the colony can neither remove nor use.
+        /// A building somebody else owns. Overlap was only ever tested against the planner's own
+        /// rooms, so the map itself never got a vote, and maps have ruins and abandoned
+        /// settlements on them. Unowned and player-owned edifices still pass — those can be
+        /// deconstructed or built around, and refusing every site with an old wall on it would
+        /// rule out most of a map.
+        ///
+        /// Terrain that will not carry a wall. Water and marsh are the ordinary cases. Watched a
+        /// Storage room sited across three such cells: "Wall (when made of wood) requires terrain
+        /// that supports: Light", repeated every pass, until the site was abandoned six attempts
+        /// later having paid for the walls that did go up.
+        ///
+        /// The terrain question is asked without a material, which is the weaker form of it —
+        /// affordance varies by stuff, so a site this accepts can still refuse the particular
+        /// material the colony picks later. It catches the terrain that carries nothing at all,
+        /// which is the case that was actually costing colonies.
         /// </summary>
-        static bool PerimeterHeldByOthers(Map map, CellRect rect)
+        static bool PerimeterUnbuildable(Map map, CellRect rect)
         {
             var player = Faction.OfPlayer;
+            var wallDef = AcDefs.Wall;
 
             foreach (var cell in rect.EdgeCells)
             {
                 if (!cell.InBounds(map)) continue;
 
                 var edifice = cell.GetEdifice(map);
-                if (edifice == null) continue;
-                if (edifice.Faction == null || edifice.Faction == player) continue;
+                if (edifice != null && edifice.Faction != null && edifice.Faction != player)
+                    return true;
 
-                return true;
+                if (wallDef == null) continue;
+
+                try
+                {
+                    if (!GenConstruct.CanBuildOnTerrain(wallDef, cell, map, Rot4.North, null, null))
+                        return true;
+                }
+                catch (Exception) { }   // a def the game will not answer for is not a reason to refuse the site
             }
             return false;
         }
