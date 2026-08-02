@@ -495,6 +495,20 @@ namespace AutoColony.Modules
                 var room = layout.rooms[i];
                 if (room.furnitureQueued) continue;
 
+                // A room deliberately set aside is not a room that keeps failing.
+                //
+                // The deferral was only honoured where walls are queued, and the give-up counter
+                // lives here. A set-aside room has no pending construction by definition — that
+                // is what setting it aside means — so it satisfied the "walls lost, start again"
+                // test on every single pass, burned all six attempts inside a few of them, and
+                // was dropped from the layout entirely. The planner then sited a fresh one
+                // somewhere else: watched a Storage room set aside at day 0 16h and a second
+                // Storage sited at (119,132) fifteen in-game hours later, the first having been
+                // quietly abandoned in between.
+                //
+                // Two rules that each held on their own, closing a loop. Fifth time today.
+                if (room.deferredUntilTick > Find.TickManager.TicksGame) continue;
+
                 if (!ShellComplete(ctx.map, room))
                 {
                     // Walls were queued but neither finished nor still pending: a raid levelled
