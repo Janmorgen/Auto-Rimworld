@@ -202,7 +202,21 @@ namespace AutoColony.Modules
             {
                 var room = layout.rooms[i];
                 if (wanted.HasValue && room.role == wanted.Value) continue;
-                if (room.furnitureQueued && ShellComplete(ctx.map, room)) continue;
+
+                // Never a room whose walls are already up.
+                //
+                // This asked for a finished shell *and* furniture queued, and requiring both was
+                // wrong twice over. Withdrawing from a standing room does not free anybody from
+                // wall-building, which is the entire point; and what it takes back is the
+                // furniture that makes the room worth having.
+                //
+                // Watched it take the research bench out of a research room four in-game hours
+                // after the room was finished — the first research room any colony here has ever
+                // completed — and set the room aside for a day. The long-term tiebreak had
+                // flipped the focus that pass, so the room was not protected as the focus room
+                // either.
+                if (ShellComplete(ctx.map, room)) continue;
+
                 if (AnyFrameIn(ctx.map, room)) continue;      // somebody has already spent work here
 
                 if (room.deferredUntilTick > now) continue;   // already set aside

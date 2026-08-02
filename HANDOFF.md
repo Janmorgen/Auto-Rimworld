@@ -369,8 +369,60 @@ Two things about this worth carrying forward:
   shrinks it. Claiming is capped at 200 cells per pass and burned ground has little to haul or
   clean, so the cost is bounded and mostly inert — but it is a real cost and it accumulates.
 
+## The six design decisions, and what the catalogue was hiding
+
+Six questions had been parked because each had a real trade-off rather than a right answer. All
+six were settled and implemented, and driving them turned up more than they fixed.
+
+| | Decision | Verified in game |
+|---|---|---|
+| 1 | Casualties carried out at 12 cells; beds counted as safe-or-not | no — needs a fire and a casualty at once |
+| 2 | Barely-wanted goals drop a horizon band; anything blocked 3 days gets a turn | yes — runs 27, 29, 30 reached the long-term chain |
+| 3 | One concurrency slot kept for the room the plan asks for | yes, and it needed two guards afterwards |
+| 4 | A focus that holds half a day without improving is logged and stood down | yes — 6 false stand-downs became 0 |
+| 5 | Beds counted over `PlannedRoom.Rect` on both sides | no — needs a colony with two bedrooms |
+| 6 | Food security is time spent out of danger, not the worst single reading | yes — discriminates runs 27 and 28 correctly |
+
+Three things are worth carrying forward more than the decisions themselves.
+
+**The arbitration gate must be the goals' own line, not a threshold on top of it.** The starvation
+guard was first written to fire when no immediate goal was *pressing*, on an urgency threshold.
+That would have promoted a research bench at 1.5 days of food — under any sensible threshold, and
+also the exact point past which nothing the colony decides arrives before the larder is empty. The
+immediate goals already draw the line where it belongs: a fire burning, hostiles present, under
+two days of food. A second line could only move it the wrong way.
+
+**The self-test was not reproducible and nobody had noticed.** Two runs of identical code
+disagreed on four of twenty-four probes. Long-term goals separate on urgency alone and several
+read theirs off the map, so the winner was the weather. The probe now prints the ranking, and the
+distinction is stark: every probe that tests an arbitration *rule* is decided by a clean
+hundred-point band, while the unstable ones sat inside six hundredths of a point. Do not trust a
+long-term probe's winner; read its margin.
+
+That tie is not cosmetic. One pass in which Masonry beat "Somewhere to research" opened a Workshop
+through the spare slot, and a colony of three then split its builders for three days. The extra
+slot now waits for the plan to ask for the same room twice.
+
+**A survey of the def database found the director knew 26 things out of 131 buildable.** 108
+unknown, 29 of them needing no research at all. Three mapped straight onto failures in the log: a
+butcher spot is free and instant where the butcher table costs material and hours (colonies here
+starved at 0.0 days with meat in the field); a stool is 25 units and no research where
+`NeedComfort` had *no remedy at all* because seating was written up as needing Complex Furniture;
+and the table remedy asked only for the 50-unit table, so colonies that could not spare 50 ate off
+the floor while holding wood for a smaller one. Still unused and research-free: `Barricade` at 5
+units against a Defense term that has scored 0.00 in every epoch ever run.
+
+The lesson generalises past the specific defs. Those remedies were written against an assumed
+catalogue, and the assumptions were sitting in comments that read as facts. Check the database.
+
 ## Traps worth knowing before you touch it
 
+- **A hand-built fixture silently reroutes every probe.** Adding a researcher check to
+  `ResearchCapacityGoal` removed "Somewhere to research" from every ranking in the self-test
+  overnight: the probes construct `ColonyState` directly, so anything the real snapshot derives
+  from pawns defaults to false. All 24 probes still passed and had simply stopped asking. This is
+  the second time this exact fault has been recorded here. When a goal starts reading a new field,
+  set it in `PowerChainSelfTest` in the same commit.
 - **A condition that reads correctly can still mean something else.** `done == 0` was a true
   statement about the pass and a false statement about the colony; `distance > radius` was a true
   statement about the fire and a false statement about the danger. Both cost a colony. When a
