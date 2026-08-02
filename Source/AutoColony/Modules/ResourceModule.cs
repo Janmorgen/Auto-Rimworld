@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AutoColony.Learning;
 using RimWorld;
@@ -208,6 +209,28 @@ namespace AutoColony.Modules
             float effective = AcMath.Clamp01(aggression + urgency * 0.5f);
             if (effective < 0.15f) return 0;
 
+            // Meat already killed and not yet dealt with counts as food on its way.
+            //
+            // `daysOfFood` sees stockpiled goods, so a field of fresh corpses reads as an empty
+            // larder — and the colony answers an empty larder by hunting, which produces another
+            // corpse it has not processed either. That is the loop: colonists hunting endlessly
+            // with nothing to show for it, each kill making the next one look more necessary.
+            float waiting = UnbutcheredNutrition(ctx);
+            float needed = ctx.state.colonists * ColonyState.NutritionPerColonistDay;
+            if (needed > 0f && waiting >= needed * BacklogDays)
+            {
+                if (!notedBacklog)
+                {
+                    notedBacklog = true;
+                    Chronicle.Record(ChronicleCategory.Hunt, string.Format(
+                        "not hunting: {0:0.0} days of meat already killed and waiting to be " +
+                        "butchered — the larder reads empty because it is lying in the field",
+                        waiting / needed));
+                }
+                return 0;
+            }
+            notedBacklog = false;
+
             // Desperation is mostly about how empty the larder is, nudged by how bold the
             // strategy is in general.
             float desperation = AcMath.Clamp01(urgency * 0.8f + aggression * 0.2f);
@@ -344,6 +367,43 @@ namespace AutoColony.Modules
                     "called off the hunt on " + Describe(released) +
                     " — no longer worth taking, and a standing designation pulls hunters onto " +
                     "whichever marked animal is nearest rather than the one now chosen");
+        }
+
+        /// <summary>Days of unprocessed meat that count as enough already in hand.</summary>
+        const float BacklogDays = 1.5f;
+
+        bool notedBacklog;
+
+        /// <summary>
+        /// Nutrition lying on the map as fresh animal corpses nobody has butchered yet.
+        ///
+        /// Only fresh ones: a rotted corpse is not food and counting it would stop the colony
+        /// hunting when it genuinely needs to. Only wild animals too — a dead colonist is not
+        /// dinner, and the burial layer has its own opinion about those.
+        /// </summary>
+        static float UnbutcheredNutrition(DirectorContext ctx)
+        {
+            float total = 0f;
+
+            try
+            {
+                var corpses = ctx.map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse);
+                for (int i = 0; i < corpses.Count; i++)
+                {
+                    var corpse = corpses[i] as Corpse;
+                    if (corpse == null || !corpse.Spawned) continue;
+
+                    var pawn = corpse.InnerPawn;
+                    if (pawn == null || pawn.RaceProps == null) continue;
+                    if (!pawn.RaceProps.Animal) continue;
+                    if (corpse.GetRotStage() != RotStage.Fresh) continue;
+
+                    total += pawn.RaceProps.baseBodySize * 3.5f;   // roughly the meat it yields
+                }
+            }
+            catch (Exception) { }
+
+            return total;
         }
 
         readonly Dictionary<string, int> released = new Dictionary<string, int>();

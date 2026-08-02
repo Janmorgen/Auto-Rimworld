@@ -68,6 +68,18 @@ namespace AutoColony.Modules
                     PreferInsulatingStuff(bill, recipe, ctx);
                     table.billStack.AddBill(bill);
                     changed = true;
+
+                    // Said out loud. What the colony has standing orders to make was logged only
+                    // at verbose level, so across thirty-odd observed colonies not one line of
+                    // production ever appeared — and "the butcher bill paused itself after one
+                    // deer" was invisible for exactly that reason.
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "standing order added: {0} on the {1}{2}",
+                        recipe.label ?? recipe.defName,
+                        table.def.label ?? table.def.defName,
+                        ConsumesCorpses(recipe)
+                            ? " — run continuously, since a corpse left alone is worth nothing"
+                            : " up to " + desired));
                 }
                 else if (IsOurs(existing) && existing.targetCount != desired)
                 {
@@ -93,11 +105,54 @@ namespace AutoColony.Modules
 
         static void ConfigureBill(Bill_Production bill, int target)
         {
+            // Anything made from something that rots is run until the input is gone, not until
+            // the output reaches a number.
+            //
+            // Butchering was target-counted on meat: three colonists gave a target of fifteen,
+            // and one deer yields far more than that — so the bill satisfied itself on the first
+            // corpse and paused, and every animal killed after that lay where it fell and
+            // rotted. The colony then read its larder as empty, hunted again, and produced
+            // another corpse it had already decided it did not need. Hunting without end and
+            // nothing to show for it, which is exactly what it looked like from outside.
+            //
+            // A corpse is not stock. It is a perishable input that is worth nothing tomorrow,
+            // so the only sensible instruction is "process what is there".
+            if (ConsumesCorpses(bill.recipe))
+            {
+                bill.repeatMode = BillRepeatModeDefOf.Forever;
+                bill.pauseWhenSatisfied = false;
+                ((IRenameable)bill).RenamableLabel = OurTag + ": " + bill.recipe.label;
+                return;
+            }
+
             bill.repeatMode = BillRepeatModeDefOf.TargetCount;
             bill.targetCount = target;
             bill.pauseWhenSatisfied = true;
             bill.unpauseWhenYouHave = System.Math.Max(1, target / 2);
             ((IRenameable)bill).RenamableLabel = OurTag + ": " + bill.recipe.label;
+        }
+
+        /// <summary>
+        /// Whether the recipe eats something that will spoil if left alone.
+        ///
+        /// Read off the recipe's own ingredient filter rather than by matching def names, so
+        /// modded butchery and any other corpse-consuming work behaves the same.
+        /// </summary>
+        static bool ConsumesCorpses(RecipeDef recipe)
+        {
+            if (recipe == null) return false;
+            if (recipe.defName != null && recipe.defName.StartsWith("ButcherCorpse")) return true;
+
+            try
+            {
+                var filter = recipe.fixedIngredientFilter;
+                if (filter == null) return false;
+
+                foreach (var def in filter.AllowedThingDefs)
+                    if (def != null && def.IsCorpse) return true;
+            }
+            catch (System.Exception) { }
+            return false;
         }
 
         /// <summary>
