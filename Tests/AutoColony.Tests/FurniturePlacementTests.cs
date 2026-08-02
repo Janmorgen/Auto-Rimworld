@@ -79,7 +79,57 @@ namespace AutoColony.Tests
                 foreach (var aspect in FurniturePlacement.Aspects)
                     Assert.True(seen.Add(FurniturePlacement.GeneKey(kind, aspect)));
 
-            Assert.Equal(4 * FurniturePlacement.Aspects.Length, seen.Count);
+            int kinds = System.Enum.GetValues(typeof(FurnitureKind)).Length;
+            Assert.Equal(kinds * FurniturePlacement.Aspects.Length, seen.Count);
+        }
+
+        [Fact]
+        public void ABenchWantsToBeNearTheShelfItReachesInto()
+        {
+            var w = FurniturePlacement.DefaultsFor(FurnitureKind.WorkTable);
+
+            var nearShelf = Cell(4f, 4, false, 3f);
+            nearShelf.fromPartnerFurniture = 2f;
+
+            var acrossTheRoom = Cell(4f, 4, false, 3f);
+            acrossTheRoom.fromPartnerFurniture = 9f;
+
+            Assert.True(FurniturePlacement.Score(nearShelf, w) >
+                        FurniturePlacement.Score(acrossTheRoom, w));
+        }
+
+        [Fact]
+        public void TheyKnowWhichWayThePairingRuns()
+        {
+            Assert.Equal(FurnitureKind.Storage, FurniturePlacement.PartnerOf(FurnitureKind.WorkTable));
+            Assert.Equal(FurnitureKind.WorkTable, FurniturePlacement.PartnerOf(FurnitureKind.Storage));
+            Assert.Null(FurniturePlacement.PartnerOf(FurnitureKind.Bed));
+        }
+
+        [Fact]
+        public void ARoomGivenOverToOnePurposeIsWorthMore()
+        {
+            // A workshop full of workshop things is a workshop; the same benches with a bed
+            // among them is a cluttered bedroom that happens to contain a bench.
+            var w = FurniturePlacement.DefaultsFor(FurnitureKind.WorkTable);
+
+            var pure = Cell(4f, 4, false, 3f);
+            pure.roomPurity = 1f;
+
+            var mixed = Cell(4f, 4, false, 3f);
+            mixed.roomPurity = 0.2f;
+
+            Assert.True(FurniturePlacement.Score(pure, w) > FurniturePlacement.Score(mixed, w));
+        }
+
+        [Fact]
+        public void SpacingAndPartnerAffinityPullOppositeWays()
+        {
+            // Spacing rewards distance from anything; affinity rewards closeness to one thing.
+            // Both act at once, which is why they are separate weights rather than one number.
+            var w = FurniturePlacement.DefaultsFor(FurnitureKind.WorkTable);
+            Assert.True(w.spacing > 0f);
+            Assert.True(w.partnerAffinity > 0f);
         }
 
         [Fact]

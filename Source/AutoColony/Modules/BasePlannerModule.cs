@@ -944,6 +944,10 @@ namespace AutoColony.Modules
                 case RoomRole.Workshop:
                     PlaceOne(ctx, room, AcDefs.StonecuttersTable);
                     PlaceOne(ctx, room, AcDefs.CraftingSpot);
+                    // A shelf, so the benches have something to reach into. A worktable works
+                    // measurably faster with its materials to hand, and the placement layer now
+                    // knows to put the two together — but only if the shelf exists at all.
+                    PlaceOne(ctx, room, AcDefs.Thing("Shelf"));
                     // Somewhere to make clothes. The production module has always been willing
                     // to keep bills on any table it finds; there was simply never a tailor bench
                     // on the map for it to find, so nothing was ever sewn.
@@ -1139,7 +1143,7 @@ namespace AutoColony.Modules
                     if (cell.GetEdifice(map) != null) continue;
 
                     float score = Rooms.FurniturePlacement.Score(
-                        PlacementFeaturesAt(map, room, cell), weights);
+                        PlacementFeaturesAt(map, room, cell, kind), weights);
                     if (score > bestScore) { bestScore = score; best = cell; }
                 }
 
@@ -1186,6 +1190,9 @@ namespace AutoColony.Modules
             if (typeof(Building_WorkTable).IsAssignableFrom(def.thingClass))
                 return Rooms.FurnitureKind.WorkTable;
             if (def.surfaceType == SurfaceType.Eat) return Rooms.FurnitureKind.Surface;
+            if (typeof(Building_Storage).IsAssignableFrom(def.thingClass))
+                return Rooms.FurnitureKind.Storage;
+            if (def.HasComp(typeof(CompGlower))) return Rooms.FurnitureKind.Light;
             return Rooms.FurnitureKind.Other;
         }
 
@@ -1200,11 +1207,16 @@ namespace AutoColony.Modules
                 Rooms.FurniturePlacement.GeneKey(kind, Rooms.FurniturePlacement.WallHugging));
             w.spacing = ctx.Gene(
                 Rooms.FurniturePlacement.GeneKey(kind, Rooms.FurniturePlacement.Spacing));
+            w.partnerAffinity = ctx.Gene(
+                Rooms.FurniturePlacement.GeneKey(kind, Rooms.FurniturePlacement.Partner));
+            w.purity = ctx.Gene(
+                Rooms.FurniturePlacement.GeneKey(kind, Rooms.FurniturePlacement.Purity));
             return w;
         }
 
         /// <summary>Reads the cell: how open it is, what it backs onto, what is already near.</summary>
-        static Rooms.PlacementFeatures PlacementFeaturesAt(Map map, PlannedRoom room, IntVec3 cell)
+        static Rooms.PlacementFeatures PlacementFeaturesAt(Map map, PlannedRoom room, IntVec3 cell,
+                                                           Rooms.FurnitureKind kind)
         {
             var f = new Rooms.PlacementFeatures();
             f.fromDoor = (cell - room.Door).LengthHorizontal;
@@ -1224,20 +1236,55 @@ namespace AutoColony.Modules
             f.freeSides = free;
             f.againstWall = wall;
 
+            // What is nearby, and what *kind* it is. Knowing only that something occupies a cell
+            // is enough to space things out and nothing else — it cannot tell a bench that the
+            // shelf it reaches into is on the far side of the room.
             float nearest = 99f;
+            float nearestPartner = 99f;
+            int furniture = 0;
+            int samePurpose = 0;
+            var partner = Rooms.FurniturePlacement.PartnerOf(kind);
+
             foreach (var other in room.Interior)
             {
                 if (other == cell) continue;
-                bool occupied = other.GetEdifice(map) != null ||
-                                PlacementUtil.HasAnyConstructionAt(map, other);
-                if (!occupied) continue;
+
+                var standing = PlacementUtil.BuildTargetOfCell(map, other);
+                if (standing == null) continue;
 
                 float d = (cell - other).LengthHorizontal;
                 if (d < nearest) nearest = d;
+
+                var otherKind = KindOf(standing);
+                furniture++;
+                if (SharesPurpose(kind, otherKind)) samePurpose++;
+
+                if (partner.HasValue && otherKind == partner.Value && d < nearestPartner)
+                    nearestPartner = d;
             }
+
             f.fromOtherFurniture = nearest;
+            f.fromPartnerFurniture = nearestPartner;
+            f.roomPurity = furniture > 0 ? samePurpose / (float)furniture : 1f;
 
             return f;
+        }
+
+        /// <summary>
+        /// Whether two kinds belong to the same sort of room.
+        ///
+        /// A bench and a shelf are both workshop things; a bed among them is not. RimWorld
+        /// decides a room's role the same way — by what is in it — and a workshop with a bed in
+        /// the corner stops being read as a workshop at all.
+        /// </summary>
+        static bool SharesPurpose(Rooms.FurnitureKind a, Rooms.FurnitureKind b)
+        {
+            if (a == b) return true;
+            if (a == Rooms.FurnitureKind.Light || b == Rooms.FurnitureKind.Light) return true;
+
+            bool aWork = a == Rooms.FurnitureKind.WorkTable || a == Rooms.FurnitureKind.Storage;
+            bool bWork = b == Rooms.FurnitureKind.WorkTable || b == Rooms.FurnitureKind.Storage;
+            return aWork && bWork;
         }
 
         /// <summary>

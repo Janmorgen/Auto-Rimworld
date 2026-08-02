@@ -46,6 +46,27 @@ namespace AutoColony
             return false;
         }
 
+        /// <summary>
+        /// What stands in this cell, or is on its way to standing there. Null for empty ground.
+        ///
+        /// Both have to count: furniture is scored against what is already in the room, and a
+        /// blueprint placed a moment ago is exactly as real for that purpose as a finished one.
+        /// </summary>
+        public static ThingDef BuildTargetOfCell(Map map, IntVec3 cell)
+        {
+            if (!cell.InBounds(map)) return null;
+
+            var things = cell.GetThingList(map);
+            for (int i = 0; i < things.Count; i++)
+            {
+                var def = BuildTargetOf(things[i]);
+                if (def == null) continue;
+                if (def.category != ThingCategory.Building) continue;
+                return def;
+            }
+            return null;
+        }
+
         /// <summary>Any blueprint or frame at all, regardless of what it builds.</summary>
         public static bool HasAnyConstructionAt(Map map, IntVec3 cell)
         {

@@ -207,6 +207,10 @@ namespace AutoColony
                     AutoColony.Rooms.FurniturePlacement.WallHugging, w.wallHugging);
                 Genes.RegisterPlacementWeight(kind.ToString(),
                     AutoColony.Rooms.FurniturePlacement.Spacing, w.spacing);
+                Genes.RegisterPlacementWeight(kind.ToString(),
+                    AutoColony.Rooms.FurniturePlacement.Partner, w.partnerAffinity);
+                Genes.RegisterPlacementWeight(kind.ToString(),
+                    AutoColony.Rooms.FurniturePlacement.Purity, w.purity);
             }
             AcLog.Message("Ready. Strategy space: " + Genes.All.Count + " genes (" + n + " work types).");
         }

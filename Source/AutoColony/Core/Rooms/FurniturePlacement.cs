@@ -12,7 +12,13 @@ namespace AutoColony.Rooms
         /// <summary>Eaten or sat at. Wants space around it on every side.</summary>
         Surface,
 
-        /// <summary>Everything else — lamps, braziers, decoration.</summary>
+        /// <summary>Shelves and containers. What a workbench reaches into.</summary>
+        Storage,
+
+        /// <summary>Lamps and braziers. Wanted near what people do, not in a corner.</summary>
+        Light,
+
+        /// <summary>Everything else — decoration, oddments.</summary>
         Other
     }
 
@@ -30,6 +36,25 @@ namespace AutoColony.Rooms
 
         /// <summary>Cells to the nearest furniture already placed or standing.</summary>
         public float fromOtherFurniture;
+
+        /// <summary>
+        /// Cells to the nearest piece of the kind this one works with.
+        ///
+        /// The same relation rooms have, one level down. A worktable reaches into a shelf for
+        /// its ingredients and works measurably faster for having one close, and a lamp is worth
+        /// having where people actually stand — neither of which the director could see, because
+        /// it knew only that *something* was nearby and never what.
+        /// </summary>
+        public float fromPartnerFurniture;
+
+        /// <summary>
+        /// Share of the room's other furniture that belongs to the same purpose, 0 to 1.
+        ///
+        /// A workshop full of workshop things is a workshop; the same benches with a bed and a
+        /// dining table among them is a cluttered bedroom that happens to contain a bench, and
+        /// RimWorld's own room-role detection agrees.
+        /// </summary>
+        public float roomPurity;
     }
 
     /// <summary>How much each of those is worth for this kind of thing. Every field is a gene.</summary>
@@ -39,6 +64,12 @@ namespace AutoColony.Rooms
         public float access;
         public float wallHugging;
         public float spacing;
+
+        /// <summary>Value of standing near the kind of thing this one works with.</summary>
+        public float partnerAffinity;
+
+        /// <summary>Value of the room being given over to one purpose.</summary>
+        public float purity;
     }
 
     /// <summary>
@@ -77,7 +108,32 @@ namespace AutoColony.Rooms
             if (f.againstWall) score += w.wallHugging;
             score += Saturate(f.fromOtherFurniture, 4f) * w.spacing;
 
+            // Closeness to what this thing works with — a cost, unlike spacing, because here
+            // near is better. A bench beside a shelf saves the walk on every ingredient.
+            score -= Saturate(f.fromPartnerFurniture, 8f) * w.partnerAffinity;
+
+            score += f.roomPurity * w.purity;
+
             return score;
+        }
+
+        /// <summary>
+        /// What this kind of furniture wants to stand near.
+        ///
+        /// Facts about how the game works rather than preferences: a worktable draws from a
+        /// shelf, and a lamp exists to light whatever people are doing. How much that closeness
+        /// is worth is the gene.
+        /// </summary>
+        public static FurnitureKind? PartnerOf(FurnitureKind kind)
+        {
+            switch (kind)
+            {
+                case FurnitureKind.WorkTable: return FurnitureKind.Storage;
+                case FurnitureKind.Storage: return FurnitureKind.WorkTable;
+                case FurnitureKind.Light: return FurnitureKind.WorkTable;
+                case FurnitureKind.Surface: return FurnitureKind.Light;
+                default: return null;
+            }
         }
 
         /// <summary>
@@ -106,6 +162,8 @@ namespace AutoColony.Rooms
                     w.access = 0.3f;
                     w.wallHugging = 1.5f;
                     w.spacing = 1.0f;
+                    w.partnerAffinity = 0f;
+                    w.purity = 1.5f;    // a bedroom with a workbench in it is not a bedroom
                     break;
 
                 case FurnitureKind.WorkTable:
@@ -113,6 +171,18 @@ namespace AutoColony.Rooms
                     w.access = 2.5f;
                     w.wallHugging = 0.5f;
                     w.spacing = 1.2f;
+                    w.partnerAffinity = 2.0f;   // the shelf it reaches into
+                    w.purity = 1.5f;
+                    break;
+
+                case FurnitureKind.Storage:
+                    // Wants to be beside the bench that draws from it, and out of the way.
+                    w.doorClearance = 0.6f;
+                    w.access = 1.0f;
+                    w.wallHugging = 1.8f;
+                    w.spacing = 0.4f;
+                    w.partnerAffinity = 2.2f;
+                    w.purity = 0.8f;
                     break;
 
                 case FurnitureKind.Surface:
@@ -120,6 +190,18 @@ namespace AutoColony.Rooms
                     w.access = 2.0f;
                     w.wallHugging = 0f;
                     w.spacing = 1.5f;
+                    w.partnerAffinity = 0.4f;
+                    w.purity = 1.0f;
+                    break;
+
+                case FurnitureKind.Light:
+                    // Near what people are doing, not tucked in a corner.
+                    w.doorClearance = 0.3f;
+                    w.access = 0.4f;
+                    w.wallHugging = 1.0f;
+                    w.spacing = 0.2f;
+                    w.partnerAffinity = 1.6f;
+                    w.purity = 0f;
                     break;
 
                 default:
@@ -127,6 +209,8 @@ namespace AutoColony.Rooms
                     w.access = 0.5f;
                     w.wallHugging = 0.8f;
                     w.spacing = 0.5f;
+                    w.partnerAffinity = 0f;
+                    w.purity = 0.3f;
                     break;
             }
             return w;
@@ -142,7 +226,10 @@ namespace AutoColony.Rooms
         public const string Access = "access";
         public const string WallHugging = "wallHugging";
         public const string Spacing = "spacing";
+        public const string Partner = "partner";
+        public const string Purity = "purity";
 
-        public static readonly string[] Aspects = { DoorClearance, Access, WallHugging, Spacing };
+        public static readonly string[] Aspects =
+            { DoorClearance, Access, WallHugging, Spacing, Partner, Purity };
     }
 }
