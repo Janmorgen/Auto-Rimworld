@@ -486,8 +486,32 @@ namespace AutoColony
 
             // With training on, the cycle alternates: one epoch played live so the colony
             // actually advances, then a round of trials replayed over the next stretch.
+            //
+            // But only from a colony worth replaying. The snapshot decides what every candidate
+            // is asked, and taken during a crisis the question becomes "can you escape this in
+            // two days" — which is mostly luck. A round taken from a one-colonist colony at zero
+            // food produced 0.466 and 0.000 from strategies differing in hauling weight, and the
+            // search has no way to know that spread was noise. Deferring costs one epoch of
+            // training; scoring four candidates on a coin toss costs a whole round of evidence
+            // and teaches something false with it.
             if (AutoColonyMod.Settings.trainingMode)
-                TrainingSession.BeginRound(evolution, AutoColonyMod.Settings.trialCandidates);
+            {
+                string why;
+                bool fit = TrainingPolicy.WorthSnapshotting(
+                    lastMetrics.colonists, lastMetrics.colonistsDowned, lastMetrics.daysOfFood,
+                    ctx.plan != null && ctx.plan.EmergencyActive, out why);
+
+                if (fit)
+                {
+                    TrainingSession.BeginRound(evolution, AutoColonyMod.Settings.trialCandidates);
+                }
+                else
+                {
+                    Chronicle.Record(ChronicleCategory.Learning,
+                        "training round deferred — " + why +
+                        "; playing on live until the colony is worth comparing candidates from");
+                }
+            }
         }
 
         static string ColonyName()
