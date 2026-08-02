@@ -96,6 +96,43 @@ namespace AutoColony.Modules
         /// </summary>
         const int MaxShellAttempts = 6;
 
+        bool roomsHeldNoted;
+
+        /// <summary>
+        /// Records the whole base being held on the concurrency limit.
+        ///
+        /// This return is the single most consequential thing the planner does and it was silent,
+        /// so every colony that never got a bedroom had to be diagnosed by inferring it from the
+        /// absence of BUILD lines. One unfinished room stops all the others, and when that room
+        /// is slow for ordinary reasons — a raid, a fire, forty-one boulders in its footprint —
+        /// the colony can spend days with no bed and nothing in the record saying why.
+        ///
+        /// Says what is holding it and what the colony would build next, because "held" and
+        /// "held while it needs a bedroom" are different facts.
+        /// </summary>
+        void NoteRoomsHeld(DirectorContext ctx, int unfinished, int allowed)
+        {
+            if (roomsHeldNoted) return;
+            roomsHeldNoted = true;
+
+            string first = "nothing";
+            var layout = ctx.layout;
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                if (layout.rooms[i].wallsQueued && ShellComplete(ctx.map, layout.rooms[i])) continue;
+                first = layout.rooms[i].role.ToString();
+                break;
+            }
+
+            var wanted = ctx.plan != null && ctx.plan.Focus != null ? ctx.plan.Focus.WantsRoom : null;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "not opening another room — {0} unfinished and only {1} allowed for {2} able " +
+                "colonists; waiting on the {3} room{4}",
+                unfinished, allowed, ctx.state.ableColonists.Count, first,
+                wanted.HasValue ? ", while the plan is asking for a " + wanted.Value : ""));
+        }
+
         protected override void Act(DirectorContext ctx)
         {
             var layout = ctx.layout;
@@ -343,8 +380,13 @@ namespace AutoColony.Modules
             // none finished, with the colonists sleeping on wet ground the whole time and a
             // bedroom among the things they never got round to.
             int unfinished = UnfinishedRooms(ctx);
-            if (unfinished >= Upkeep.BuildingMeans.ConcurrentRooms(ctx.state.ableColonists.Count))
+            int allowed = Upkeep.BuildingMeans.ConcurrentRooms(ctx.state.ableColonists.Count);
+            if (unfinished >= allowed)
+            {
+                NoteRoomsHeld(ctx, unfinished, allowed);
                 return;
+            }
+            roomsHeldNoted = false;
 
             // Finish the room the plan actually asked for before opening another.
             //
