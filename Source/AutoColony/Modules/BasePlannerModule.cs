@@ -190,11 +190,100 @@ namespace AutoColony.Modules
             RoomRole role;
             if (!TryChooseNextRole(ctx, out role)) return;
 
+            // A room the colony already owns, before any new ground is opened.
+            if (TryRepurpose(ctx, role)) return;
+
             var reserved = ReserveRoom(ctx, role);
             if (reserved != null)
             {
                 ctx.Credit(BanditId, role.ToString());
                 Note("reserved a new " + role + " room");
+            }
+        }
+
+        /// <summary>
+        /// Gives an existing, finished room a new job instead of building another one.
+        ///
+        /// The walls are the expensive part — roughly a hundred and twenty units a shell, and
+        /// this codebase already treats them as stored material when it reclaims a surplus room.
+        /// A room that has stopped being needed for what it was built for is a complete shell
+        /// standing empty, and the only thing between it and being a workshop is the furniture
+        /// inside it.
+        ///
+        /// Without this the two halves of the director worked against each other. The planner
+        /// opened new ground for the role it wanted; the extra walls pushed the colony into
+        /// being destitute; the upkeep layer then reclaimed the *old* room for its material —
+        /// so a colony with a perfectly good empty room built a second one beside it and tore
+        /// the first down to pay for it. Observed in a running colony, blueprints going up
+        /// alongside finished rooms with nothing wrong with them.
+        /// </summary>
+        bool TryRepurpose(DirectorContext ctx, RoomRole role)
+        {
+            var layout = ctx.layout;
+            if (layout == null) return false;
+
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var room = layout.rooms[i];
+                if (room.role == role) continue;
+
+                // Only a shell that is actually finished. A half-built room offers no saving
+                // over starting one where the plan wants it.
+                if (!room.wallsQueued || !ShellComplete(ctx.map, room)) continue;
+
+                // And only one nobody needs for what it currently is — the same test used
+                // before taking a room down, since the question is the same one.
+                if (!Upkeep.DefectSurvey.Expendable(ctx.map, layout, room)) continue;
+
+                var was = room.role;
+                ClearFurnitureFor(ctx, room, was);
+
+                room.role = role;
+                room.furnitureQueued = false;   // furnished for its new purpose on a later pass
+
+                ctx.Credit(BanditId, role.ToString());
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "repurposed the {0} room as a {1} — the shell is already standing, and " +
+                    "building another one would have cost about {2} units of material it did not need",
+                    was, role, Upkeep.BuildingMeans.RoomCost));
+                Note("repurposed a " + was + " room as " + role);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Takes out the furniture that made the room what it was, keeping the material.
+        ///
+        /// Uninstalled rather than deconstructed wherever the game allows it, which is the rule
+        /// this codebase already applies to moving anything: deconstruction returns only
+        /// `resourcesFractionWhenDeconstructed`, and several vanilla defs set that to zero.
+        /// Beds especially have to go, or the room still counts as somewhere to sleep and the
+        /// shelter goal reads it as one.
+        /// </summary>
+        void ClearFurnitureFor(DirectorContext ctx, PlannedRoom room, RoomRole was)
+        {
+            if (was != RoomRole.Bedroom && was != RoomRole.Hospital && was != RoomRole.Prison)
+                return;
+
+            foreach (var cell in room.Interior)
+            {
+                if (!cell.InBounds(ctx.map)) continue;
+
+                var things = cell.GetThingList(ctx.map);
+                for (int i = things.Count - 1; i >= 0; i--)
+                {
+                    var bed = things[i] as Building_Bed;
+                    if (bed == null || !bed.Spawned) continue;
+                    if (bed.OwnersForReading != null && bed.OwnersForReading.Count > 0) continue;
+
+                    if (bed.def.Minifiable)
+                        ctx.map.designationManager.AddDesignation(
+                            new Designation(bed, DesignationDefOf.Uninstall));
+                    else
+                        ctx.map.designationManager.AddDesignation(
+                            new Designation(bed, DesignationDefOf.Deconstruct));
+                }
             }
         }
 

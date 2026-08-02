@@ -444,7 +444,14 @@ namespace AutoColony.Upkeep
         /// Whether a planned room can be taken down without costing the colony something it
         /// cannot do without.
         /// </summary>
-        static bool Expendable(Map map, BaseLayout layout, PlannedRoom planned)
+        /// <summary>
+        /// Whether a room can be given up — taken down for its material, or handed a new job.
+        ///
+        /// Public because the planner needs the same answer for the opposite reason: before it
+        /// opens ground for a new room it should know whether one the colony already owns is
+        /// free to take the work.
+        /// </summary>
+        public static bool Expendable(Map map, BaseLayout layout, PlannedRoom planned)
         {
             // Never the last of a role. One kitchen, one store and one bedroom are the floor.
             if (layout.CountRooms(planned.role) <= 1 &&
