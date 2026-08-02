@@ -183,6 +183,22 @@ namespace AutoColony
                 defaults.Add(AutoColony.Upkeep.DefectPolicy.DefaultWeights[(int)kind]);
             }
             Genes.RegisterUpkeepWeights(keys, defaults);
+
+            // Where each kind of furniture wants to stand, as four competing preferences per
+            // kind. A bed and a workbench do not want the same cell and never did.
+            foreach (AutoColony.Rooms.FurnitureKind kind in
+                     System.Enum.GetValues(typeof(AutoColony.Rooms.FurnitureKind)))
+            {
+                var w = AutoColony.Rooms.FurniturePlacement.DefaultsFor(kind);
+                Genes.RegisterPlacementWeight(kind.ToString(),
+                    AutoColony.Rooms.FurniturePlacement.DoorClearance, w.doorClearance);
+                Genes.RegisterPlacementWeight(kind.ToString(),
+                    AutoColony.Rooms.FurniturePlacement.Access, w.access);
+                Genes.RegisterPlacementWeight(kind.ToString(),
+                    AutoColony.Rooms.FurniturePlacement.WallHugging, w.wallHugging);
+                Genes.RegisterPlacementWeight(kind.ToString(),
+                    AutoColony.Rooms.FurniturePlacement.Spacing, w.spacing);
+            }
             AcLog.Message("Ready. Strategy space: " + Genes.All.Count + " genes (" + n + " work types).");
         }
     }

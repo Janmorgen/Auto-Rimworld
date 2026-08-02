@@ -149,6 +149,7 @@ namespace AutoColony.Modules
 
                 QueueFurniture(ctx, room);
                 room.furnitureQueued = true;
+                ReportRoomStats(ctx, room);
                 Note("furnished " + room.role + " room");
                 return;
             }
@@ -990,20 +991,129 @@ namespace AutoColony.Modules
 
             var stuff = PlacementUtil.ChooseStuff(map, def,
                 FireRisk.StonePreference(ctx, FireRisk.Assess(map, ctx.state)));
-            int placed = 0;
+            var kind = KindOf(def);
+            var weights = PlacementWeightsFor(ctx, kind);
 
-            foreach (var cell in room.Interior)
+            // Scored rather than first-fit.
+            //
+            // Everything used to go into the first legal cell of the interior, so a room's
+            // furniture piled into one corner in iteration order — blocking its own access,
+            // leaving the rest of the floor bare, and costing the room the Space rating RimWorld
+            // scores it on. Each item now takes the best cell for *that* item, which is a
+            // different cell for a bed than for a workbench.
+            for (int n = 0; n < count; n++)
             {
-                if (placed >= count || placedThisPass >= MaxPlacementsPerPass) return;
-                // Keep the cell in front of the door clear so nothing blocks the entrance.
-                if ((cell - room.Door).LengthHorizontalSquared <= 2) continue;
+                if (placedThisPass >= MaxPlacementsPerPass) return;
 
-                if (PlacementUtil.TryPlace(map, def, cell, Rot4.North, stuff))
+                float bestScore = float.NegativeInfinity;
+                var best = IntVec3.Invalid;
+
+                foreach (var cell in room.Interior)
                 {
-                    placed++;
-                    placedThisPass++;
+                    if (!cell.InBounds(map)) continue;
+                    if (PlacementUtil.HasAnyConstructionAt(map, cell)) continue;
+                    if (cell.GetEdifice(map) != null) continue;
+
+                    float score = Rooms.FurniturePlacement.Score(
+                        PlacementFeaturesAt(map, room, cell), weights);
+                    if (score > bestScore) { bestScore = score; best = cell; }
                 }
+
+                if (!best.IsValid) return;
+                if (!PlacementUtil.TryPlace(map, def, best, Rot4.North, stuff)) return;
+
+                placedThisPass++;
             }
+        }
+
+        /// <summary>
+        /// Records what the game itself thinks of the finished room.
+        ///
+        /// RimWorld scores a room on space, beauty and cleanliness and turns those into the
+        /// impressiveness a colonist actually feels, and none of it was ever read — so how a
+        /// room turned out was invisible and furniture placement could not be judged at all.
+        /// The stats are only meaningful for an enclosed room, which is the other reason the
+        /// completeness test had to start asking the game whether the walls actually close.
+        /// </summary>
+        static void ReportRoomStats(DirectorContext ctx, PlannedRoom planned)
+        {
+            try
+            {
+                var room = planned.Center.GetRoom(ctx.map);
+                if (room == null || room.TouchesMapEdge || room.PsychologicallyOutdoors) return;
+
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "{0} room finished — space {1:0.0}, beauty {2:0.0}, cleanliness {3:0.00}, " +
+                    "impressiveness {4:0.0}",
+                    planned.role,
+                    room.GetStat(RoomStatDefOf.Space),
+                    room.GetStat(RoomStatDefOf.Beauty),
+                    room.GetStat(RoomStatDefOf.Cleanliness),
+                    room.GetStat(RoomStatDefOf.Impressiveness)));
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>What this def wants from a cell, which is not the same for all of them.</summary>
+        static Rooms.FurnitureKind KindOf(ThingDef def)
+        {
+            if (def == null) return Rooms.FurnitureKind.Other;
+            if (typeof(Building_Bed).IsAssignableFrom(def.thingClass)) return Rooms.FurnitureKind.Bed;
+            if (typeof(Building_WorkTable).IsAssignableFrom(def.thingClass))
+                return Rooms.FurnitureKind.WorkTable;
+            if (def.surfaceType == SurfaceType.Eat) return Rooms.FurnitureKind.Surface;
+            return Rooms.FurnitureKind.Other;
+        }
+
+        Rooms.PlacementWeights PlacementWeightsFor(DirectorContext ctx, Rooms.FurnitureKind kind)
+        {
+            var w = new Rooms.PlacementWeights();
+            w.doorClearance = ctx.Gene(
+                Rooms.FurniturePlacement.GeneKey(kind, Rooms.FurniturePlacement.DoorClearance));
+            w.access = ctx.Gene(
+                Rooms.FurniturePlacement.GeneKey(kind, Rooms.FurniturePlacement.Access));
+            w.wallHugging = ctx.Gene(
+                Rooms.FurniturePlacement.GeneKey(kind, Rooms.FurniturePlacement.WallHugging));
+            w.spacing = ctx.Gene(
+                Rooms.FurniturePlacement.GeneKey(kind, Rooms.FurniturePlacement.Spacing));
+            return w;
+        }
+
+        /// <summary>Reads the cell: how open it is, what it backs onto, what is already near.</summary>
+        static Rooms.PlacementFeatures PlacementFeaturesAt(Map map, PlannedRoom room, IntVec3 cell)
+        {
+            var f = new Rooms.PlacementFeatures();
+            f.fromDoor = (cell - room.Door).LengthHorizontal;
+
+            int free = 0;
+            bool wall = false;
+            for (int i = 0; i < 4; i++)
+            {
+                var side = cell + GenAdj.CardinalDirections[i];
+                if (!side.InBounds(map)) { wall = true; continue; }
+
+                var edifice = side.GetEdifice(map);
+                if (edifice != null) { wall = true; continue; }
+                if (PlacementUtil.HasAnyConstructionAt(map, side)) continue;
+                if (side.Standable(map)) free++;
+            }
+            f.freeSides = free;
+            f.againstWall = wall;
+
+            float nearest = 99f;
+            foreach (var other in room.Interior)
+            {
+                if (other == cell) continue;
+                bool occupied = other.GetEdifice(map) != null ||
+                                PlacementUtil.HasAnyConstructionAt(map, other);
+                if (!occupied) continue;
+
+                float d = (cell - other).LengthHorizontal;
+                if (d < nearest) nearest = d;
+            }
+            f.fromOtherFurniture = nearest;
+
+            return f;
         }
 
         /// <summary>

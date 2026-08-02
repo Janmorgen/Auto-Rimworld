@@ -248,6 +248,20 @@ namespace AutoColony.Learning
         /// colony under constant raids and one building out in peace do not agree about whether
         /// roofing the generator beats lighting the bedroom.
         /// </summary>
+        /// <summary>
+        /// Registers one weight for one aspect of where a kind of furniture wants to stand.
+        ///
+        /// Four aspects each — clearance from the door, open sides to work from, a wall at the
+        /// back, and distance from other furniture — because a bed and a workbench want
+        /// genuinely opposite things and a single ordering served neither.
+        /// </summary>
+        public static void RegisterPlacementWeight(string kind, string aspect, float def)
+        {
+            if (string.IsNullOrEmpty(kind) || string.IsNullOrEmpty(aspect)) return;
+            Register(new GeneSpec("furniture." + kind + "." + aspect, 0f, 4f, def,
+                                  "Furniture placement", kind + " " + aspect));
+        }
+
         public static void RegisterUpkeepWeights(IList<string> keys, IList<float> defaults)
         {
             if (keys == null || defaults == null) return;
