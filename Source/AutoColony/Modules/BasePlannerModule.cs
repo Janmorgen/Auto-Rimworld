@@ -40,6 +40,42 @@ namespace AutoColony.Modules
 
         int placedThisPass;
 
+        /// <summary>
+        /// Whether the "no ground left" line has already been said for the current dry spell.
+        /// Cleared as soon as a room is sited again, so a base that gets unblocked — a boulder
+        /// mined out, a surplus room reclaimed — says so again if it blocks a second time.
+        /// </summary>
+        bool reportedNoSite;
+
+        /// <summary>Whether the "nothing to build walls from" line has been said this dry spell.</summary>
+        bool reportedNoShellMaterial;
+
+        /// <summary>
+        /// How many passes running the same room has had its furniture re-queued, and which room
+        /// that is. Consecutive by room rather than a total, because the fault this catches is a
+        /// single room cycling — a re-queue elsewhere is ordinary work and resets the count.
+        /// </summary>
+        int requeueRun;
+        string requeueRoom;
+
+        /// <summary>
+        /// Why the last furniture placement put nothing down, or null if the last one worked.
+        /// Carried so the loop report can name its own cause instead of only its symptom.
+        /// </summary>
+        string lastPlacementFailure;
+
+        /// <summary>
+        /// Cells the game refused this item in, so the next-best is tried instead of the same one
+        /// for ever. Per call, and a field only to keep it off the per-pass allocation path.
+        /// </summary>
+        readonly HashSet<IntVec3> refusedCells = new HashSet<IntVec3>();
+
+        /// <summary>
+        /// How many different cells one item may be offered before the room is left for a later
+        /// pass. Bounded because every attempt rescores the whole interior.
+        /// </summary>
+        const int MaxCellAttempts = 8;
+
         protected override void Act(DirectorContext ctx)
         {
             var layout = ctx.layout;
@@ -58,10 +94,16 @@ namespace AutoColony.Modules
                 var room = layout.rooms[i];
                 if (!room.wallsQueued)
                 {
-                    QueueShell(ctx, room);
-                    room.wallsQueued = true;
-                    Note("queued walls for " + room.role + " room");
-                    return;
+                    // Only claim the room once something is actually going up. Marking it queued
+                    // on a pass that placed nothing is what made the planner un-queue and re-queue
+                    // it every three in-game hours, and burn the pass doing it.
+                    if (QueueShell(ctx, room) > 0)
+                    {
+                        room.wallsQueued = true;
+                        Note("queued walls for " + room.role + " room");
+                        return;
+                    }
+                    continue;
                 }
             }
 
@@ -78,12 +120,56 @@ namespace AutoColony.Modules
                 // generator or bed still waiting to be built reads as one that was destroyed.
                 if (HasPendingConstructionAnywhereIn(ctx.map, room)) continue;
 
+                // Nor is a room whose floor is still being dug out a room that lost its
+                // furniture. Mining is work the colony has already been told to do, and a mine
+                // designation is not a blueprint, so this check could not see it.
+                if (StillBeingCleared(ctx.map, room)) continue;
+
                 room.furnitureQueued = false;
                 Chronicle.Record(ChronicleCategory.Build,
                     room.role + " room is missing its key furniture — re-queuing it");
                 Note("re-queuing lost furniture in " + room.role + " room");
+
+                // Re-queuing the same room over and over is not upkeep, it is a loop.
+                //
+                // This path exists for furniture that was destroyed, and one pass should end it.
+                // Twice now it has run instead as a metronome — a kitchen, then a bedroom,
+                // alternating "furnished" and "missing" every three in-game hours for days,
+                // while both branches return early and starve the rest of the planner. Each time
+                // the cause was different and each time it was invisible, because every
+                // individual line looked like ordinary work.
+                //
+                // The loop is easier to recognise than any of its causes, so this names the loop.
+                if (requeueRoom == room.role.ToString()) requeueRun++;
+                else { requeueRoom = room.role.ToString(); requeueRun = 1; }
+
+                if (requeueRun == 4 || (requeueRun > 4 && requeueRun % 20 == 0))
+                {
+                    Chronicle.Record(ChronicleCategory.Build, string.Format(
+                        "the {0} room's key furniture has been re-queued {1} times running and " +
+                        "still has not appeared — the planner is looping on it instead of getting " +
+                        "on with the base; last placement said: {2}",
+                        room.role, requeueRun,
+                        lastPlacementFailure ?? "nothing, which means it placed something and it " +
+                        "went away again"));
+                }
                 return;
             }
+
+            // Somebody is on the floor and there is nowhere to carry them.
+            //
+            // This test already existed, but only inside the "walls are not up yet" branch and
+            // behind `furnitureQueued`, so it could not reach the case that actually keeps
+            // killing people: a finished, furnished bedroom holding fewer beds than the colony
+            // has colonists. A rescue needs a *free* bed, and bed rest is what decides whether a
+            // wound beats the infection.
+            //
+            // Watched live, and this is the clearest the record has ever been about it: Sanchez
+            // spent nine in-game hours down with no threat, no fire and eight days of food in
+            // store, while the director used those hours to place a games table twice.
+            if (ctx.state.colonistsDowned > 0 &&
+                ctx.state.colonistBeds < ctx.state.colonists &&
+                TryAddEmergencyBed(ctx)) return;
 
             for (int i = 0; i < layout.rooms.Count; i++)
             {
@@ -110,8 +196,17 @@ namespace AutoColony.Modules
                     // 14 HP a day, and an untended infection races immunity to 100% — the first
                     // to arrive decides whether the pawn lives. Colonies in this session died
                     // exactly there: everyone down, nobody rescuable, `beds 0` in the record.
-                    if (ctx.state.colonistsDowned > 0 && ctx.state.colonistBeds <= 0 &&
-                        room.role == RoomRole.Bedroom)
+                    // A bed somebody else is asleep in is not a bed to be rescued into, so the
+                    // test is how many are spare, not how many exist.
+                    //
+                    // This asked for zero beds, and zero is the one number a colony stops being
+                    // at the moment the first bed goes up. Watched live: Belle went down at 12h
+                    // in a raid with `beds 1` for three colonists, the doctor was correctly held
+                    // back to tend her, and she died on the ground at 16h — four hours in which
+                    // this branch could have placed the bed that would have carried her off it,
+                    // and declined to because one bed already existed.
+                    if (ctx.state.colonistsDowned > 0 && room.role == RoomRole.Bedroom &&
+                        ctx.state.colonistBeds < ctx.state.colonists)
                     {
                         QueueFurniture(ctx, room);
                         room.furnitureQueued = true;
@@ -153,6 +248,18 @@ namespace AutoColony.Modules
                 Note("furnished " + room.role + " room");
                 return;
             }
+
+            // Everything a room needs, not just the one item it is named for.
+            //
+            // The missing-furniture check above asks only about the *key* item, so a kitchen
+            // with a stove is a finished kitchen however much else failed to land. Anything
+            // secondary therefore gets exactly one attempt, on one pass, and if that attempt
+            // fails it is never made again. Watched live: a kitchen with a stove and no butcher
+            // table, and a colony that hunted for ten days with 51 corpses on the map, one meal
+            // in the larder and 0.0 days of food — "a corpse is not food until something
+            // butchers it", arriving by a route the goal layer cannot see, because the goal was
+            // satisfied the moment the kitchen existed.
+            if (TopUpFurniture(ctx)) return;
 
             MarkPrisonBeds(ctx);
 
@@ -228,6 +335,23 @@ namespace AutoColony.Modules
             {
                 var room = layout.rooms[i];
                 if (room.role == role) continue;
+
+                // Never take the room the plan is currently asking for.
+                //
+                // Repurposing judges a room on whether anything needs it for what it is *now*,
+                // and a room that has not been furnished yet always looks spare. But a Research
+                // room with no bench in it is not a spare room — it is the room the plan is in
+                // the middle of asking for. So wanting a workshop quietly ate the research room,
+                // the plan asked for research again, and the two traded the same shell back and
+                // forth: four conversions in seven in-game hours, and no bench ever built.
+                //
+                // The same guard the planner already applies to its own focus before opening new
+                // ground; it simply never applied it to taking a room away.
+                if (ctx.plan != null && ctx.plan.Focus != null)
+                {
+                    var wanted = ctx.plan.Focus.WantsRoom;
+                    if (wanted.HasValue && room.role == wanted.Value) continue;
+                }
 
                 // Only a shell that is actually finished. A half-built room offers no saving
                 // over starting one where the plan wants it.
@@ -574,12 +698,27 @@ namespace AutoColony.Modules
             bool bestNorth = true;
             System.Func<bool> bestFound = delegate { return bestScore > float.NegativeInfinity; };
 
-            // Try successive slots until one lands somewhere buildable. Slots are capped so a
-            // hemmed-in base stops searching instead of marching rooms off across the map.
+            // Surveying a slot is not the same as spending it.
+            //
+            // While this loop took the first slot that fitted, advancing the cursor per slot
+            // examined was right: everything it stepped over had just been rejected. Scoring
+            // changed that — the loop now runs all the way to the end on every call, so the
+            // cursor ran to its ceiling on the *first* room and `ReserveRoom` returned null in
+            // silence for the rest of the colony's life. Watched live: one kitchen, nextSlot
+            // pinned at 40 in the save, three colonists sleeping outside for five days beside a
+            // plan that kept asking for beds, and no line anywhere saying why.
+            //
+            // The cursor is only allowed past slots that can never come good — off the map, or
+            // already under a room. The winner does not advance it, because the room about to
+            // be added there makes it overlap on the next call anyway.
+            int firstUsable = -1;
+
+            // Slots are capped so a hemmed-in base stops searching instead of marching rooms
+            // off across the map.
             for (int attempt = 0; attempt < 24; attempt++)
             {
-                if (layout.nextSlot >= MaxSlots) return null;
-                int slot = layout.nextSlot++;
+                int slot = layout.nextSlot + attempt;
+                if (slot >= MaxSlots) break;
                 bool north = (slot % 2) == 0;
                 int index = slot / 2;
 
@@ -594,6 +733,8 @@ namespace AutoColony.Modules
                 if (!rect.InBounds(map)) continue;
                 if (OverlapsExisting(layout, rect)) continue;
 
+                if (firstUsable < 0) firstUsable = slot;
+
                 // Scored rather than taken. Every slot used to give the same answer to a
                 // question that differs completely by role — a store wants the middle of the
                 // base, a workshop wants to be beside that store, a prison wants to be nowhere
@@ -607,7 +748,25 @@ namespace AutoColony.Modules
                 bestNorth = north;
             }
 
-            if (!bestFound()) return null;
+            if (!bestFound())
+            {
+                // Running out of ground is a legitimate answer; being unable to tell it apart
+                // from the planner having quietly broken is not. This is the line whose absence
+                // cost a whole colony to diagnose, so it is said once per dry spell rather than
+                // suppressed for tidiness.
+                if (!reportedNoSite)
+                {
+                    reportedNoSite = true;
+                    Chronicle.Record(ChronicleCategory.Build, string.Format(
+                        "nowhere to put a {0} room {1}x{2} — 24 slots from {3} of {4} are all off " +
+                        "the map or already built on; the base has run out of ground",
+                        role, width, height, layout.nextSlot, MaxSlots));
+                }
+                return null;
+            }
+
+            layout.nextSlot = firstUsable;
+            reportedNoSite = false;
 
             var room = new PlannedRoom();
             room.minX = bestRect.minX;
@@ -736,6 +895,119 @@ namespace AutoColony.Modules
         /// returns material; plants are cut, which returns wood. Neither is wasted work — it is
         /// work the colony was going to be blocked by otherwise.
         /// </summary>
+        /// <summary>
+        /// True while the room's own floor is still being cleared out from under it.
+        ///
+        /// Natural rock is an edifice, and <see cref="PlaceMany"/> skips any cell holding one —
+        /// so a room sited on rock has nowhere to put its furniture until the mining is done.
+        /// That is a wait, not a loss, but nothing could tell the two apart: the re-queue check
+        /// looked for blueprints, and mining leaves a designation instead. A kitchen sited over
+        /// 22 obstructions re-queued its stove every three in-game hours for a day while the
+        /// colonists dug, and because both that branch and the furnish branch return, the whole
+        /// planner idled behind it with the colony at 0.0 days of food.
+        /// </summary>
+        /// <summary>
+        /// Which room the top-up sweep looks at next. One room per pass, in rotation, because
+        /// every check rescans the room and the planner already runs at most once a tick.
+        /// </summary>
+        int topUpCursor;
+
+        /// <summary>
+        /// Puts back anything a finished room was meant to have and has not got.
+        ///
+        /// Safe to run repeatedly: <see cref="PlaceMany"/> tops up to a count rather than adding
+        /// to it, so this places what is missing and nothing else. It reports only when it
+        /// actually placed something, so a base with nothing wrong stays silent.
+        /// </summary>
+        /// <summary>
+        /// Adds one bed, anywhere it will go, because somebody is down and every bed is spoken
+        /// for. Deliberately indifferent to whether the room is finished or already furnished:
+        /// the ordinary furnishing rules are about building a base tidily, and this is not that.
+        /// </summary>
+        bool TryAddEmergencyBed(DirectorContext ctx)
+        {
+            var layout = ctx.layout;
+            if (layout == null || AcDefs.Bed == null) return false;
+
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var room = layout.rooms[i];
+                if (room.role != RoomRole.Bedroom && room.role != RoomRole.Hospital) continue;
+
+                // A bed already on its way is not a reason to queue a second. A *wall* on its way
+                // is no reason at all.
+                //
+                // This asked whether anything at all was under construction in the room, which is
+                // true of every bedroom that is still being built — so the one case this path
+                // exists for, an early colony where nobody has a bed yet, was the one case it
+                // refused to act on. Watched live: `beds 0` for all 118 vitals samples across
+                // nine days, a Bedroom sited on day 0 and never furnished, two colonists dead on
+                // the floor, and this branch never once firing.
+                //
+                // ExistingCount counts blueprints and frames as well as built beds, so asking
+                // about the bed specifically is both the correct guard and an idempotent one.
+                if (ExistingCount(ctx.map, room, AcDefs.Bed) > 0) continue;
+
+                int before = placedThisPass;
+                PlaceMany(ctx, room, AcDefs.Bed, 1);
+                if (placedThisPass <= before) continue;
+
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "{0} down with {1} beds for {2} colonists — putting another bed in the {3} " +
+                    "now, because a rescue needs a free bed to carry someone to",
+                    ctx.state.colonistsDowned, ctx.state.colonistBeds, ctx.state.colonists,
+                    room.role));
+                Note("emergency bed for a downed colonist in the " + room.role + " room");
+                return true;
+            }
+            return false;
+        }
+
+        bool TopUpFurniture(DirectorContext ctx)
+        {
+            var rooms = ctx.layout.rooms;
+            if (rooms.Count == 0) return false;
+
+            var room = rooms[topUpCursor % rooms.Count];
+            topUpCursor++;
+
+            // Only somewhere settled enough that a gap means a failure rather than work in
+            // progress — the same three tests the missing-furniture check uses.
+            if (!room.furnitureQueued) return false;
+            if (!ShellComplete(ctx.map, room)) return false;
+            if (StillBeingCleared(ctx.map, room)) return false;
+            if (HasPendingConstructionAnywhereIn(ctx.map, room)) return false;
+
+            int before = placedThisPass;
+            QueueFurniture(ctx, room);
+            if (placedThisPass <= before) return false;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "topped up the {0} room — it was standing without furniture it was meant to have",
+                room.role));
+            Note("topped up furniture in " + room.role + " room");
+            return true;
+        }
+
+        static bool StillBeingCleared(Map map, PlannedRoom room)
+        {
+            foreach (var cell in room.Interior)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var edifice = cell.GetEdifice(map);
+                if (edifice != null && edifice.def.mineable && edifice.Faction == null) return true;
+
+                var plant = cell.GetPlant(map);
+                if (plant == null) continue;
+                if (map.designationManager.DesignationOn(plant, DesignationDefOf.CutPlant) != null)
+                    return true;
+                if (map.designationManager.DesignationOn(plant, DesignationDefOf.HarvestPlant) != null)
+                    return true;
+            }
+            return false;
+        }
+
         int ClearFootprint(DirectorContext ctx, PlannedRoom room)
         {
             var map = ctx.map;
@@ -778,9 +1050,20 @@ namespace AutoColony.Modules
             return ordered;
         }
 
-        void QueueShell(DirectorContext ctx, PlannedRoom room)
+        /// <summary>
+        /// Lays out a room's walls and door, and reports how many blueprints actually landed.
+        ///
+        /// The count is the point. This used to return nothing and record "walls queued" either
+        /// way, so a colony with no wood was told six times in twelve hours that it had queued
+        /// the storage room's walls while placing not one blueprint — and because the caller
+        /// then set `wallsQueued`, the next pass found no pending construction, un-queued the
+        /// room and started again. The walls-path twin of the furniture metronome, and it hid
+        /// for the same reason: every line looked like ordinary work.
+        /// </summary>
+        int QueueShell(DirectorContext ctx, PlannedRoom room)
         {
             var map = ctx.map;
+            int before = placedThisPass;
 
             // Ground first. A wall cannot be placed through a tree, and a boulder left in the
             // wall line would be mistaken for one.
@@ -800,7 +1083,7 @@ namespace AutoColony.Modules
 
             var wallDef = AcDefs.Wall;
             var doorDef = AcDefs.Door;
-            if (wallDef == null) return;
+            if (wallDef == null) return 0;
 
             bool gotPreferred;
             var wallStuff = PlacementUtil.ChooseStuff(map, wallDef, stonePref, out gotPreferred);
@@ -811,7 +1094,7 @@ namespace AutoColony.Modules
 
             foreach (var cell in rect.EdgeCells)
             {
-                if (placedThisPass >= MaxPlacementsPerPass) return;
+                if (placedThisPass >= MaxPlacementsPerPass) return placedThisPass - before;
 
                 if (cell.x == door.x && cell.z == door.z)
                 {
@@ -823,6 +1106,22 @@ namespace AutoColony.Modules
                 if (PlacementUtil.TryPlace(map, wallDef, cell, Rot4.North, wallStuff))
                     placedThisPass++;
             }
+
+            if (placedThisPass == before)
+            {
+                // Nothing landed. Said once per dry spell rather than every pass, because the
+                // colony will keep asking until it has something to build with.
+                if (!reportedNoShellMaterial)
+                {
+                    reportedNoShellMaterial = true;
+                    Chronicle.Record(ChronicleCategory.Build, string.Format(
+                        "cannot start the {0} room's walls — not one blueprint would place, which " +
+                        "is what having nothing to build them from looks like ({1})",
+                        room.role, wallStuff != null ? wallStuff.label : "no material at all"));
+                }
+                return 0;
+            }
+            reportedNoShellMaterial = false;
 
             Chronicle.Record(ChronicleCategory.Build, string.Format(
                 "{0} room walls queued in {1} (fire risk {2:0.00}, stone preference {3:0.00}){4}",
@@ -838,6 +1137,7 @@ namespace AutoColony.Modules
             {
                 PlacementUtil.MarkRoof(map, cell);
             }
+            return placedThisPass - before;
         }
 
         /// <summary>True while any blueprint or frame is still outstanding on the room's walls.</summary>
@@ -1067,7 +1367,11 @@ namespace AutoColony.Modules
             }
         }
 
-        static bool KeyFurnitureMissing(DirectorContext ctx, PlannedRoom room)
+        /// <summary>
+        /// Public so the upkeep layer can ask it before dropping a table or a lamp into a room:
+        /// a room that has not got the thing it exists for is not a room with spare space.
+        /// </summary>
+        public static bool KeyFurnitureMissing(DirectorContext ctx, PlannedRoom room)
         {
             var def = KeyFurnitureFor(ctx, room.role);
             if (def == null) return false;
@@ -1129,28 +1433,89 @@ namespace AutoColony.Modules
             // leaving the rest of the floor bare, and costing the room the Space rating RimWorld
             // scores it on. Each item now takes the best cell for *that* item, which is a
             // different cell for a bed than for a workbench.
+            // Nothing below can succeed if the item is unbuildable in principle, and retrying it
+            // in another cell only wastes the pass. Tested once, up front, and said plainly.
+            if (!def.IsResearchFinished)
+            {
+                lastPlacementFailure = def.defName + " is not researched yet";
+                return;
+            }
+            if (def.MadeFromStuff && stuff == null)
+            {
+                lastPlacementFailure = def.defName + " has no material the colony can spare";
+                return;
+            }
+
+            refusedCells.Clear();
+
             for (int n = 0; n < count; n++)
             {
                 if (placedThisPass >= MaxPlacementsPerPass) return;
 
-                float bestScore = float.NegativeInfinity;
-                var best = IntVec3.Invalid;
+                bool placed = false;
 
-                foreach (var cell in room.Interior)
+                // The best cell is not always one the game will accept.
+                //
+                // Furniture is bigger than the cell it is scored on — a bed is two cells long, a
+                // butcher table two by two — and `CanPlaceBlueprintAt` judges the whole
+                // footprint. So the highest-scoring cell is regularly one whose second cell runs
+                // into a wall, a rock or another item. Taking the best cell and giving up on
+                // refusal is a deterministic dead end: same map, same scores, same best cell,
+                // same refusal, for ever. Watched live as a bedroom re-queuing its bed twenty
+                // times running, reporting "Bed was refused at (137, 0, 129)" every single pass.
+                //
+                // A refused cell is therefore struck off and the next best one tried.
+                for (int attempt = 0; attempt < MaxCellAttempts && !placed; attempt++)
                 {
-                    if (!cell.InBounds(map)) continue;
-                    if (PlacementUtil.HasAnyConstructionAt(map, cell)) continue;
-                    if (cell.GetEdifice(map) != null) continue;
+                    float bestScore = float.NegativeInfinity;
+                    var best = IntVec3.Invalid;
 
-                    float score = Rooms.FurniturePlacement.Score(
-                        PlacementFeaturesAt(map, room, cell, kind), weights);
-                    if (score > bestScore) { bestScore = score; best = cell; }
+                    foreach (var cell in room.Interior)
+                    {
+                        if (!cell.InBounds(map)) continue;
+                        if (refusedCells.Contains(cell)) continue;
+                        if (PlacementUtil.HasAnyConstructionAt(map, cell)) continue;
+                        if (cell.GetEdifice(map) != null) continue;
+
+                        float score = Rooms.FurniturePlacement.Score(
+                            PlacementFeaturesAt(map, room, cell, kind), weights);
+                        if (score > bestScore) { bestScore = score; best = cell; }
+                    }
+
+                    if (!best.IsValid)
+                    {
+                        // Which of the two this is decides the fix entirely, and the first
+                        // version of this line could not tell them apart: an interior with
+                        // nothing placeable in it at all is a siting problem, whereas one whose
+                        // every candidate the game refused is a fit problem — a 2x2 table in a
+                        // room that has the cells but not four of them together.
+                        lastPlacementFailure = refusedCells.Count == 0
+                            ? def.defName + " found no placeable cell in the interior at all " +
+                              "(every cell holds rock, a building or pending construction)"
+                            : def.defName + " was refused at all " + refusedCells.Count +
+                              " placeable cells in the interior — its footprint does not fit " +
+                              "anywhere among what is already there";
+                        return;
+                    }
+
+                    // Orientation is part of whether a footprint fits at all, so a long item
+                    // gets asked both ways before the cell is written off.
+                    if (PlacementUtil.TryPlace(map, def, best, Rot4.North, stuff) ||
+                        PlacementUtil.TryPlace(map, def, best, Rot4.East, stuff))
+                    {
+                        placed = true;
+                        lastPlacementFailure = null;
+                        placedThisPass++;
+                    }
+                    else
+                    {
+                        refusedCells.Add(best);
+                        lastPlacementFailure = def.defName + " was refused at " + best +
+                            " in both orientations (the game's own placement rules)";
+                    }
                 }
 
-                if (!best.IsValid) return;
-                if (!PlacementUtil.TryPlace(map, def, best, Rot4.North, stuff)) return;
-
-                placedThisPass++;
+                if (!placed) return;
             }
         }
 
