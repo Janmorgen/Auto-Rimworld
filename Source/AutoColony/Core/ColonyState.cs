@@ -623,6 +623,7 @@ namespace AutoColony
             m.colonistBeds = colonistBeds;
             m.turrets = poweredTurrets;
             m.fires = fires;
+            m.firesNearBase = firesNearBase;
             m.researchFinished = researchFinished;
 
             var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;

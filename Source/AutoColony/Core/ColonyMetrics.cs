@@ -37,6 +37,16 @@ namespace AutoColony
         public int fires;
 
         /// <summary>
+        /// Fires close enough to the colony to be worth answering.
+        ///
+        /// Separate from the map-wide total on purpose. The director deliberately ignores a
+        /// wildfire that will never reach the base — that is a designed behaviour, measured and
+        /// kept — so scoring or diagnosing on the total punishes the colony for a decision that
+        /// was correct, and describes a quiet colony as one that spent half an epoch on fire.
+        /// </summary>
+        public int firesNearBase;
+
+        /// <summary>
         /// Whether the plan was answering something immediate at this moment — a fire, a raid,
         /// an empty larder.
         ///

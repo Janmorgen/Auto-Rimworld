@@ -146,3 +146,58 @@ namespace AutoColony.Tests
         }
     }
 }
+
+namespace AutoColony.Tests
+{
+    /// <summary>
+    /// The director deliberately leaves a wildfire that will never reach the base — a designed,
+    /// measured behaviour. Scoring on every fire on the map punished it for doing so.
+    /// </summary>
+    public class DistantFireScoringTests
+    {
+        static ColonyMetrics With(int fires, int near)
+        {
+            var m = ColonyMetrics.Neutral();
+            m.fires = fires;
+            m.firesNearBase = near;
+            return m;
+        }
+
+        static EpochAccumulator Fresh()
+        {
+            var acc = new EpochAccumulator();
+            acc.ResetFor(ColonyMetrics.Neutral());
+            return acc;
+        }
+
+        [Fact]
+        public void AWildfireAcrossTheMapIsNotTheColonyBurning()
+        {
+            // Observed: one fire 93 cells away, correctly ignored, reported as "fire burning for
+            // 57% of the epoch" and charged against the infrastructure score for all of it.
+            var acc = Fresh();
+            for (int i = 0; i < 10; i++) acc.Observe(With(fires: 1, near: 0));
+
+            Assert.Equal(0f, acc.FireFraction, 3);
+        }
+
+        [Fact]
+        public void AFireAtTheColonyStillCounts()
+        {
+            var acc = Fresh();
+            for (int i = 0; i < 10; i++) acc.Observe(With(fires: 1, near: 1));
+
+            Assert.Equal(1f, acc.FireFraction, 3);
+        }
+
+        [Fact]
+        public void OnlyTheSamplesWithFireAtHomeCount()
+        {
+            var acc = Fresh();
+            for (int i = 0; i < 5; i++) acc.Observe(With(fires: 3, near: 1));
+            for (int i = 0; i < 5; i++) acc.Observe(With(fires: 3, near: 0));
+
+            Assert.Equal(0.5f, acc.FireFraction, 3);
+        }
+    }
+}

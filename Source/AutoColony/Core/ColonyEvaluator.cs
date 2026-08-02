@@ -158,7 +158,11 @@ namespace AutoColony
             if (m.daysOfFood > 0f) foodObserved = true;
             if (foodObserved && m.daysOfFood < minDaysOfFood) minDaysOfFood = m.daysOfFood;
             if (m.colonistsInMentalState > 0) mentalBreakSamples++;
-            if (m.fires > 0) fireSamples++;
+            // Only fires that actually threaten the colony. Counting every fire on the map
+            // meant a wildfire ninety cells away — one the director is designed to ignore, and
+            // was right to ignore — cost the colony infrastructure score for the whole epoch it
+            // burned. The search was being penalised for behaving correctly.
+            if (m.firesNearBase > 0) fireSamples++;
             if (m.colonistsDowned > 0) downedSamples++;
             if (m.inEmergency) emergencySamples++;
 
