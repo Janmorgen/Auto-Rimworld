@@ -130,7 +130,20 @@ namespace AutoColony.Modules
             var wanted = ctx.plan.Focus.WantsRoom;
             if (!wanted.HasValue) return false;
 
-            return ctx.layout != null && !ctx.layout.HasRoom(wanted.Value);
+            if (ctx.layout == null || ctx.layout.HasRoom(wanted.Value)) return false;
+
+            // Not while the colony cannot afford the rooms it has already started.
+            //
+            // The slot exists because a colony can be building the wrong thing first and have no
+            // way to start the right one. It does not help a colony that cannot finish anything:
+            // watched one reach day four with three shells open, none finished, and its material
+            // falling from 164 to 134 while it opened nothing new and completed nothing old.
+            //
+            // Adding a fourth outline to that is the exact failure the concurrency limit was
+            // written for. Being blocked on labour and being blocked on material look identical
+            // from the plan's side and want opposite answers, and this is the one that can tell
+            // them apart.
+            return !Upkeep.BuildingMeans.Destitute(Means(ctx));
         }
 
         bool roomsHeldNoted;
