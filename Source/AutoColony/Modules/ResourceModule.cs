@@ -37,15 +37,33 @@ namespace AutoColony.Modules
             // Something is burning or shooting at the colony. Sending people out to fell trees
             // or chase animals now spends the exact labour needed at home, and walks it out of
             // range of the emergency. Gathering waits.
-            if (ctx.state.EmergencyAtHome || (ctx.plan != null && ctx.plan.EmergencyActive
-                                              && ctx.state.daysOfFood >= 2f))
+            // A colonist on the floor is an emergency at home too.
+            //
+            // `EmergencyAtHome` counts fires and hostiles, and casualties outlive both: the
+            // doctor hold-back that keeps someone tending is scoped to an active threat, so the
+            // moment a raid ends the last able colonist is free to walk off after an animal. It
+            // is not a priority problem — the work module already puts Doctor at 4x — it is that
+            // a hunt takes hours and leads them across the map.
+            //
+            // Watched live: raid over at 14h, two down at 16h with three days of food, the one
+            // colonist still standing sent hunting at 20h, both casualties dead by 22h.
+            //
+            // Relieved below a day of food, on the same reasoning that stops the plan barring a
+            // hungry colony from its own kitchen: tending costs minutes and starvation is then
+            // the nearer of the two ways to die.
+            bool casualtiesAtHome = ctx.state.colonistsDowned > 0 && ctx.state.daysOfFood >= 1f;
+
+            if (ctx.state.EmergencyAtHome || casualtiesAtHome
+                || (ctx.plan != null && ctx.plan.EmergencyActive
+                    && ctx.state.daysOfFood >= 2f))
             {
                 if (!yieldedToEmergency)
                 {
                     yieldedToEmergency = true;
                     Chronicle.Record(ChronicleCategory.Economy, string.Format(
-                        "holding off gathering: {0} fires and {1} hostiles at the colony",
-                        ctx.state.firesNearBase, ctx.state.hostilesNearBase));
+                        "holding off gathering: {0} fires, {1} hostiles and {2} down at the colony",
+                        ctx.state.firesNearBase, ctx.state.hostilesNearBase,
+                        ctx.state.colonistsDowned));
                 }
                 return;
             }
