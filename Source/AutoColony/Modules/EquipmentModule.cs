@@ -26,6 +26,20 @@ namespace AutoColony.Modules
 
         protected override void Act(DirectorContext ctx)
         {
+            // Nobody goes shopping for a rifle while someone is bleeding out.
+            //
+            // This is not a matter of priorities, which is what makes it worth a hard guard:
+            // rearming issues an *ordered* job, and an ordered job overrides the colonist's own
+            // work priorities outright. The work module already raises Doctor to 4x the moment
+            // anyone is down, and it cannot win, because the order arrives underneath it.
+            //
+            // Watched live and it cost a colony: two colonists down with two free beds and two
+            // industrial medicine in store, the threat already over, one able colonist left —
+            // and the director sent him to swap a good revolver for a rifle. Both casualties
+            // were dead within the next two hours. A better gun is worth nothing measured
+            // against the person who would have carried it.
+            if (ctx.state.colonistsDowned > 0) return;
+
             CollectAvailableWeapons(ctx.map);
             if (available.Count == 0) return;
 
@@ -51,6 +65,20 @@ namespace AutoColony.Modules
                 // Something already carried is not on the floor to be picked up.
                 if (weapon.ParentHolder is Pawn_EquipmentTracker) continue;
                 if (!weapon.def.IsWeapon) continue;
+
+                // Something that can be held is not the same as something worth holding.
+                //
+                // `IsWeapon` is true of anything carrying tools, which includes raw materials —
+                // they have them so a pawn can bash with whatever is to hand. Watched live:
+                // "Morty sent to equip Wood x2 (ranged fighter, was unarmed)", after which the
+                // colony met a raid at strength 25 and Morty died of the wounds. The colony was
+                // arming itself out of the woodpile.
+                //
+                // `equipmentType` is the game's own test for what may be carried as a primary
+                // weapon, and every real weapon passes it, so this only ever removes things that
+                // were never weapons. A stack is a further tell: no weapon stacks.
+                if (weapon.def.equipmentType != EquipmentType.Primary) continue;
+                if (weapon.def.stackLimit > 1) continue;
 
                 available.Add(weapon);
             }

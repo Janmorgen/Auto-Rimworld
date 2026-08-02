@@ -32,7 +32,18 @@ namespace AutoColony.Modules
         protected override void Act(DirectorContext ctx)
         {
             ApplyDispositions(ctx);
-            TryCapture(ctx);
+
+            // The colony's own casualties come before a stranger's.
+            //
+            // Capturing and rescuing both issue an *ordered* job, which overrides whatever the
+            // carrier would otherwise have chosen — including tending the colonist lying on the
+            // floor at home. Watched live, in the same in-game hour that Sierrap died of their
+            // wounds: "rescuing Walrus, who is not hostile — no prison needed and they may well
+            // stay". The last able colonist was sent across the map for a stranger while two of
+            // their own bled out with free beds and medicine waiting.
+            //
+            // A recruit is worth having. It is not worth the two people already here.
+            if (ctx.state.colonistsDowned == 0) TryCapture(ctx);
         }
 
         // ------------------------------------------------------------ capture
