@@ -42,6 +42,12 @@ namespace AutoColony
         /// </summary>
         public int shellAttempts;
 
+        /// <summary>
+        /// Tick until which this room is set aside, because the colony has more open than it can
+        /// finish. It keeps its site and its plan; it simply is not worked on meanwhile.
+        /// </summary>
+        public int deferredUntilTick = -1;
+
         public CellRect Rect { get { return new CellRect(minX, minZ, width, height); } }
 
         /// <summary>The floor area inside the walls.</summary>
@@ -70,6 +76,7 @@ namespace AutoColony
             Scribe_Values.Look(ref doorZ, "doorZ", 0);
             Scribe_Values.Look(ref roleChangedTick, "roleChangedTick", -1);
             Scribe_Values.Look(ref shellAttempts, "shellAttempts", 0);
+            Scribe_Values.Look(ref deferredUntilTick, "deferredUntilTick", -1);
         }
     }
 

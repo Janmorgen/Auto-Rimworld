@@ -181,6 +181,17 @@ namespace AutoColony
         public int researchFinished;
         public bool hasResearchBench;
 
+        /// <summary>
+        /// Whether anybody in the colony is actually able to do research.
+        ///
+        /// A bench is not research. Intellectual work can be disabled outright by a backstory or
+        /// a trait, and a colony where every colonist is incapable of it will build the bench,
+        /// mark the goal satisfied, and never finish a project — which is the same shape as the
+        /// unpowered turret and the kitchen with no stove, and this codebase has now been caught
+        /// by it five times.
+        /// </summary>
+        public bool canResearch;
+
         // --- threat ---
         public StoryDanger danger = StoryDanger.None;
         public int hostilePawns;
@@ -389,6 +400,20 @@ namespace AutoColony
                 if (broken) s.colonistsInMentalState++;
 
                 if (!p.Downed && !broken && p.Spawned) s.ableColonists.Add(p);
+
+                // Somebody has to be able to use the bench once it exists.
+                //
+                // Asked of everyone rather than only the able, because this is a fact about who
+                // the colony has rather than who is on their feet this minute — a researcher
+                // asleep or in bed is still the reason to build a bench.
+                if (!s.canResearch)
+                {
+                    try
+                    {
+                        if (!p.WorkTypeIsDisabled(WorkTypeDefOf.Research)) s.canResearch = true;
+                    }
+                    catch (Exception) { }
+                }
 
                 if (p.needs != null && p.needs.mood != null)
                 {

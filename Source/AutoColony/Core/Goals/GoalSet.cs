@@ -324,14 +324,28 @@ namespace AutoColony.Goals
         public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
         public override RoomRole? WantsRoom { get { return RoomRole.Research; } }
 
+        /// <summary>
+        /// A bench, and somebody who can use it.
+        ///
+        /// Satisfied on the bench alone at first, which is the mistake this codebase keeps
+        /// making in new clothes: a kitchen with no stove cannot cook, an unpowered turret is a
+        /// wall decoration, and a research bench in a colony where every colonist has
+        /// Intellectual work disabled is a table. Each time, the object existed and the
+        /// capability did not.
+        ///
+        /// Treated as satisfied when nobody can research, rather than left outstanding forever.
+        /// The colony cannot fix it by building — a researcher arrives with a new colonist or
+        /// not at all — and an unsatisfiable goal would sit in the plan blocking the rest.
+        /// </summary>
         public override bool Satisfied(DirectorContext ctx)
         {
+            if (!ctx.state.canResearch) return true;
             return ctx.state.hasResearchBench;
         }
 
         public override float Urgency(DirectorContext ctx)
         {
-            if (ctx.state.hasResearchBench) return 0f;
+            if (ctx.state.hasResearchBench || !ctx.state.canResearch) return 0f;
 
             // Deliberately below a short larder or a colony with no beds, and above anything
             // discretionary. It is never the most pressing thing in the colony and it is always
@@ -341,6 +355,9 @@ namespace AutoColony.Goals
 
         public override string Explain(DirectorContext ctx)
         {
+            if (!ctx.state.canResearch)
+                return "nobody here can do intellectual work, so a bench would be furniture";
+
             return "no research bench, so nothing the colony studies can ever finish";
         }
     }

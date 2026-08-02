@@ -164,6 +164,105 @@ namespace AutoColony.Modules
             return !Upkeep.BuildingMeans.Destitute(Means(ctx));
         }
 
+        /// <summary>
+        /// Ticks after a withdrawal before another may happen. Half an in-game day.
+        ///
+        /// Withdrawing is cheap and withdrawing repeatedly is a loop, which this codebase has
+        /// produced three times already from rules that were individually correct. One room at a
+        /// time, with long enough between for the colony to visibly get on with what is left.
+        /// </summary>
+        const int ConsolidateCooldownTicks = 30000;
+
+        /// <summary>How long a set-aside room stays set aside. One in-game day.</summary>
+        const int DeferralTicks = 60000;
+
+        int lastConsolidatedTick = -999999;
+
+        /// <summary>
+        /// Withdraws the blueprints of a room the colony cannot currently finish.
+        ///
+        /// Chooses the room furthest from being done and least wanted: never the focus room,
+        /// never one whose walls are complete, and never one with a frame standing in it. A
+        /// frame holds real work and material; a blueprint holds neither, so taking one back
+        /// costs the colony nothing but the intention.
+        /// </summary>
+        void ConsolidateOntoWhatCanBeFinished(DirectorContext ctx, int unfinished, int allowed)
+        {
+            if (unfinished <= allowed) return;
+
+            int now = Find.TickManager.TicksGame;
+            if (now - lastConsolidatedTick < ConsolidateCooldownTicks) return;
+
+            var layout = ctx.layout;
+            var wanted = ctx.plan != null && ctx.plan.Focus != null
+                ? ctx.plan.Focus.WantsRoom
+                : null;
+
+            for (int i = layout.rooms.Count - 1; i >= 0; i--)
+            {
+                var room = layout.rooms[i];
+                if (wanted.HasValue && room.role == wanted.Value) continue;
+                if (room.furnitureQueued && ShellComplete(ctx.map, room)) continue;
+                if (AnyFrameIn(ctx.map, room)) continue;      // somebody has already spent work here
+
+                if (room.deferredUntilTick > now) continue;   // already set aside
+
+                int withdrawn = WithdrawBlueprints(ctx.map, room);
+                if (withdrawn == 0) continue;
+
+                // Set aside rather than forgotten. It keeps its site, so nothing else is sited
+                // over the walls it already has, and it is picked up again when the deferral
+                // lapses and the colony has hands to spare.
+                room.wallsQueued = false;
+                room.deferredUntilTick = now + DeferralTicks;
+                lastConsolidatedTick = now;
+
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "took back {0} unstarted blueprints from the {1} room and set it aside for a " +
+                    "day — {2} rooms open and only {3} that {4} colonists can finish, so the hands " +
+                    "go to one of them instead of all of them. Nothing built was lost",
+                    withdrawn, room.role, unfinished, allowed, ctx.state.ableColonists.Count));
+                Note("withdrew the " + room.role + " room to concentrate on the rest");
+                return;
+            }
+        }
+
+        static bool AnyFrameIn(Map map, PlannedRoom room)
+        {
+            foreach (var cell in room.Rect)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    if (things[i] is Frame) return true;
+                }
+            }
+            return false;
+        }
+
+        static int WithdrawBlueprints(Map map, PlannedRoom room)
+        {
+            var doomed = new List<Thing>();
+            foreach (var cell in room.Rect)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    if (things[i] is Blueprint) doomed.Add(things[i]);
+                }
+            }
+
+            for (int i = 0; i < doomed.Count; i++)
+            {
+                if (!doomed[i].Destroyed) doomed[i].Destroy(DestroyMode.Cancel);
+            }
+            return doomed.Count;
+        }
+
         bool roomsHeldNoted;
 
         /// <summary>
@@ -217,6 +316,12 @@ namespace AutoColony.Modules
             for (int i = 0; i < layout.rooms.Count; i++)
             {
                 var room = layout.rooms[i];
+
+                // A room set aside is not worked on until its deferral runs out. Without this the
+                // withdrawal below undoes itself on the very next pass: the room reads as having
+                // no walls queued, and the planner obligingly queues them all again.
+                if (room.deferredUntilTick > Find.TickManager.TicksGame) continue;
+
                 if (!room.wallsQueued)
                 {
                     // Walls already going up from an earlier pass are walls already queued.
@@ -467,6 +572,20 @@ namespace AutoColony.Modules
             if (unfinished >= allowed)
             {
                 NoteRoomsHeld(ctx, unfinished, allowed);
+
+                // More open than the colony can now carry: give one back.
+                //
+                // The limit only ever refused to *open* rooms, so a commitment made when the
+                // colony was larger outlives the colony. Watched one go from three colonists to
+                // two with three shells standing, 989 units of material in store and not one
+                // room finished in five days — its people sleeping outside, because the beds
+                // were in a bedroom whose walls were never going to go up while the same hands
+                // were also building a workshop and a research room.
+                //
+                // Nothing here is destroyed. Only blueprints are withdrawn, and a blueprint is a
+                // note about intent rather than work done, so the room can be started again the
+                // moment the colony can carry it.
+                ConsolidateOntoWhatCanBeFinished(ctx, unfinished, allowed);
                 return;
             }
             roomsHeldNoted = false;

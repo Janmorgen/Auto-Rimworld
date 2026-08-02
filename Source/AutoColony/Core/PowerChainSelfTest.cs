@@ -300,6 +300,14 @@ namespace AutoColony
             state.map = map;
             state.colonists = 3;
             state.colonistBeds = 3;
+
+            // These fixtures are built by hand rather than read off a colony, so anything the
+            // real snapshot derives from pawns defaults to false here and quietly changes what
+            // the probes test. Adding a researcher check to the goal removed "Somewhere to
+            // research" from every ranking in the file overnight — the probes all still passed
+            // and had simply stopped asking the question. Same fault the handoff records against
+            // an earlier fixture; it is worth stating loudly because it does not announce itself.
+            state.canResearch = true;
             state.daysOfFood = 20f;
             state.steel = 600;
             state.components = 20;
