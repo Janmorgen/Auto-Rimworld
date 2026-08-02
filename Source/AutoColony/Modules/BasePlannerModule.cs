@@ -24,6 +24,17 @@ namespace AutoColony.Modules
         public const string BanditId = "build";
 
         public override string Name { get { return "Base planner"; } }
+        /// <summary>
+        /// Only for the one thing this module does that cannot wait: putting a bed under a
+        /// colonist who is on the floor with nowhere to be carried to. Ordinary building is
+        /// exactly the sort of work that should keep its place in the rotation.
+        /// </summary>
+        public override bool Urgent(DirectorContext ctx)
+        {
+            return ctx.state.colonistsDowned > 0 &&
+                   ctx.state.colonistBeds < ctx.state.colonists;
+        }
+
         public override int IntervalTicks { get { return 3750; } }
 
         /// <summary>Stop queueing work when this much construction is already outstanding.</summary>

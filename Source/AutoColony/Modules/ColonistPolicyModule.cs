@@ -14,6 +14,16 @@ namespace AutoColony.Modules
     public class ColonistPolicyModule : DirectorModule
     {
         public override string Name { get { return "Colonist policy"; } }
+        /// <summary>
+        /// Medical care level and self-tending are settings about being wounded, and this runs
+        /// every eight in-game hours by default — long enough that a casualty can be treated
+        /// under the wrong policy from start to finish, or die under it.
+        /// </summary>
+        public override bool Urgent(DirectorContext ctx)
+        {
+            return ctx.state.colonistsDowned > 0 || ctx.state.hostilesNearBase > 0;
+        }
+
         public override int IntervalTicks { get { return 20000; } }
 
         // Prisoners used to be handled here too, as a straight recruit-or-not read off the

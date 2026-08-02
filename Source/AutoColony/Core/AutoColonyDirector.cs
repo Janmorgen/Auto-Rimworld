@@ -376,7 +376,7 @@ namespace AutoColony
                 moduleCursor = (moduleCursor + 1) % modules.Count;
                 var m = modules[moduleCursor];
                 if (!settings.IsModuleEnabled(m.Name)) continue;
-                if (!m.ShouldRun(tick)) continue;
+                if (!m.ShouldRun(tick, ctx)) continue;
                 m.Run(ctx, tick);
                 return;
             }

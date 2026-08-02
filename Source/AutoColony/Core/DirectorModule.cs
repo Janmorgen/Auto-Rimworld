@@ -71,6 +71,30 @@ namespace AutoColony
         /// <summary>How often this module wants to act. 2500 ticks is one in-game hour.</summary>
         public virtual int IntervalTicks { get { return 2500; } }
 
+        /// <summary>
+        /// How often it acts while something it can answer is actually happening.
+        ///
+        /// The director's responsiveness used to be a constant. Every module ran on a fixed
+        /// interval whatever the colony was doing, so the work module — the one that raises
+        /// Doctor to 4x the moment anyone goes down — applied that decision up to three in-game
+        /// hours after the person hit the floor, and the resource module stopped a hunt up to
+        /// five hours after it should have. Measured directly: a colonist went down at 14h and
+        /// gathering was still not held off until 18h.
+        ///
+        /// The round-robin was wrongly blamed for that. Advancing the cursor costs about fifteen
+        /// ticks to sweep every module, a quarter of a second; the delay was entirely each
+        /// module's own interval. So the fix belongs here rather than in the scheduler, and one
+        /// module still runs per tick, which keeps the flat per-tick cost intact.
+        /// </summary>
+        public virtual int UrgentIntervalTicks { get { return 600; } }
+
+        /// <summary>
+        /// Whether the colony is in a state this module needs to answer now rather than on its
+        /// ordinary schedule. False by default: most work genuinely can wait, and a module that
+        /// declares itself urgent in ordinary conditions simply burns ticks other modules need.
+        /// </summary>
+        public virtual bool Urgent(DirectorContext ctx) { return false; }
+
         /// <summary>Modules that only matter once a colony exists can skip early ticks.</summary>
         public virtual bool RequiresColonists { get { return true; } }
 
@@ -92,7 +116,27 @@ namespace AutoColony
 
         public bool ShouldRun(int tick)
         {
-            return enabled && failures < MaxFailures && tick - lastRunTick >= IntervalTicks;
+            return ShouldRun(tick, null);
+        }
+
+        public bool ShouldRun(int tick, DirectorContext ctx)
+        {
+            if (!enabled || failures >= MaxFailures) return false;
+
+            int interval = IntervalTicks;
+
+            // Urgency may only ever make a module run sooner, never later. Written the other way
+            // round it would be a second schedule to keep in step with the first.
+            if (ctx != null && ctx.state != null && ctx.state.Valid)
+            {
+                bool urgent;
+                try { urgent = Urgent(ctx); }
+                catch (Exception) { urgent = false; }   // a broken test must not stop the module
+
+                if (urgent && UrgentIntervalTicks < interval) interval = UrgentIntervalTicks;
+            }
+
+            return tick - lastRunTick >= interval;
         }
 
         /// <summary>Runs the module, absorbing any exception it raises.</summary>

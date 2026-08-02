@@ -20,6 +20,17 @@ namespace AutoColony.Modules
 
         // Roughly every three in-game hours: often enough to react to a crisis, rare enough
         // that colonists are not constantly abandoning half-finished jobs.
+        /// <summary>
+        /// The weights this module sets are the colony's whole answer to a casualty or a fire —
+        /// Doctor to 4x, Firefighter to 6x — and applied three in-game hours after the event
+        /// they answer nothing. This is the module where a fixed interval cost most.
+        /// </summary>
+        public override bool Urgent(DirectorContext ctx)
+        {
+            var s = ctx.state;
+            return s.colonistsDowned > 0 || s.firesNearBase > 0 || s.hostilesNearBase > 0;
+        }
+
         public override int IntervalTicks { get { return 7500; } }
 
         readonly Dictionary<string, float> needs = new Dictionary<string, float>();

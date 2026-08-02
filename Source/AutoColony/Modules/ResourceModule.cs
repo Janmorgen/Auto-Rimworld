@@ -17,6 +17,17 @@ namespace AutoColony.Modules
     public class ResourceModule : DirectorModule
     {
         public override string Name { get { return "Resource gathering"; } }
+        /// <summary>
+        /// Holding off gathering is time-critical in a way that designating it is not: a hunt
+        /// leads the only able colonist across the map for hours while somebody bleeds out at
+        /// home. This is the four in-game hours measured between a colonist going down at 14h
+        /// and gathering finally being held off at 18h.
+        /// </summary>
+        public override bool Urgent(DirectorContext ctx)
+        {
+            return ctx.state.colonistsDowned > 0 || ctx.state.EmergencyAtHome;
+        }
+
         public override int IntervalTicks { get { return 12500; } }
 
         bool yieldedToEmergency;
