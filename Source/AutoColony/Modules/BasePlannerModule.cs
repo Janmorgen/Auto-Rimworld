@@ -121,16 +121,34 @@ namespace AutoColony.Modules
         /// bedroom rather than the first; and the allowance must not already have been stretched,
         /// which is what holds the extra to exactly one however many passes run.
         /// </summary>
-        static bool FocusRoomWouldUseTheSpareSlot(DirectorContext ctx, int unfinished, int allowed)
+        RoomRole? previouslyWanted;
+
+        bool FocusRoomWouldUseTheSpareSlot(DirectorContext ctx, int unfinished, int allowed)
         {
+            var asking = ctx.plan != null && ctx.plan.Focus != null
+                ? ctx.plan.Focus.WantsRoom
+                : null;
+
+            var lastTime = previouslyWanted;
+            previouslyWanted = asking;
+
             if (unfinished > allowed) return false;   // the spare slot is already in use
+            if (!asking.HasValue) return false;
+            if (ctx.layout == null || ctx.layout.HasRoom(asking.Value)) return false;
 
-            if (ctx.plan == null || ctx.plan.Focus == null) return false;
-
-            var wanted = ctx.plan.Focus.WantsRoom;
-            if (!wanted.HasValue) return false;
-
-            if (ctx.layout == null || ctx.layout.HasRoom(wanted.Value)) return false;
+            // The plan has to have wanted this room for more than an instant.
+            //
+            // Long-term goals are separated by urgency alone and several of them read theirs off
+            // the map, so the ordering among them can flip on the weather — three of them sat
+            // within six hundredths of a point of each other in the self-test. That is harmless
+            // while they share a prerequisite and it is not harmless here, because they do not
+            // all want the same room: one pass in which Masonry beat "Somewhere to research"
+            // opened a Workshop, and a colony of three then spent days splitting its builders
+            // between that and the research room it had been asking for all along.
+            //
+            // Scoring a tie one way or the other is cheap. Committing a shell to it is not, so
+            // the extra slot waits for the plan to say the same thing twice.
+            if (!lastTime.HasValue || lastTime.Value != asking.Value) return false;
 
             // Not while the colony cannot afford the rooms it has already started.
             //
