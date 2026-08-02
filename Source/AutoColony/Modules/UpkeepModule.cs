@@ -39,6 +39,20 @@ namespace AutoColony.Modules
 
         readonly List<UnmetComplaint> unhandled = new List<UnmetComplaint>();
 
+        float[] kindWeights;
+
+        /// <summary>
+        /// This colony's own opinion of what each kind of fault is worth, read from its genome.
+        /// Rebuilt each pass because a training trial swaps the genome underneath the module.
+        /// </summary>
+        float[] UpkeepWeights(DirectorContext ctx)
+        {
+            if (kindWeights == null) kindWeights = new float[DefectPolicy.KindCount];
+            for (int i = 0; i < kindWeights.Length; i++)
+                kindWeights[i] = ctx.Gene(DefectPolicy.WeightKey((DefectKind)i));
+            return kindWeights;
+        }
+
         protected override void Act(DirectorContext ctx)
         {
 
@@ -54,7 +68,8 @@ namespace AutoColony.Modules
             unhandled.Clear();
             var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled,
                                               ctx.Gene(Genes.RoomEssentialWeight),
-                                              ctx.Gene(Genes.RoomOccupancyWeight));
+                                              ctx.Gene(Genes.RoomOccupancyWeight),
+                                              UpkeepWeights(ctx));
 
             Report(ctx, BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists),
                    defects.Count);

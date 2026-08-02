@@ -252,29 +252,71 @@ namespace AutoColony.Upkeep
         /// </summary>
         public static float Priority(DefectKind kind, float severity, float roomImportance)
         {
+            return Priority(kind, severity, roomImportance, Weight(kind));
+        }
+
+        /// <summary>
+        /// As above with the kind's weight supplied rather than looked up, so the caller can
+        /// hand in the colony's own learned value instead of a constant compiled in here.
+        /// </summary>
+        public static float Priority(DefectKind kind, float severity, float roomImportance,
+                                     float kindWeight)
+        {
             if (severity <= 0f) return 0f;
             if (roomImportance <= 0f) roomImportance = 1f;
-            return severity * Weight(kind) * roomImportance;
+            if (kindWeight < 0f) kindWeight = 0f;
+            return severity * kindWeight * roomImportance;
+        }
+
+        /// <summary>
+        /// How well fixing each kind of fault pays for itself.
+        ///
+        /// These were a hardcoded table — nine numbers somebody reasoned their way to once,
+        /// fixed for every colony in every situation. They are the director's whole opinion
+        /// about what to do next, and the search was not allowed to have one.
+        ///
+        /// They are now supplied from outside, which means from the genome, so a colony can
+        /// learn that its own circumstances make burying the dead or roofing the generator the
+        /// thing that pays. The values below are the starting point rather than the answer.
+        /// </summary>
+        public static readonly float[] DefaultWeights = BuildDefaults();
+
+        static float[] BuildDefaults()
+        {
+            // Sized from the enum directly, not from KindCount. Static fields initialise in
+            // declaration order, so KindCount is still zero when this runs — which produced an
+            // empty weight table and a type initialiser that threw on first touch.
+            var weights = new float[System.Enum.GetValues(typeof(DefectKind)).Length];
+            for (int i = 0; i < weights.Length; i++) weights[i] = 0.5f;
+
+            // A free building that removes the largest penalty in the game. Nothing else here
+            // has that ratio, which is why it starts highest — not why it must stay there.
+            weights[(int)DefectKind.UnburiedDead] = 2.0f;
+            weights[(int)DefectKind.Overbuilt] = 1.6f;
+            weights[(int)DefectKind.ExposedPowered] = 1.4f;
+            weights[(int)DefectKind.ColdRoom] = 1.3f;      // cold kills, unlike the rest of these
+            weights[(int)DefectKind.HotRoom] = 1.3f;
+            weights[(int)DefectKind.DarkRoom] = 1.2f;
+            weights[(int)DefectKind.SharedBedroom] = 1.0f;
+            weights[(int)DefectKind.NoTable] = 0.9f;       // small, but every colonist every meal
+            weights[(int)DefectKind.Cheerless] = 0.7f;
+            weights[(int)DefectKind.DrearyRoom] = 0.6f;
+            return weights;
+        }
+
+        /// <summary>Number of defect kinds, so a weight vector can be sized without a lookup.</summary>
+        public static readonly int KindCount = System.Enum.GetValues(typeof(DefectKind)).Length;
+
+        /// <summary>The name a weight gene carries for a given kind.</summary>
+        public static string WeightKey(DefectKind kind)
+        {
+            return "upkeep.w." + kind;
         }
 
         static float Weight(DefectKind kind)
         {
-            switch (kind)
-            {
-                // A free building that removes the largest penalty in the game. Nothing else
-                // here has that ratio, so nothing else should outrank it.
-                case DefectKind.UnburiedDead: return 2.0f;
-
-                case DefectKind.Overbuilt: return 1.6f;
-                case DefectKind.ColdRoom: return 1.3f;   // cold kills, unlike the rest of these
-                case DefectKind.NoTable: return 0.9f;    // small, but every colonist every meal
-                case DefectKind.Cheerless: return 0.7f;
-                case DefectKind.ExposedPowered: return 1.4f;
-                case DefectKind.DarkRoom: return 1.2f;
-                case DefectKind.SharedBedroom: return 1.0f;
-                case DefectKind.DrearyRoom: return 0.6f;
-                default: return 0.5f;
-            }
+            int i = (int)kind;
+            return i >= 0 && i < DefaultWeights.Length ? DefaultWeights[i] : 0.5f;
         }
 
         /// <summary>Whether this is worth acting on at all.</summary>

@@ -172,6 +172,17 @@ namespace AutoColony
                 Genes.RegisterWorkType(wt.defName, "Work: " + wt.labelShort.CapitalizeFirst());
                 n++;
             }
+
+            // Every kind of fault the upkeep layer can find gets a weight the search can move.
+            var kinds = System.Enum.GetValues(typeof(AutoColony.Upkeep.DefectKind));
+            var keys = new List<string>();
+            var defaults = new List<float>();
+            foreach (AutoColony.Upkeep.DefectKind kind in kinds)
+            {
+                keys.Add(AutoColony.Upkeep.DefectPolicy.WeightKey(kind));
+                defaults.Add(AutoColony.Upkeep.DefectPolicy.DefaultWeights[(int)kind]);
+            }
+            Genes.RegisterUpkeepWeights(keys, defaults);
             AcLog.Message("Ready. Strategy space: " + Genes.All.Count + " genes (" + n + " work types).");
         }
     }

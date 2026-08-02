@@ -32,7 +32,21 @@ namespace AutoColony.Upkeep
         /// </summary>
         public float roomImportance = 1f;
 
-        public float Priority { get { return DefectPolicy.Priority(kind, severity, roomImportance); } }
+        /// <summary>
+        /// How much this kind of fault is worth to *this* colony, taken from its genome. Left at
+        /// the built-in default when nobody supplied one, so the survey still works standalone.
+        /// </summary>
+        public float kindWeight = -1f;
+
+        public float Priority
+        {
+            get
+            {
+                return kindWeight >= 0f
+                    ? DefectPolicy.Priority(kind, severity, roomImportance, kindWeight)
+                    : DefectPolicy.Priority(kind, severity, roomImportance);
+            }
+        }
     }
 
     /// <summary>
@@ -57,7 +71,7 @@ namespace AutoColony.Upkeep
         public static List<ColonyDefect> Survey(Map map, ColonyState state, BaseLayout layout,
                                                 List<UnmetComplaint> unhandled)
         {
-            return Survey(map, state, layout, unhandled, 0.8f, 0.6f);
+            return Survey(map, state, layout, unhandled, 0.8f, 0.6f, null);
         }
 
         /// <summary>
@@ -68,7 +82,8 @@ namespace AutoColony.Upkeep
         /// </summary>
         public static List<ColonyDefect> Survey(Map map, ColonyState state, BaseLayout layout,
                                                 List<UnmetComplaint> unhandled,
-                                                float essentialWeight, float occupancyWeight)
+                                                float essentialWeight, float occupancyWeight,
+                                                float[] kindWeights)
         {
             var defects = new List<ColonyDefect>();
             if (map == null || state == null) return defects;
@@ -80,6 +95,17 @@ namespace AutoColony.Upkeep
             SurveyDead(map, complaints, defects);
             SurveyComforts(complaints, defects);
             SurveyRooms(map, state, means, complaints, defects, essentialWeight, occupancyWeight);
+
+            // What each kind of fault is worth to this colony, rather than to colonies in
+            // general. Supplied from the genome; absent, every defect keeps the built-in default.
+            if (kindWeights != null)
+            {
+                for (int i = 0; i < defects.Count; i++)
+                {
+                    int k = (int)defects[i].kind;
+                    if (k >= 0 && k < kindWeights.Length) defects[i].kindWeight = kindWeights[k];
+                }
+            }
             SurveyOverbuilding(map, state, layout, means, defects);
 
             defects.Sort(delegate(ColonyDefect a, ColonyDefect b)

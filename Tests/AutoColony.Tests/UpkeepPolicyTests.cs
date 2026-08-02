@@ -343,3 +343,63 @@ namespace AutoColony.Tests
         }
     }
 }
+
+namespace AutoColony.Tests
+{
+    /// <summary>
+    /// What each kind of fault is worth was a hardcoded table — the director's entire opinion
+    /// about what to do next, fixed for every colony in every situation.
+    /// </summary>
+    public class LearnedUpkeepWeightTests
+    {
+        [Fact]
+        public void TheDefaultTableIsSizedForEveryKind()
+        {
+            // A zero-length table silently made every weight fall back to a constant, which is
+            // how the hardcoded behaviour would have survived the change to remove it.
+            Assert.Equal(AutoColony.Upkeep.DefectPolicy.KindCount,
+                         AutoColony.Upkeep.DefectPolicy.DefaultWeights.Length);
+            foreach (var w in AutoColony.Upkeep.DefectPolicy.DefaultWeights) Assert.True(w > 0f);
+        }
+
+        [Fact]
+        public void AColonyCanValueAFaultDifferentlyFromTheDefault()
+        {
+            float asShipped = AutoColony.Upkeep.DefectPolicy.Priority(
+                AutoColony.Upkeep.DefectKind.Cheerless, 1f, 1f);
+            float caresMore = AutoColony.Upkeep.DefectPolicy.Priority(
+                AutoColony.Upkeep.DefectKind.Cheerless, 1f, 1f, 3f);
+
+            Assert.True(caresMore > asShipped);
+        }
+
+        [Fact]
+        public void AWeightOfZeroMeansTheColonyIgnoresThatFault()
+        {
+            Assert.Equal(0f, AutoColony.Upkeep.DefectPolicy.Priority(
+                AutoColony.Upkeep.DefectKind.DrearyRoom, 1f, 1f, 0f), 3);
+        }
+
+        [Fact]
+        public void EveryKindHasItsOwnGeneKey()
+        {
+            var seen = new System.Collections.Generic.HashSet<string>();
+            foreach (AutoColony.Upkeep.DefectKind kind in
+                     System.Enum.GetValues(typeof(AutoColony.Upkeep.DefectKind)))
+            {
+                Assert.True(seen.Add(AutoColony.Upkeep.DefectPolicy.WeightKey(kind)));
+            }
+        }
+
+        [Fact]
+        public void RoomImportanceAndKindWeightCompose()
+        {
+            float plain = AutoColony.Upkeep.DefectPolicy.Priority(
+                AutoColony.Upkeep.DefectKind.DarkRoom, 1f, 1f, 1f);
+            float importantRoom = AutoColony.Upkeep.DefectPolicy.Priority(
+                AutoColony.Upkeep.DefectKind.DarkRoom, 1f, 2f, 1f);
+
+            Assert.Equal(plain * 2f, importantRoom, 3);
+        }
+    }
+}

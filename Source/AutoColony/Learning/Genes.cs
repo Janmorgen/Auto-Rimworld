@@ -217,6 +217,26 @@ namespace AutoColony.Learning
         /// One gene per *category*, not per work type. <see cref="Register"/> ignores a key it
         /// already holds, so twenty work types produce six genes.
         /// </summary>
+        /// <summary>
+        /// Registers a gene for every kind of fault the upkeep layer can find.
+        ///
+        /// These were a hardcoded table: numbers reasoned to once and fixed for every colony
+        /// forever. They are the director's entire opinion about what to do next, and that is
+        /// exactly the sort of opinion worth earning from outcomes rather than asserting — a
+        /// colony under constant raids and one building out in peace do not agree about whether
+        /// roofing the generator beats lighting the bedroom.
+        /// </summary>
+        public static void RegisterUpkeepWeights(IList<string> keys, IList<float> defaults)
+        {
+            if (keys == null || defaults == null) return;
+            for (int i = 0; i < keys.Count && i < defaults.Count; i++)
+            {
+                if (string.IsNullOrEmpty(keys[i])) continue;
+                Register(new GeneSpec(keys[i], 0f, 3f, defaults[i], "Upkeep weights",
+                                      "Upkeep: " + keys[i].Replace("upkeep.w.", "")));
+            }
+        }
+
         public static void RegisterWorkType(string workDefName, string label)
         {
             string category = CategoryOf(workDefName);
