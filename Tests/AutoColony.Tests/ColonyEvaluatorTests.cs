@@ -156,6 +156,95 @@ namespace AutoColony.Tests
                 "identical endpoints must still score differently when the epoch went badly");
         }
 
+        /// <summary>Fills an accumulator with `lean` samples at `low` days and the rest comfortable.</summary>
+        static EpochAccumulator Epoch(ColonyMetrics comfortable, int lean, float low, int total = 40)
+        {
+            var acc = new EpochAccumulator();
+            acc.ResetFor(comfortable);
+
+            // One comfortable sample first, so the larder is measurable from the start and the
+            // lean stretch is recorded as a real dip rather than the opening hours.
+            acc.Observe(comfortable);
+
+            var thin = comfortable;
+            thin.daysOfFood = low;
+            for (int i = 0; i < lean; i++) acc.Observe(thin);
+            for (int i = acc.samples; i < total; i++) acc.Observe(comfortable);
+            return acc;
+        }
+
+        [Fact]
+        public void OneEmptyHourIsNotAStarvingEpoch()
+        {
+            // The case the term was changed for. Both of these scored 0.00 on the old measure,
+            // because both touched zero at some point and the score was the single worst reading.
+            var end = Baseline();
+
+            var dipped = Epoch(end, lean: 1, low: 0.1f);
+            var starving = Epoch(end, lean: 35, low: 0.1f);
+
+            Assert.True(dipped.FoodSecurity > 0.9f,
+                "an epoch that dipped once was secure almost throughout");
+            Assert.True(starving.FoodSecurity < 0.2f,
+                "an epoch spent short of food was not");
+        }
+
+        [Fact]
+        public void TimeSpentShortIsWhatSeparatesTheTwo()
+        {
+            var start = StartFrom(Baseline());
+            var end = Baseline();
+
+            List<ScoreTerm> a, b;
+            float dipped = ColonyEvaluator.Evaluate(start, end, Epoch(end, 1, 0.1f), out a);
+            float starving = ColonyEvaluator.Evaluate(start, end, Epoch(end, 35, 0.1f), out b);
+
+            Assert.True(dipped > starving,
+                "a colony that ran out briefly must outscore one that was short all epoch");
+        }
+
+        [Fact]
+        public void FoodSecurityIsTheFractionOfTimeOutOfDanger()
+        {
+            var end = Baseline();
+            var acc = Epoch(end, lean: 10, low: 0.1f, total: 40);
+
+            Assert.Equal(40, acc.foodSamples);
+            Assert.Equal(30, acc.foodSecureSamples);
+            Assert.Equal(0.75f, acc.FoodSecurity, 3);
+        }
+
+        [Fact]
+        public void FoodJustAboveTheDangerLineCountsAsSecure()
+        {
+            // The line is the supply lead time: below it nothing decided now arrives in time.
+            var end = Baseline();
+
+            var acc = new EpochAccumulator();
+            acc.ResetFor(end);
+            var atLine = end;
+            atLine.daysOfFood = EpochAccumulator.FoodDangerDays;
+            for (int i = 0; i < 10; i++) acc.Observe(atLine);
+
+            Assert.Equal(1f, acc.FoodSecurity, 3);
+        }
+
+        [Fact]
+        public void AColonyThatNeverStockpiledAnythingScoresZero()
+        {
+            // Unchanged from the old measure, and deliberately: no measurable sample is no
+            // evidence of security, not perfect security.
+            var end = Baseline();
+            end.daysOfFood = 0f;
+
+            var acc = new EpochAccumulator();
+            acc.ResetFor(end);
+            for (int i = 0; i < 40; i++) acc.Observe(end);
+
+            Assert.Equal(0, acc.foodSamples);
+            Assert.Equal(0f, acc.FoodSecurity, 3);
+        }
+
         [Fact]
         public void BreakdownContributionsSumToTheScore()
         {

@@ -73,8 +73,48 @@ namespace AutoColony
         /// <summary>
         /// Worst food the epoch actually saw. A colony that never stockpiled anything scores
         /// zero rather than the sentinel, which would otherwise read as perfect food security.
+        ///
+        /// Kept because it is worth reporting — the low point of an epoch is a real fact about
+        /// it — but no longer what the score is built on. See <see cref="FoodSecurity"/>.
         /// </summary>
         public float WorstFood { get { return foodObserved ? minDaysOfFood : 0f; } }
+
+        /// <summary>
+        /// Food below which the colony counts as in danger for that sample.
+        ///
+        /// Deliberately the supply lead time rather than a fresh number. That is already this
+        /// codebase's definition of too late — the days between deciding to eat and eating, so
+        /// below it nothing the colony decides can arrive before the larder is empty. Inventing
+        /// a second threshold would mean two answers to one question.
+        /// </summary>
+        public const float FoodDangerDays = FoodTiming.SupplyLeadDays;
+
+        /// <summary>Samples taken since the larder became measurable at all.</summary>
+        public int foodSamples;
+
+        /// <summary>Of those, the ones where the colony was not close to running out.</summary>
+        public int foodSecureSamples;
+
+        /// <summary>
+        /// How much of the epoch the colony spent with food actually in hand, 0 to 1.
+        ///
+        /// The score used to be the single worst reading the epoch ever took, divided by a
+        /// target. That is an honest measure of the worst moment and a poor measure of how the
+        /// colony was run, because one transient hour at zero zeroes a five-day epoch: run 23
+        /// scored 0.00 having never actually run out. It cannot tell *briefly empty* from
+        /// *chronically starving*, and those deserve very different scores.
+        ///
+        /// Time spent in danger is the thing the term was reaching for. It cannot collapse on
+        /// one sample, it still punishes a colony that is short for days on end, and it reads
+        /// directly as a sentence — "secure for four fifths of the epoch".
+        ///
+        /// A colony that never stockpiled anything still scores zero: no measurable samples
+        /// means no evidence of security, which is the same treatment the old minimum gave it.
+        /// </summary>
+        public float FoodSecurity
+        {
+            get { return foodSamples > 0 ? (float)foodSecureSamples / foodSamples : 0f; }
+        }
         public int mentalBreakSamples;
         public int fireSamples;
         public int downedSamples;
@@ -120,6 +160,8 @@ namespace AutoColony
             healthSum = 0f;
             minDaysOfFood = 999f;
             foodObserved = false;
+            foodSamples = 0;
+            foodSecureSamples = 0;
             mentalBreakSamples = 0;
             fireSamples = 0;
             downedSamples = 0;
@@ -157,6 +199,13 @@ namespace AutoColony
             // then the measurement has started.
             if (m.daysOfFood > 0f) foodObserved = true;
             if (foodObserved && m.daysOfFood < minDaysOfFood) minDaysOfFood = m.daysOfFood;
+
+            // Same measurability rule, counted over time rather than reduced to its low point.
+            if (foodObserved)
+            {
+                foodSamples++;
+                if (m.daysOfFood >= FoodDangerDays) foodSecureSamples++;
+            }
             if (m.colonistsInMentalState > 0) mentalBreakSamples++;
             // Only fires that actually threaten the colony. Counting every fire on the map
             // meant a wildfire ninety cells away — one the director is designed to ignore, and
@@ -220,6 +269,8 @@ namespace AutoColony
             Scribe_Values.Look(ref healthSum, "healthSum", 0f);
             Scribe_Values.Look(ref minDaysOfFood, "minDaysOfFood", 999f);
             Scribe_Values.Look(ref foodObserved, "foodObserved", false);
+            Scribe_Values.Look(ref foodSamples, "foodSamples", 0);
+            Scribe_Values.Look(ref foodSecureSamples, "foodSecureSamples", 0);
             Scribe_Values.Look(ref mentalBreakSamples, "mentalBreakSamples", 0);
             Scribe_Values.Look(ref fireSamples, "fireSamples", 0);
             Scribe_Values.Look(ref downedSamples, "downedSamples", 0);
@@ -275,7 +326,12 @@ namespace AutoColony
         /// <summary>Unmet mood this bad per survey counts as thoroughly mismanaged.</summary>
         const float MiseryCeiling = 40f;
 
-        /// <summary>Days of stored food that counts as fully secure.</summary>
+        /// <summary>
+        /// Days of stored food that counts as fully secure.
+        ///
+        /// Only used for the endpoint fallback now: an epoch with no samples at all has nothing
+        /// to take a fraction of, so it is scored on where it finished.
+        /// </summary>
         const float FoodSecureDays = 12f;
 
         public static float Evaluate(EpochStart start, ColonyMetrics end, EpochAccumulator acc,
@@ -305,9 +361,15 @@ namespace AutoColony
             float growth = wealthGrowth * 0.6f + popGrowth * 0.4f;
             breakdown.Add(new ScoreTerm("Growth", growth, WGrowth));
 
-            // --- food security: worst reserve reached, not the comfortable endpoint ---
-            float worstFood = acc.samples > 0 ? acc.WorstFood : end.daysOfFood;
-            float food = AcMath.Clamp01(worstFood / FoodSecureDays);
+            // --- food security: how much of the epoch was spent out of danger ---
+            //
+            // Was the single worst reading the epoch ever took. That is an honest measure of the
+            // worst moment and a poor measure of how a colony was run: one transient hour at zero
+            // zeroes a five-day epoch, and run 23 scored 0.00 having never actually run out. The
+            // search could not tell a colony that dipped once from one that starved for a week.
+            float food = acc.foodSamples > 0
+                ? acc.FoodSecurity
+                : AcMath.Clamp01(end.daysOfFood / FoodSecureDays);
             breakdown.Add(new ScoreTerm("Food security", food, WFood));
 
             // --- mood: time-averaged, penalised by how often someone was breaking ---
