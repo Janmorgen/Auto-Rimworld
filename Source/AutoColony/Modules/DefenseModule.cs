@@ -55,6 +55,9 @@ namespace AutoColony.Modules
             if (ctx.state.firesNearBase > 0 || closing) HandleFires(ctx, closing);
             else if (ctx.state.fires > 0) NoteDistantFire(ctx);
 
+            // People before property, and before the fire arrives rather than after.
+            if (ctx.state.fires > 0 && ctx.state.colonistsDowned > 0) EvacuateCasualties(ctx);
+
             if (ThreatActive(ctx))
             {
                 HandleThreat(ctx);
@@ -310,6 +313,167 @@ namespace AutoColony.Modules
                 "{0} fires burning and {1} able colonists — past what they could beat out, so " +
                 "nobody is sent into it",
                 count, able));
+        }
+
+        readonly HashSet<int> evacuating = new HashSet<int>();
+
+        /// <summary>
+        /// Carries a colonist who cannot walk out of a fire's way before it reaches them.
+        ///
+        /// Three colonies in this session burned around their own casualties, and the question
+        /// that blocked a fix for all of them was whether a rescue would path a carrier through
+        /// flame. Moving people *before* the fire arrives never asks it: at twelve cells there is
+        /// no fire between anybody and anybody, and the whole problem was waiting until there was.
+        ///
+        /// The colony's own doctors would do this unprompted, given a free bed and the Doctor
+        /// priority the work module already raises. What they will not do is choose *which* bed —
+        /// the game's own rescue takes the nearest, and the nearest bed to a colonist lying in a
+        /// burning room is generally in the burning room. So the bed is chosen here and the job
+        /// is ordered, which is the one thing that makes this worth overriding work priorities
+        /// for: an ordered job that saves someone beats a chosen job that reaches them later.
+        ///
+        /// Only for people actually in danger, and only once each. Re-issuing an ordered job
+        /// every pass would restart the carry and the carrier would never arrive — the same
+        /// mistake that made hunters chase a new animal every sweep.
+        /// </summary>
+        void EvacuateCasualties(DirectorContext ctx)
+        {
+            var map = ctx.map;
+            var fireDef = AcDefs.Fire;
+            if (fireDef == null) return;
+
+            var fires = map.listerThings.ThingsOfDef(fireDef);
+            if (fires.Count == 0) return;
+
+            var colonists = map.mapPawns.FreeColonistsSpawned;
+
+            for (int i = 0; i < colonists.Count; i++)
+            {
+                var victim = colonists[i];
+                if (victim == null || victim.Dead || !victim.Downed) continue;
+                if (victim.InBed()) continue;                       // already off the floor
+                if (evacuating.Contains(victim.thingIDNumber)) continue;
+                if (!FireIsComingFor(fires, victim.Position)) continue;
+
+                var carrier = NearestCarrier(ctx, victim);
+                if (carrier == null) continue;
+
+                var bed = SafestBedFor(ctx, victim, carrier, fires);
+                if (bed == null)
+                {
+                    NoteNowhereSafe(ctx, victim);
+                    continue;
+                }
+
+                var job = JobMaker.MakeJob(JobDefOf.Rescue, victim, bed);
+                job.count = 1;
+                if (!carrier.jobs.TryTakeOrderedJob(job, JobTag.Misc)) continue;
+
+                evacuating.Add(victim.thingIDNumber);
+                Chronicle.Record(ChronicleCategory.Fire, string.Format(
+                    "{0} is down with fire {1:0} cells away — {2} is carrying them to a bed clear " +
+                    "of it now, rather than waiting to see whether it comes this way",
+                    victim.LabelShortCap, NearestFireDistance(fires, victim.Position),
+                    carrier.LabelShortCap));
+                Note("evacuated " + victim.LabelShortCap + " ahead of the fire");
+                return;
+            }
+        }
+
+        /// <summary>
+        /// The closest colonist who could carry them, ignoring how busy they are.
+        ///
+        /// Deliberately not filtered on Caring the way a capture is: hauling somebody out of a
+        /// fire is not medicine, and a colonist who cannot treat a wound can still pick a person
+        /// up. Drafted colonists are left alone — they are in a fight, and taking them out of it
+        /// to fetch someone tends to produce a second casualty.
+        /// </summary>
+        static Pawn NearestCarrier(DirectorContext ctx, Pawn victim)
+        {
+            Pawn best = null;
+            float bestDist = float.MaxValue;
+
+            var able = ctx.state.ableColonists;
+            for (int i = 0; i < able.Count; i++)
+            {
+                var pawn = able[i];
+                if (pawn == null || pawn.Drafted || pawn == victim) continue;
+                if (!pawn.CanReach(victim, PathEndMode.OnCell, Danger.Deadly)) continue;
+
+                float dist = (pawn.Position - victim.Position).LengthHorizontalSquared;
+                if (dist < bestDist) { bestDist = dist; best = pawn; }
+            }
+            return best;
+        }
+
+        static bool FireIsComingFor(List<Thing> fires, IntVec3 cell)
+        {
+            return FireFront.Threatens(NearestFireDistance(fires, cell));
+        }
+
+        static float NearestFireDistance(List<Thing> fires, IntVec3 cell)
+        {
+            float nearest = -1f;
+            for (int i = 0; i < fires.Count; i++)
+            {
+                var fire = fires[i];
+                if (fire == null || !fire.Spawned) continue;
+
+                float dist = AcMath.Sqrt((fire.Position - cell).LengthHorizontalSquared);
+                if (nearest < 0f || dist < nearest) nearest = dist;
+            }
+            return nearest;
+        }
+
+        /// <summary>
+        /// A bed the fire is not going to reach, asked for on the carrier's behalf.
+        ///
+        /// The game's own answer is tried first, because it knows about ownership, reservations
+        /// and reachability and this does not. It is only overruled when what it returns is
+        /// standing in the fire.
+        /// </summary>
+        static Building_Bed SafestBedFor(DirectorContext ctx, Pawn victim, Pawn carrier,
+                                         List<Thing> fires)
+        {
+            Building_Bed chosen = null;
+            try { chosen = RestUtility.FindBedFor(victim, carrier, false, false, null); }
+            catch (Exception) { }
+
+            if (chosen != null && !FireIsComingFor(fires, chosen.Position)) return chosen;
+
+            foreach (var bed in ctx.map.listerBuildings.AllBuildingsColonistOfClass<Building_Bed>())
+            {
+                if (bed == null || !bed.Spawned || !bed.ForColonists) continue;
+                if (FireIsComingFor(fires, bed.Position)) continue;
+                if (!carrier.CanReach(bed, PathEndMode.OnCell, Danger.Deadly)) continue;
+
+                bool taken = false;
+                try
+                {
+                    foreach (var sleeper in bed.CurOccupants)
+                    {
+                        if (sleeper != null && sleeper != victim) { taken = true; break; }
+                    }
+                }
+                catch (Exception) { }
+                if (taken) continue;
+
+                return bed;
+            }
+            return chosen != null && !FireIsComingFor(fires, chosen.Position) ? chosen : null;
+        }
+
+        readonly HashSet<int> nowhereSafeNoted = new HashSet<int>();
+
+        void NoteNowhereSafe(DirectorContext ctx, Pawn victim)
+        {
+            if (!nowhereSafeNoted.Add(victim.thingIDNumber)) return;
+            Chronicle.Record(ChronicleCategory.Fire, string.Format(
+                "{0} is down with fire closing and every bed is either taken or in its path — " +
+                "asking the planner for one somewhere clear",
+                victim.LabelShortCap));
+
+            if (ctx.director != null) ctx.director.ForceModuleDue("Base planner");
         }
 
         void HandleFires(DirectorContext ctx, bool meetTheFront)

@@ -32,6 +32,22 @@ namespace AutoColony
         /// <summary>Movement toward the colony smaller than this is sampling noise, not approach.</summary>
         public const float ApproachTolerance = 1f;
 
+        /// <summary>
+        /// How close a fire has to be before somebody who cannot walk is in danger from it.
+        ///
+        /// Generous on purpose. A colonist on the floor does not move, carrying them takes time,
+        /// and fire spreads while both of those are happening — so the distance that matters is
+        /// not where the fire is but where it will be once the rescue is finished. Waiting until
+        /// it is close enough to see is waiting until it is too late to act.
+        /// </summary>
+        public const float DangerRadius = 12f;
+
+        /// <summary>Whether a fire this far away puts somebody who cannot move at risk.</summary>
+        public static bool Threatens(float distance)
+        {
+            return distance >= 0f && distance <= DangerRadius;
+        }
+
         /// <summary>Whether the colony's people could still physically put this front out.</summary>
         public static bool Fightable(int fires, int ableColonists)
         {

@@ -31,8 +31,25 @@ namespace AutoColony.Modules
         /// </summary>
         public override bool Urgent(DirectorContext ctx)
         {
-            return ctx.state.colonistsDowned > 0 &&
-                   ctx.state.colonistBeds < ctx.state.colonists;
+            return NeedsAnEmergencyBed(ctx);
+        }
+
+        /// <summary>
+        /// Whether somebody is on the floor with nowhere to be carried to.
+        ///
+        /// Counting beds against colonists answers that most of the time and not when there is a
+        /// fire. A colony can own four beds, have none of them occupied, and still have nowhere
+        /// to put anybody, because a bed the fire is about to reach is not a rescue — it is a
+        /// slower way to the same end. Every bed count in the director read as "no bed needed"
+        /// in exactly that situation.
+        /// </summary>
+        static bool NeedsAnEmergencyBed(DirectorContext ctx)
+        {
+            if (ctx.state.colonistsDowned == 0) return false;
+
+            if (ctx.state.colonistBeds < ctx.state.colonists) return true;
+
+            return ctx.state.fires > 0 && ctx.state.freeBedsAwayFromFire == 0;
         }
 
         public override int IntervalTicks { get { return 3750; } }
@@ -259,9 +276,7 @@ namespace AutoColony.Modules
             // Watched live, and this is the clearest the record has ever been about it: Sanchez
             // spent nine in-game hours down with no threat, no fire and eight days of food in
             // store, while the director used those hours to place a games table twice.
-            if (ctx.state.colonistsDowned > 0 &&
-                ctx.state.colonistBeds < ctx.state.colonists &&
-                TryAddEmergencyBed(ctx)) return;
+            if (NeedsAnEmergencyBed(ctx) && TryAddEmergencyBed(ctx)) return;
 
             for (int i = 0; i < layout.rooms.Count; i++)
             {

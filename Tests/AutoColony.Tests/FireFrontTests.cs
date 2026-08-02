@@ -88,6 +88,32 @@ namespace AutoColony.Tests
         }
 
         [Fact]
+        public void SomebodyOnTheFloorIsInDangerWellBeforeTheFireArrives()
+        {
+            // The whole point of the reframing: act at a distance where there is still no fire
+            // between the carrier and the casualty, so the question of pathing through flame
+            // never has to be answered.
+            Assert.True(FireFront.Threatens(1f));
+            Assert.True(FireFront.Threatens(FireFront.DangerRadius));
+            Assert.False(FireFront.Threatens(FireFront.DangerRadius + 0.1f));
+        }
+
+        [Fact]
+        public void NoFireAtAllThreatensNobody()
+        {
+            // -1 is "nothing burning", which must not read as distance zero.
+            Assert.False(FireFront.Threatens(-1f));
+        }
+
+        [Fact]
+        public void TheDangerRadiusAllowsTimeToCarrySomebody()
+        {
+            // A carry is slow and fire spreads while it happens, so this has to be generous
+            // enough to be acting on a fire that has not arrived rather than one that has.
+            Assert.True(FireFront.DangerRadius >= 8f);
+        }
+
+        [Fact]
         public void FightableScalesWithThePeopleAvailable()
         {
             Assert.True(FireFront.Fightable(6, 1));

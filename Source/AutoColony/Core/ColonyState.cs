@@ -209,6 +209,16 @@ namespace AutoColony
         /// <summary>Distance from the base to the closest fire, or -1 if none burning.</summary>
         public float nearestFireDistance = -1f;
 
+        /// <summary>
+        /// Empty colonist beds far enough from every fire to be worth carrying somebody to.
+        ///
+        /// A bed is the only way a downed colonist gets off the floor, and counting beds without
+        /// asking where the fire is answers the wrong question: a colony can hold four beds, none
+        /// occupied, and still have nowhere safe to put anybody. That reads as "no bed needed"
+        /// to everything that looks at bed counts.
+        /// </summary>
+        public int freeBedsAwayFromFire;
+
         /// <summary>Hostiles close enough to the colony to matter.</summary>
         public int hostilesNearBase;
 
@@ -226,6 +236,61 @@ namespace AutoColony
         /// against a wall is an emergency. Nothing else in the snapshot can tell them apart,
         /// because only the director knows where the base is.
         /// </summary>
+        /// <summary>
+        /// Counts the beds somebody could actually be carried to right now.
+        ///
+        /// Empty and out of the fire's reach, both of which have to hold: an occupied bed is not
+        /// somewhere to put a second person, and a free one standing where the fire is going is
+        /// not a rescue, it is a slower way to the same end.
+        /// </summary>
+        void CountBedsOutOfTheFire()
+        {
+            freeBedsAwayFromFire = 0;
+            if (map.listerBuildings == null) return;
+
+            var fireDef = AcDefs.Fire;
+            var burning = fireDef != null && map.listerThings != null
+                ? map.listerThings.ThingsOfDef(fireDef)
+                : null;
+
+            foreach (var bed in map.listerBuildings.AllBuildingsColonistOfClass<Building_Bed>())
+            {
+                if (bed == null || !bed.Spawned || !bed.ForColonists || bed.Medical) continue;
+                if (Occupied(bed)) continue;
+                if (NearAFire(burning, bed.Position)) continue;
+
+                freeBedsAwayFromFire++;
+            }
+        }
+
+        static bool Occupied(Building_Bed bed)
+        {
+            try
+            {
+                foreach (var sleeper in bed.CurOccupants)
+                {
+                    if (sleeper != null) return true;
+                }
+            }
+            catch (Exception) { }
+            return false;
+        }
+
+        static bool NearAFire(System.Collections.Generic.List<Thing> burning, IntVec3 cell)
+        {
+            if (burning == null) return false;
+
+            for (int i = 0; i < burning.Count; i++)
+            {
+                var fire = burning[i];
+                if (fire == null || !fire.Spawned) continue;
+
+                float dist = AcMath.Sqrt((fire.Position - cell).LengthHorizontalSquared);
+                if (FireFront.Threatens(dist)) return true;
+            }
+            return false;
+        }
+
         public void AnnotateProximity(IntVec3 origin, float radius)
         {
             if (map == null) return;
@@ -251,6 +316,8 @@ namespace AutoColony
                     if (inHome || distSq <= radiusSq) firesNearBase++;
                 }
             }
+
+            CountBedsOutOfTheFire();
 
             var pawns = map.mapPawns.AllPawnsSpawned;
             for (int i = 0; i < pawns.Count; i++)
