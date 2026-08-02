@@ -302,9 +302,13 @@ namespace AutoColony.Modules
             bool besieged = Besieged(ctx);
             if (besieged) hasRefuge = false;
 
+            // A bed is what a rescue carries someone to; with none, a colonist who goes down
+            // stays down, so the fight has to be worth more before it is taken.
+            bool canRecover = ctx.state.colonistBeds > 0;
+
             float required = CasualtyPolicy.RequiredAdvantage(
                 ctx.Gene(Genes.DefenseEngageRatio), fighters.Count,
-                ctx.state.colonistsDowned, hasRefuge);
+                ctx.state.colonistsDowned, hasRefuge, canRecover);
 
             bool winnable = threat <= 0f || strength / threat >= required;
 
@@ -377,7 +381,10 @@ namespace AutoColony.Modules
                         : caution > 1f
                             ? " (" + ctx.state.colonistsDowned + " already down, so the bar is " +
                               caution.ToString("0.0") + "x higher)"
-                            : (hasRefuge ? " (a room to hold, so the open is elective)" : ""),
+                            : hasRefuge
+                            ? " (a room to hold, so the open is elective)"
+                            : (canRecover ? "" : " (no bed to carry a casualty to, so an even " +
+                                                 "fight is one the colony cannot afford)"),
                     winnable ? "" : " — not worth meeting in the open, holding the base instead"));
             }
         }

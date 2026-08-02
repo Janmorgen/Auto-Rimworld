@@ -204,7 +204,7 @@ namespace AutoColony.Tests
         {
             // The fight that lost run 7: a 0.68x advantage cleared a bare gene bar of 0.35 and
             // downed three of four colonists. With a room to withdraw into it is refused.
-            float required = CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, hasRefuge: true);
+            float required = CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, true, true);
             Assert.True(0.68f < required);
             Assert.Equal(CasualtyPolicy.MinimumToLeaveCover, required, 3);
         }
@@ -213,22 +213,46 @@ namespace AutoColony.Tests
         public void WithNowhereToWithdrawToTheGeneStands()
         {
             // A colony with no walls yet is not choosing between two options.
-            Assert.Equal(0.35f, CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, hasRefuge: false), 3);
-            Assert.True(0.68f > CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, hasRefuge: false));
+            // With beds to recover into, the gene stands unaltered.
+            Assert.Equal(0.35f, CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, false, true), 3);
+            Assert.True(0.68f > CasualtyPolicy.RequiredAdvantage(0.35f, 4, 0, false, true));
         }
 
         [Fact]
         public void AStrategyBolderThanTheCoverFloorIsNotHeldBackByIt()
         {
             // The floor is a minimum, not an override — a gene demanding more still demands it.
-            Assert.Equal(3f, CasualtyPolicy.RequiredAdvantage(3f, 4, 0, hasRefuge: true), 3);
+            Assert.Equal(3f, CasualtyPolicy.RequiredAdvantage(3f, 4, 0, true, true), 3);
         }
 
         [Fact]
         public void CasualtiesStillRaiseTheBarAboveTheCoverFloor()
         {
-            Assert.True(CasualtyPolicy.RequiredAdvantage(0.35f, 1, 3, hasRefuge: true) >
+            Assert.True(CasualtyPolicy.RequiredAdvantage(0.35f, 1, 3, true, true) >
                         CasualtyPolicy.MinimumToLeaveCover);
+        }
+
+        [Fact]
+        public void ADayZeroColonyWithNoBedsRefusesTheFightsThatKilledColonies()
+        {
+            // Across the observed runs, every early fight taken at these ratios preceded severe
+            // colonist loss; those at 1.59x and above did not.
+            float bar = CasualtyPolicy.RequiredAdvantage(0.35f, 3, 0, false, false);
+            Assert.True(0.68f < bar);
+            Assert.True(0.96f < bar);
+            Assert.True(1.09f < bar);
+
+            Assert.True(1.59f > bar);
+            Assert.True(1.94f > bar);
+            Assert.True(3.02f > bar);
+        }
+
+        [Fact]
+        public void ARefugeStillOutranksTheNoBedFloor()
+        {
+            // Both apply to a colony with walls but no beds; the cover floor is the higher bar.
+            Assert.Equal(CasualtyPolicy.MinimumToLeaveCover,
+                         CasualtyPolicy.RequiredAdvantage(0.35f, 3, 0, true, false), 3);
         }
 
         [Fact]
