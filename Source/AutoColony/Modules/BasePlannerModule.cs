@@ -176,6 +176,14 @@ namespace AutoColony.Modules
         /// <summary>How long a set-aside room stays set aside. One in-game day.</summary>
         const int DeferralTicks = 60000;
 
+        /// <summary>
+        /// Outstanding blueprints below which a room is left alone.
+        ///
+        /// Roughly a quarter of a small room's perimeter. Under that the remainder is minutes of
+        /// work and putting the room down costs more than finishing it.
+        /// </summary>
+        const int MinOutstandingToWithdraw = 6;
+
         int lastConsolidatedTick = -999999;
 
         /// <summary>
@@ -197,6 +205,17 @@ namespace AutoColony.Modules
             var wanted = ctx.plan != null && ctx.plan.Focus != null
                 ? ctx.plan.Focus.WantsRoom
                 : null;
+
+            // Whichever eligible room has the furthest to go.
+            //
+            // The comment here used to claim this and the code took the first room it met.
+            // Watched it withdraw two blueprints from a bedroom that was two walls from
+            // finished: that frees nobody — two walls is minutes of work — and gives up a room
+            // the colony had almost paid for. The point is to stop hands being split across
+            // several *large* remainders, so the room with the largest remainder is the one to
+            // put down.
+            PlannedRoom worst = null;
+            int worstOutstanding = 0;
 
             for (int i = layout.rooms.Count - 1; i >= 0; i--)
             {
@@ -221,24 +240,56 @@ namespace AutoColony.Modules
 
                 if (room.deferredUntilTick > now) continue;   // already set aside
 
-                int withdrawn = WithdrawBlueprints(ctx.map, room);
-                if (withdrawn == 0) continue;
+                int outstanding = CountBlueprints(ctx.map, room);
 
-                // Set aside rather than forgotten. It keeps its site, so nothing else is sited
-                // over the walls it already has, and it is picked up again when the deferral
-                // lapses and the colony has hands to spare.
-                room.wallsQueued = false;
-                room.deferredUntilTick = now + DeferralTicks;
-                lastConsolidatedTick = now;
+                // A room nearly finished is finished. Below this the remainder is minutes of
+                // work, so putting it down frees nobody and throws away what it has cost.
+                if (outstanding < MinOutstandingToWithdraw) continue;
 
-                Chronicle.Record(ChronicleCategory.Build, string.Format(
-                    "took back {0} unstarted blueprints from the {1} room and set it aside for a " +
-                    "day — {2} rooms open and only {3} that {4} colonists can finish, so the hands " +
-                    "go to one of them instead of all of them. Nothing built was lost",
-                    withdrawn, room.role, unfinished, allowed, ctx.state.ableColonists.Count));
-                Note("withdrew the " + room.role + " room to concentrate on the rest");
-                return;
+                if (outstanding > worstOutstanding)
+                {
+                    worstOutstanding = outstanding;
+                    worst = room;
+                }
             }
+
+            if (worst == null) return;
+
+            int withdrawn = WithdrawBlueprints(ctx.map, worst);
+            if (withdrawn == 0) return;
+
+            // Set aside rather than forgotten. It keeps its site, so nothing else is sited over
+            // the walls it already has, and it is picked up again when the deferral lapses and
+            // the colony has hands to spare.
+            worst.wallsQueued = false;
+            worst.deferredUntilTick = now + DeferralTicks;
+            lastConsolidatedTick = now;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "took back {0} unstarted blueprints from the {1} room and set it aside for a " +
+                "day — {2} rooms open and only {3} that {4} colonists can finish, so the hands " +
+                "go to one of them instead of all of them. Nothing built was lost",
+                withdrawn, worst.role, unfinished, allowed, ctx.state.ableColonists.Count));
+            Note("withdrew the " + worst.role + " room to concentrate on the rest");
+        }
+
+        /// <summary>
+        /// Blueprints still standing in a room, which is how much of it has not been started.
+        /// </summary>
+        static int CountBlueprints(Map map, PlannedRoom room)
+        {
+            int n = 0;
+            foreach (var cell in room.Rect)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    if (things[i] is Blueprint) n++;
+                }
+            }
+            return n;
         }
 
         static bool AnyFrameIn(Map map, PlannedRoom room)
