@@ -196,7 +196,18 @@ namespace AutoColony.Modules
         /// </summary>
         void ConsolidateOntoWhatCanBeFinished(DirectorContext ctx, int unfinished, int allowed)
         {
-            if (unfinished <= allowed) return;
+            // The room the spare slot sanctioned is allowed to stand.
+            //
+            // These two rules were written a few hours apart and undo each other exactly. The
+            // spare slot opens one room beyond the allowance for whatever the plan is asking
+            // for; on the next pass the slot counts as used, so the stretch is refused, the
+            // allowance falls back to base, and consolidation withdraws the very room the slot
+            // had just opened. Watched it happen on day 0 of a fresh colony, sixteen hours in.
+            //
+            // So consolidation starts one room later than the limit does. Below that the colony
+            // is using an allowance it was deliberately given; above it, it is genuinely
+            // carrying more than it can build.
+            if (unfinished <= allowed + 1) return;
 
             int now = Find.TickManager.TicksGame;
             if (now - lastConsolidatedTick < ConsolidateCooldownTicks) return;
