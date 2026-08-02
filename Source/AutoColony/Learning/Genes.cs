@@ -197,15 +197,79 @@ namespace AutoColony.Learning
             specList.Add(spec);
         }
 
-        /// <summary>Registers a priority weight gene for a work type discovered at startup.</summary>
+        /// <summary>
+        /// Registers the priority weight gene covering a work type discovered at startup.
+        ///
+        /// One gene per *category*, not per work type. <see cref="Register"/> ignores a key it
+        /// already holds, so twenty work types produce six genes.
+        /// </summary>
         public static void RegisterWorkType(string workDefName, string label)
         {
-            Register(new GeneSpec(WorkWeightPrefix + workDefName, 0f, 3f, 1f, "Work weights", label));
+            string category = CategoryOf(workDefName);
+            Register(new GeneSpec(WorkWeightPrefix + category, 0f, 3f, 1f,
+                                  "Work weights", "Work: " + category));
         }
 
         public static string WorkKey(string workDefName)
         {
-            return WorkWeightPrefix + workDefName;
+            return WorkWeightPrefix + CategoryOf(workDefName);
+        }
+
+        /// <summary>
+        /// Which weight a work type shares.
+        ///
+        /// The search had one gene per work type — around twenty of a fifty-eight gene genome —
+        /// against a handful of epochs, and a colony's score is far noisier than the difference
+        /// those genes make. Measured directly this session: two candidates replayed from an
+        /// identical healthy world scored 0.561 and 0.565, a spread far below the ~0.02 at which
+        /// the search is already known to go flat. Expressiveness the evidence cannot support is
+        /// not expressiveness, it is dilution — every extra dimension spends the same limited
+        /// number of trials.
+        ///
+        /// Grouped by what the work is *for*, since that is the level a strategy actually varies
+        /// at: a colony leans towards feeding itself or towards building, not towards hauling
+        /// over cleaning. Work types from other mods fall to "other" rather than each adding a
+        /// gene, which keeps them covered without paying for them.
+        /// </summary>
+        public static string CategoryOf(string workDefName)
+        {
+            switch (workDefName)
+            {
+                case "Firefighter":
+                case "Patient":
+                case "PatientBedRest":
+                case "Doctor":
+                    return "health";
+
+                case "Growing":
+                case "Hunting":
+                case "Cooking":
+                    return "food";
+
+                case "Construction":
+                case "Mining":
+                case "PlantCutting":
+                case "Smoothing":
+                    return "build";
+
+                case "Smithing":
+                case "Tailoring":
+                case "Crafting":
+                case "Art":
+                    return "craft";
+
+                case "Hauling":
+                case "Cleaning":
+                    return "logistics";
+
+                case "Research":
+                case "Warden":
+                case "Handling":
+                    return "colony";
+
+                default:
+                    return "other";
+            }
         }
 
         public static GeneSpec Spec(string key)
