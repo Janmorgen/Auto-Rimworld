@@ -96,6 +96,26 @@ namespace AutoColony.Modules
         /// </summary>
         const int MaxShellAttempts = 6;
 
+        /// <summary>
+        /// Whether the plan wants a room the colony has not reserved, and the spare slot is free.
+        ///
+        /// Three conditions, all of them narrowing. The plan has to be asking for a room at all;
+        /// the colony must not already have one of that kind, or this would open a second
+        /// bedroom rather than the first; and the allowance must not already have been stretched,
+        /// which is what holds the extra to exactly one however many passes run.
+        /// </summary>
+        static bool FocusRoomWouldUseTheSpareSlot(DirectorContext ctx, int unfinished, int allowed)
+        {
+            if (unfinished > allowed) return false;   // the spare slot is already in use
+
+            if (ctx.plan == null || ctx.plan.Focus == null) return false;
+
+            var wanted = ctx.plan.Focus.WantsRoom;
+            if (!wanted.HasValue) return false;
+
+            return ctx.layout != null && !ctx.layout.HasRoom(wanted.Value);
+        }
+
         bool roomsHeldNoted;
 
         /// <summary>
@@ -381,6 +401,23 @@ namespace AutoColony.Modules
             // bedroom among the things they never got round to.
             int unfinished = UnfinishedRooms(ctx);
             int allowed = Upkeep.BuildingMeans.ConcurrentRooms(ctx.state.ableColonists.Count);
+
+            // One slot is kept for the room the plan is actually asking for.
+            //
+            // The limit exists for a good reason — six shells at once, none finished, colonists
+            // on wet ground for three days — and it is not being relaxed in general. But it
+            // counts rooms without asking what they are for, so a colony building its kitchen
+            // cannot start the bedroom the plan is asking for, and beds queue behind the store
+            // and the workshop. Run 19 spent its whole life at `beds 0` and lost three
+            // colonists; run 26 reached day 2 with no bed while a kitchen crawled through
+            // forty-one boulders, a raid and a fire.
+            //
+            // Bounded at exactly one extra, and only for the focus room, so the failure the
+            // limit was written for cannot come back: the colony can be building at most one
+            // thing more than its hands can finish, and that thing is the one it most needs.
+            if (unfinished >= allowed && FocusRoomWouldUseTheSpareSlot(ctx, unfinished, allowed))
+                allowed = unfinished + 1;
+
             if (unfinished >= allowed)
             {
                 NoteRoomsHeld(ctx, unfinished, allowed);
