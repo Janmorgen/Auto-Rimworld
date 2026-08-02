@@ -417,6 +417,20 @@ catalogue, and the assumptions were sitting in comments that read as facts. Chec
 
 ## Traps worth knowing before you touch it
 
+- **Review the loop a rule closes, not the rule.** Four times in one session, two individually
+  correct rules composed into a cycle. The bandit picks the next room from the roles the layout
+  *lacks*, and repurposing satisfies that pick by relabelling a shell — so converting the only
+  workshop into a research room puts workshop straight back in the bandit's list, and one shell
+  went Workshop, Research, Workshop, Dining, Hospital, Workshop in fourteen hours. Withdrawing a
+  room's blueprints set `wallsQueued = false`, which made the planner re-queue them on the very
+  next pass. The spare slot opens one room beyond the allowance and consolidation, seeing the
+  allowance exceeded, takes that exact room back. And a long-term scoring tie of six hundredths
+  of a point flipped the focus for single passes, which damaged three separate mechanisms
+  downstream before the cause was addressed.
+  Each rule was reasoned about carefully in isolation and each was fine there. None of these
+  showed up in 278 offline tests; all four were found by watching one colony. When adding a
+  control surface, write down what it does on the pass *after* it acts, and against every rule
+  already present.
 - **A hand-built fixture silently reroutes every probe.** Adding a researcher check to
   `ResearchCapacityGoal` removed "Somewhere to research" from every ranking in the self-test
   overnight: the probes construct `ColonyState` directly, so anything the real snapshot derives
