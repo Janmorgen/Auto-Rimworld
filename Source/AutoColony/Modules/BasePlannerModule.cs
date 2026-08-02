@@ -76,7 +76,16 @@ namespace AutoColony.Modules
         bool reportedNoSite;
 
         /// <summary>Whether the "nothing to build walls from" line has been said this dry spell.</summary>
-        bool reportedNoShellMaterial;
+        /// <summary>
+        /// Rooms whose wall failure has already been explained, so it is said once per room
+        /// rather than once per dry spell.
+        ///
+        /// This was a single flag for the whole module: the first room to fail printed its
+        /// reason and every other room's failure after it was silent, whatever the cause. Nearly
+        /// everything found in this codebase has been found by reading these lines, so a
+        /// diagnostic that reports one room and hides the rest is worse than it looks.
+        /// </summary>
+        readonly HashSet<string> shellFailureNoted = new HashSet<string>();
 
         /// <summary>
         /// How many passes running the same room has had its furniture re-queued, and which room
@@ -1792,9 +1801,9 @@ namespace AutoColony.Modules
                 // open ground with no bed, and had 1,422 units of unforbidden wood the whole
                 // time. A message that guesses is worse than one that says nothing, because it
                 // ends the investigation it should have started.
-                if (!reportedNoShellMaterial)
+                string who = room.role.ToString() + room.Center;
+                if (shellFailureNoted.Add(who))
                 {
-                    reportedNoShellMaterial = true;
                     Chronicle.Record(ChronicleCategory.Build, string.Format(
                         "cannot start the {0} room's walls in {1} — not one of its {2} edge cells " +
                         "would take a blueprint: {3}",
@@ -1803,7 +1812,7 @@ namespace AutoColony.Modules
                 }
                 return 0;
             }
-            reportedNoShellMaterial = false;
+            shellFailureNoted.Remove(room.role.ToString() + room.Center);
 
             Chronicle.Record(ChronicleCategory.Build, string.Format(
                 "{0} room walls queued in {1} (fire risk {2:0.00}, stone preference {3:0.00}){4}",
