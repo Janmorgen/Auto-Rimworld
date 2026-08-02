@@ -39,6 +39,13 @@ namespace AutoColony
         public static ThingDef Wall { get { return Thing("Wall"); } }
         public static ThingDef Door { get { return Thing("Door"); } }
         public static ThingDef Bed { get { return Thing("Bed"); } }
+
+        /// <summary>
+        /// A patch of floor designated for sleeping. Free, instant, and a real bed as far as the
+        /// game is concerned — which is the only property that matters when somebody is bleeding
+        /// on the ground and a rescue needs somewhere to carry them.
+        /// </summary>
+        public static ThingDef SleepingSpot { get { return Thing("SleepingSpot"); } }
         public static ThingDef Sandbag { get { return Thing("Sandbags"); } }
         public static ThingDef TurretMini { get { return Thing("Turret_MiniTurret"); } }
         public static ThingDef Battery { get { return Thing("Battery"); } }

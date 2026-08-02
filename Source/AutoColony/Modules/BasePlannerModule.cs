@@ -1274,7 +1274,109 @@ namespace AutoColony.Modules
                 Note("emergency bed for a downed colonist in the " + room.role + " room");
                 return true;
             }
+
+            // Nothing could take a bed. Put down a sleeping spot instead.
+            //
+            // A bed costs 45 of a material the colony may not have, and it costs *time* it
+            // certainly does not have: queued as a blueprint it is somewhere to lie down in
+            // several hours, and the colonist bleeding on the floor is being asked to wait for
+            // hauling and construction to happen first. Every bed this branch has ever placed
+            // was a promise rather than a bed.
+            //
+            // A sleeping spot is a patch of floor with a label on it. It costs nothing, needs no
+            // research, and has zero work to build — so `PlacementUtil` spawns it outright
+            // instead of queuing it, and it exists the instant it is placed. The game counts it
+            // as a bed, which is the only thing that matters here: `FindBedFor` will return it
+            // and a rescue will carry somebody to it.
+            //
+            // It is a bad bed. Comfort 0.4, no quality, and it does none of the things a real bed
+            // does for a wound. It is also the difference between being tended on the floor where
+            // you fell and being tended somewhere, and colonies in this session died on the wrong
+            // side of that. The real bed still gets built by the ordinary furnishing path; this
+            // only guarantees the colony is never in a state where a rescue has nowhere to go.
+            return TryAddSleepingSpot(ctx);
+        }
+
+        /// <summary>
+        /// Puts a sleeping spot somewhere a casualty can actually be carried to.
+        ///
+        /// Inside a room if the colony has one, because a roof and walls are most of what a bed
+        /// is for. Failing that, next to the casualty — a spot on open ground is a poor place to
+        /// be tended and it is still off the floor, reachable, and reservable, which is three
+        /// more things than where they are now.
+        ///
+        /// Fire is the one thing that disqualifies a location outright. Carrying somebody into
+        /// the path of a fire is not a rescue, and this runs in exactly the situations where
+        /// there is one.
+        /// </summary>
+        bool TryAddSleepingSpot(DirectorContext ctx)
+        {
+            var def = AcDefs.SleepingSpot;
+            if (def == null) return false;
+
+            var layout = ctx.layout;
+
+            // With something burning, a room is not automatically the safer choice — it may be
+            // the thing that is on fire, and this path exists partly to answer that case. So the
+            // rooms are skipped entirely and the spot goes down beside the casualty, which is
+            // somewhere the fire demonstrably has not reached yet.
+            bool avoidRooms = ctx.state.fires > 0;
+
+            for (int i = 0; !avoidRooms && layout != null && i < layout.rooms.Count; i++)
+            {
+                var room = layout.rooms[i];
+                if (room.role != RoomRole.Bedroom && room.role != RoomRole.Hospital) continue;
+                if (ExistingCount(ctx.map, room, def) > 0) continue;
+
+                int before = placedThisPass;
+                PlaceMany(ctx, room, def, 1);
+                if (placedThisPass <= before) continue;
+
+                NoteSleepingSpot(ctx, "the " + room.role + " room");
+                return true;
+            }
+
+            // No room will take one, so put it beside whoever needs it.
+            var casualty = FirstDownedColonist(ctx);
+            var origin = casualty != null ? casualty.Position : ctx.Origin;
+
+            foreach (var cell in GenRadial.RadialCellsAround(origin, 12, true))
+            {
+                if (!cell.InBounds(ctx.map)) continue;
+                if (PlacementUtil.TryPlace(ctx.map, def, cell, Rot4.North, null))
+                {
+                    PlacementUtil.MarkHome(ctx.map, cell);
+                    NoteSleepingSpot(ctx, "open ground beside them");
+                    return true;
+                }
+            }
             return false;
+        }
+
+        static Pawn FirstDownedColonist(DirectorContext ctx)
+        {
+            var colonists = ctx.map.mapPawns.FreeColonistsSpawned;
+            for (int i = 0; i < colonists.Count; i++)
+            {
+                var pawn = colonists[i];
+                if (pawn != null && !pawn.Dead && pawn.Downed && !pawn.InBed()) return pawn;
+            }
+            return null;
+        }
+
+        bool sleepingSpotNoted;
+
+        void NoteSleepingSpot(DirectorContext ctx, string where)
+        {
+            if (sleepingSpotNoted) return;
+            sleepingSpotNoted = true;
+
+            Chronicle.Record(ChronicleCategory.Health, string.Format(
+                "{0} down and no bed would go up — laid a sleeping spot in {1}. It costs nothing " +
+                "and appears at once, where a bed is 45 material and several hours of hauling " +
+                "and building that nobody bleeding on the floor has",
+                ctx.state.colonistsDowned, where));
+            Note("sleeping spot for a downed colonist — " + where);
         }
 
         bool TopUpFurniture(DirectorContext ctx)
