@@ -706,14 +706,59 @@ namespace AutoColony.Modules
             // as uninstalled crates.
             if (ctx.state.colonistBeds <= ctx.state.colonists) return false;
 
+            // Counted over the planner's own footprint, not the game's room.
+            //
+            // The last round of this made the two sides agree on the target *number*. They still
+            // disagreed about the region it applied to: the planner tops up beds inside
+            // PlannedRoom.Rect and this counted them inside RimWorld's Room, which is bounded by
+            // whatever walls actually exist. The two are the same only for a finished, sealed
+            // room — so a room still going up, or one whose door leaks into the corridor, has one
+            // count for adding and another for removing, and a bed comes out and goes back in
+            // about twice a day for ever.
+            //
+            // Agreeing on the number was half of it; this is the other half. The survey above
+            // still works in RimWorld rooms, and should: a SharedBedroom thought comes from the
+            // room a pawn actually slept in, which is the game's notion, not the planner's.
+            // It is only the arithmetic of how many to leave that has to match.
+            var planned = PlannedRoomAt(ctx.layout, defect.cell);
+
             var beds = new List<Building_Bed>();
-            var things = defect.room.ContainedAndAdjacentThings;
-            for (int i = 0; i < things.Count; i++)
+            int counted = 0;
+
+            if (planned != null)
             {
-                var bed = things[i] as Building_Bed;
-                if (bed == null || !bed.Spawned) continue;
-                if (bed.GetRoom() != defect.room) continue;
-                if (bed.ForColonists && !bed.Medical) beds.Add(bed);
+                foreach (var cell in planned.Rect)
+                {
+                    if (!cell.InBounds(ctx.map)) continue;
+
+                    var atCell = cell.GetThingList(ctx.map);
+                    for (int i = 0; i < atCell.Count; i++)
+                    {
+                        var thing = atCell[i];
+                        if (thing == null || thing.Position != cell) continue;
+
+                        // Beds on the way count too, or the two sides disagree again the moment
+                        // the planner queues one and this cannot see it yet.
+                        if (PlacementUtil.BuildTargetOf(thing) != AcDefs.Bed) continue;
+                        counted++;
+
+                        var bed = thing as Building_Bed;
+                        if (bed != null && bed.Spawned && bed.ForColonists && !bed.Medical)
+                            beds.Add(bed);
+                    }
+                }
+            }
+            else
+            {
+                var things = defect.room.ContainedAndAdjacentThings;
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var bed = things[i] as Building_Bed;
+                    if (bed == null || !bed.Spawned) continue;
+                    if (bed.GetRoom() != defect.room) continue;
+                    if (bed.ForColonists && !bed.Medical) beds.Add(bed);
+                }
+                counted = beds.Count;
             }
 
             // Down to the number the planner fills a bedroom to, not down to one.
@@ -729,7 +774,7 @@ namespace AutoColony.Modules
                 ctx.state.colonists);
             if (target < 1) target = 1;
 
-            if (beds.Count <= target) return false;
+            if (counted <= target) return false;
 
             // Uninstalled, not deconstructed. The colony wants this bed — just not here — and
             // uninstalling keeps it whole, quality included, ready to be set down in the room
@@ -738,12 +783,30 @@ namespace AutoColony.Modules
             //
             // One at a time, so the colony is never left with nowhere to sleep while the
             // replacement rooms are still going up.
-            for (int i = target; i < beds.Count; i++)
+            // Only the beds beyond the target come out, and only ones actually standing — a
+            // blueprint counts toward the total but there is nothing there to uninstall.
+            int surplus = counted - target;
+            int from = beds.Count - surplus;
+            if (from < 0) from = 0;   // the surplus is blueprints, which nobody can uninstall
+
+            for (int i = from; i < beds.Count; i++)
             {
                 if (PlacementUtil.MarkedForDeconstruction(ctx.map, beds[i])) continue;
                 if (PlacementUtil.TryUninstall(ctx.map, beds[i])) return true;
             }
             return false;
+        }
+
+        /// <summary>The planner's room containing this cell, or null if it is not in one.</summary>
+        static PlannedRoom PlannedRoomAt(BaseLayout layout, IntVec3 cell)
+        {
+            if (layout == null) return null;
+
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                if (layout.rooms[i].Rect.Contains(cell)) return layout.rooms[i];
+            }
+            return null;
         }
 
         /// <summary>
