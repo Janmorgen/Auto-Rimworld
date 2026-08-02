@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AutoColony.Upkeep;
 using RimWorld;
@@ -307,8 +308,9 @@ namespace AutoColony.Modules
         /// </summary>
         static bool AddHeater(DirectorContext ctx)
         {
-            if (ctx.state.workingGenerators > 0 && PlaceInBase(ctx, AcDefs.Heater, 1)) return true;
-            return PlaceInBase(ctx, AcDefs.Campfire, 1);
+            if (ctx.state.workingGenerators > 0 &&
+                PlaceInBase(ctx, AcDefs.Heater, 1, RoomPreference.Coldest)) return true;
+            return PlaceInBase(ctx, AcDefs.Campfire, 1, RoomPreference.Coldest);
         }
 
         /// <summary>
@@ -327,12 +329,13 @@ namespace AutoColony.Modules
         {
             var cooler = AcDefs.Cooler;
             if (ctx.state.workingGenerators > 0 && cooler != null &&
-                PlacementUtil.ResearchDone(cooler) && PlaceInBase(ctx, cooler, 1))
+                PlacementUtil.ResearchDone(cooler) &&
+                PlaceInBase(ctx, cooler, 1, RoomPreference.Hottest))
                 return true;
 
             var passive = AcDefs.Thing("PassiveCooler");
             if (passive == null || !PlacementUtil.ResearchDone(passive)) return false;
-            if (!PlaceInBase(ctx, passive, 1)) return false;
+            if (!PlaceInBase(ctx, passive, 1, RoomPreference.Hottest)) return false;
 
             Chronicle.Record(ChronicleCategory.Build,
                 "passive cooler placed — fifty wood, no research and no grid, which is the " +
@@ -405,12 +408,40 @@ namespace AutoColony.Modules
         /// </summary>
         static bool PlaceInBase(DirectorContext ctx, ThingDef def, int count)
         {
+            return PlaceInBase(ctx, def, count, RoomPreference.Any);
+        }
+
+        enum RoomPreference { Any, Hottest, Coldest }
+
+        /// <summary>
+        /// As above, but able to pick the room by its own temperature.
+        ///
+        /// Temperature is a property of a room, not of the map: one room can be baking while the
+        /// one next door is fine, because heat is held by walls and moved by what is inside them.
+        /// A cooler dropped into "the first room with space" is therefore as likely to cool a
+        /// room nobody was complaining about as the one that drove the complaint, and the colony
+        /// pays the wood either way.
+        /// </summary>
+        static bool PlaceInBase(DirectorContext ctx, ThingDef def, int count, RoomPreference prefer)
+        {
             if (def == null || ctx.layout == null) return false;
 
             var stuff = PlacementUtil.ChooseStuff(ctx.map, def,
                 FireRisk.StonePreference(ctx, FireRisk.Assess(ctx.map, ctx.state)));
 
-            var rooms = ctx.layout.rooms;
+            var rooms = new List<PlannedRoom>(ctx.layout.rooms);
+            if (prefer != RoomPreference.Any)
+            {
+                var map = ctx.map;
+                bool hottestFirst = prefer == RoomPreference.Hottest;
+                rooms.Sort(delegate(PlannedRoom a, PlannedRoom b)
+                {
+                    float ta = RoomTemperature(map, a);
+                    float tb = RoomTemperature(map, b);
+                    return hottestFirst ? tb.CompareTo(ta) : ta.CompareTo(tb);
+                });
+            }
+
             for (int i = 0; i < rooms.Count; i++)
             {
                 foreach (var cell in rooms[i].Interior)
@@ -420,6 +451,20 @@ namespace AutoColony.Modules
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// A planned room's actual temperature, or the outdoor reading when it has no walls yet.
+        /// </summary>
+        static float RoomTemperature(Map map, PlannedRoom planned)
+        {
+            try
+            {
+                var room = planned.Center.GetRoom(map);
+                if (room != null && !room.UsesOutdoorTemperature) return room.Temperature;
+                return map.mapTemperature.OutdoorTemp;
+            }
+            catch (Exception) { return 0f; }
         }
 
         /// <summary>Roofs every cell the building stands on, which is cheaper than moving it.</summary>

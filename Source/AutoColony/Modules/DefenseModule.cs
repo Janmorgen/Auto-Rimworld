@@ -62,6 +62,7 @@ namespace AutoColony.Modules
             {
                 firefightingUnderway = false;
                 distantFireNoted = false;
+                hotRoomNoted = false;
                 Chronicle.Record(ChronicleCategory.Fire, "fires near the colony are out");
             }
 
@@ -234,6 +235,21 @@ namespace AutoColony.Modules
                 bool inHome = home != null && home[fire.Position];
                 if (!inHome && (fire.Position - origin).LengthHorizontalSquared > radiusSq) continue;
 
+                // A room the fire has already won is not a room to send anyone into.
+                //
+                // Fire heats the air, and an enclosed space holds that heat: past about sixty
+                // degrees a colonist walking in takes heatstroke and burns on top of whatever
+                // the fire itself does, and they are slower to leave than to enter. The same
+                // fire fought from the doorway costs nothing but time. So the interior is left
+                // unclaimed once it is dangerously hot, and the ring around the room is claimed
+                // instead — the front still gets fought, from the side of the wall where people
+                // survive doing it.
+                if (RoomIsAnOven(map, fire.Position))
+                {
+                    NoteRoomTooHot(map, fire.Position);
+                    continue;
+                }
+
                 // Claim the fire and a ring around it, so the whole burning front is inside
                 // the area colonists are willing to work in.
                 foreach (var cell in GenRadial.RadialCellsAround(fire.Position, 4f, true))
@@ -252,6 +268,54 @@ namespace AutoColony.Modules
                     "{0} fires burning; claimed {1} cells into the home area and forced a work re-prioritisation",
                     ctx.state.fires, claimed));
             }
+        }
+
+        /// <summary>
+        /// Room temperature past which going in to fight the fire costs more than the fire does.
+        ///
+        /// Colonists take heatstroke roughly ten degrees past what they can bear, and an
+        /// enclosed burning room runs far hotter than that — the injuries come from the air as
+        /// much as the flames, and a pawn who walks in is slower getting out than getting in.
+        /// </summary>
+        const float RoomTooHotToEnter = 60f;
+
+        /// <summary>
+        /// Whether the fire is inside a room that has become an oven.
+        ///
+        /// An outdoor fire, or one in a room still open to the sky, is never this — it is the
+        /// walls that trap the heat, which is exactly why the same fire is safe to fight in the
+        /// open and not safe to fight indoors.
+        /// </summary>
+        static bool RoomIsAnOven(Map map, IntVec3 at)
+        {
+            try
+            {
+                var room = at.GetRoom(map);
+                if (room == null || room.UsesOutdoorTemperature) return false;
+                return room.Temperature >= RoomTooHotToEnter;
+            }
+            catch (Exception) { return false; }
+        }
+
+        bool hotRoomNoted;
+
+        void NoteRoomTooHot(Map map, IntVec3 at)
+        {
+            if (hotRoomNoted) return;
+            hotRoomNoted = true;
+
+            float temperature = 0f;
+            try
+            {
+                var room = at.GetRoom(map);
+                if (room != null) temperature = room.Temperature;
+            }
+            catch (Exception) { }
+
+            Chronicle.Record(ChronicleCategory.Fire, string.Format(
+                "the burning room is at {0:0}C — not claiming its interior, so the fire is " +
+                "fought from outside rather than by sending colonists into an oven",
+                temperature));
         }
 
         bool distantFireNoted;
