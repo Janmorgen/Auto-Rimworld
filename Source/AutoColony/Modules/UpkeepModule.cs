@@ -326,9 +326,38 @@ namespace AutoColony.Modules
         /// </summary>
         static bool AddHeater(DirectorContext ctx)
         {
+            // Only if a room is actually cold.
+            //
+            // Both of these fire on what colonists *feel*, and a colonist beside a campfire is
+            // hot while one across the same room is cold — so the two complaints coexist and the
+            // remedies alternate. Watched immediately after the heat survey was added: heater at
+            // day 4 18h, cooler at 5 00h, cooler at 5 06h, heater at 5 12h, outdoors 12-18C the
+            // whole time. Neither remedy was wrong about a colonist; both were wrong about the
+            // room, which is the thing being altered.
+            //
+            // Reading the temperature is what tells them apart. The thought says somebody is
+            // uncomfortable; only the thermometer says which way to move the room.
+            if (!AnyRoomBeyond(ctx, ColonyState.ComfortableMin, true)) return false;
+
             if (ctx.state.workingGenerators > 0 &&
                 PlaceInBase(ctx, AcDefs.Heater, 1, RoomPreference.Coldest)) return true;
             return PlaceInBase(ctx, AcDefs.Campfire, 1, RoomPreference.Coldest);
+        }
+
+        /// <summary>
+        /// Whether any planned room sits past a temperature bound — below it when
+        /// <paramref name="below"/>, above it otherwise.
+        /// </summary>
+        static bool AnyRoomBeyond(DirectorContext ctx, float bound, bool below)
+        {
+            if (ctx.layout == null) return false;
+
+            for (int i = 0; i < ctx.layout.rooms.Count; i++)
+            {
+                float t = RoomTemperature(ctx.map, ctx.layout.rooms[i]);
+                if (below ? t < bound : t > bound) return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -345,6 +374,9 @@ namespace AutoColony.Modules
         /// </summary>
         static bool AddCooler(DirectorContext ctx)
         {
+            // The thermometer, for the same reason as AddHeater — see the note there.
+            if (!AnyRoomBeyond(ctx, ColonyState.ComfortableMax, false)) return false;
+
             var cooler = AcDefs.Cooler;
             if (ctx.state.workingGenerators > 0 && cooler != null &&
                 PlacementUtil.ResearchDone(cooler) &&
@@ -429,6 +461,37 @@ namespace AutoColony.Modules
             return PlaceInBase(ctx, def, count, RoomPreference.Any);
         }
 
+        /// <summary>
+        /// How many of this thing already stand in the room, counting anything on its way — a
+        /// blueprint or a frame is one that is coming, and treating it as absent is what queues
+        /// the duplicate.
+        /// </summary>
+        static int CountIn(Map map, PlannedRoom room, ThingDef def)
+        {
+            if (map == null || def == null) return 0;
+
+            int found = 0;
+            foreach (var cell in room.Interior)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var thing = things[i];
+                    if (thing == null) continue;
+                    if (thing.def == def) { found++; continue; }
+
+                    var blueprint = thing as Blueprint;
+                    if (blueprint != null && blueprint.def.entityDefToBuild == def) { found++; continue; }
+
+                    var frame = thing as Frame;
+                    if (frame != null && frame.def.entityDefToBuild == def) found++;
+                }
+            }
+            return found;
+        }
+
         enum RoomPreference { Any, Hottest, Coldest }
 
         /// <summary>
@@ -462,6 +525,36 @@ namespace AutoColony.Modules
 
             for (int i = 0; i < rooms.Count; i++)
             {
+                // A room still waiting for the thing it exists for is not a room with space.
+                //
+                // These remedies take whatever room has a free cell, and a research bench is
+                // three cells by two — so a 2x2 table and a torch lamp dropped into a small
+                // Research room leave nowhere its own bench will fit, and the planner then
+                // re-queues that bench for ever. Watched live, with the diagnostic naming it
+                // exactly: "SimpleResearchBench was refused at all 5 placeable cells in the
+                // interior — its footprint does not fit anywhere among what is already there".
+                //
+                // Which makes this a second, independent reason research never happens: not only
+                // does the plan rarely reach the long-term horizon, but when it does the room it
+                // asks for has already been furnished with somebody else's answer to a different
+                // complaint. The same discipline as not repurposing the room the plan wants.
+                if (BasePlannerModule.KeyFurnitureMissing(ctx, rooms[i])) continue;
+
+                // A room that already has one does not need a second.
+                //
+                // This placed into the first workable cell of the coldest room and never asked
+                // what was already standing there, so every time the cold-room complaint came
+                // back — which in a boreal winter is every few hours — another campfire went
+                // down beside the last. Counted eleven of them in one colony at -15C.
+                //
+                // Three separate costs, none of them obvious from the remedy itself: eleven open
+                // flames inside a wooden base, which is how run 5 burned to death; eleven work
+                // tables, because a campfire is one, each collecting its own duplicate set of
+                // cooking bills; and the wood. `PlaceMany` has topped up to a count rather than
+                // adding to it since the duplicate-crafting-spot bug, and this is the same rule
+                // arriving late in the other placement path.
+                if (CountIn(ctx.map, rooms[i], def) >= count) continue;
+
                 foreach (var cell in rooms[i].Interior)
                 {
                     if ((cell - rooms[i].Door).LengthHorizontalSquared <= 2) continue;
@@ -599,6 +692,20 @@ namespace AutoColony.Modules
         {
             if (defect.room == null) return false;
 
+            // Affording to separate them is not the same as having beds to spare.
+            //
+            // The survey already declines to call sharing a fault when the colony is too poor to
+            // fix it. That guard reads material, and material was never the binding constraint
+            // here: a colony with 1,441 units of wood, two bedrooms and one bed pulled that bed
+            // out of the barracks to cure a -3 SharedBedroom, and left two of three colonists on
+            // the ground paying -4 SleptOnGround and -4 SleptOutside apiece. Richer made it
+            // worse, because means is what unlocks this remedy.
+            //
+            // A bed is only surplus once everyone has one. Watched live: beds stuck at 1 for
+            // three colonists across an entire epoch, with the other two beds lying in the room
+            // as uninstalled crates.
+            if (ctx.state.colonistBeds <= ctx.state.colonists) return false;
+
             var beds = new List<Building_Bed>();
             var things = defect.room.ContainedAndAdjacentThings;
             for (int i = 0; i < things.Count; i++)
@@ -609,7 +716,20 @@ namespace AutoColony.Modules
                 if (bed.ForColonists && !bed.Medical) beds.Add(bed);
             }
 
-            if (beds.Count <= 1) return false;
+            // Down to the number the planner fills a bedroom to, not down to one.
+            //
+            // These two held different opinions about the same room. The planner tops a bedroom
+            // up to BedsPerRoom; this drove it toward a single bed; and between them a bed came
+            // out and went back in every couple of days, for ever. Reading the same number makes
+            // them agree whichever runs first, which is the same discipline that keeps Reclaim
+            // and the sharing rule from sawing at each other.
+            int target = BuildingMeans.BedsPerRoom(
+                BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists),
+                AcMath.Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4),
+                ctx.state.colonists);
+            if (target < 1) target = 1;
+
+            if (beds.Count <= target) return false;
 
             // Uninstalled, not deconstructed. The colony wants this bed — just not here — and
             // uninstalling keeps it whole, quality included, ready to be set down in the room
@@ -618,7 +738,7 @@ namespace AutoColony.Modules
             //
             // One at a time, so the colony is never left with nowhere to sleep while the
             // replacement rooms are still going up.
-            for (int i = 1; i < beds.Count; i++)
+            for (int i = target; i < beds.Count; i++)
             {
                 if (PlacementUtil.MarkedForDeconstruction(ctx.map, beds[i])) continue;
                 if (PlacementUtil.TryUninstall(ctx.map, beds[i])) return true;
