@@ -383,6 +383,8 @@ namespace AutoColony.Modules
             // Somebody has to still be standing afterwards to tend whoever is not.
             var medic = ChooseReservedMedic(ctx, fighters);
 
+            taken.Clear();
+
             for (int i = 0; i < fighters.Count; i++)
             {
                 var pawn = fighters[i];
