@@ -282,6 +282,69 @@ namespace AutoColony.Goals
         }
     }
 
+    /// <summary>
+    /// Somewhere to actually do the research.
+    ///
+    /// Every research-gated goal in this file walks its prerequisites back through
+    /// <see cref="ResearchChain"/> until it finds something the colony could start studying —
+    /// and then nothing, anywhere, asks for the bench the studying has to happen at. The
+    /// research module selects a project on day zero regardless, so a colony reports a project
+    /// in progress from its first hour and finishes none of it, ever.
+    ///
+    /// Six colonies scored exactly 0.00 on research, across two biomes, for this reason. The
+    /// whole power chain sits behind it: Electricity gates the conduits, the generator and the
+    /// electric stove, and none of that can be studied at a bench nobody built. One run reached
+    /// "LongTerm: Power (towards Refrigeration)" on day 8 and could not have advanced a single
+    /// project from there.
+    ///
+    /// <c>hasResearchBench</c> was already measured. Its only reader weighted the research work
+    /// priority by it — how hard to work at a bench, never whether to have one.
+    ///
+    /// A bench is the end here rather than a means, which is what separates this from the
+    /// clothing goal's workshop: being warm is the end there and a bench is incidental to it,
+    /// whereas nothing else in the colony makes research possible at all.
+    /// </summary>
+    public class ResearchCapacityGoal : ColonyGoal
+    {
+        public const string Id = "Somewhere to research";
+        public override string Name { get { return Id; } }
+
+        /// <summary>
+        /// Long term, and reached by being a prerequisite rather than by pre-empting.
+        ///
+        /// Written as ShortTerm first, which was wrong in a way the power self-test caught
+        /// immediately: a nearer horizon pre-empts a further one outright, and no probe fixture
+        /// has a bench, so *every* long-term probe in the file came back
+        /// <c>focus=Somewhere to research</c> — power, refrigeration, crop diversity, the lot.
+        /// That is the same fault the handoff records against the last batch of short-term
+        /// goals, and it hides itself: the probes all still pass, they simply stop testing
+        /// anything. A bench is a compounding investment, not a this-season necessity, so it
+        /// belongs beside power and refrigeration and reaches the plan the way they do.
+        /// </summary>
+        public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
+        public override RoomRole? WantsRoom { get { return RoomRole.Research; } }
+
+        public override bool Satisfied(DirectorContext ctx)
+        {
+            return ctx.state.hasResearchBench;
+        }
+
+        public override float Urgency(DirectorContext ctx)
+        {
+            if (ctx.state.hasResearchBench) return 0f;
+
+            // Deliberately below a short larder or a colony with no beds, and above anything
+            // discretionary. It is never the most pressing thing in the colony and it is always
+            // in the way of everything that compounds.
+            return 0.45f;
+        }
+
+        public override string Explain(DirectorContext ctx)
+        {
+            return "no research bench, so nothing the colony studies can ever finish";
+        }
+    }
+
     public class MasonryGoal : ColonyGoal
     {
         public const string Id = "Masonry";
@@ -318,6 +381,17 @@ namespace AutoColony.Goals
         public override RoomRole? WantsRoom { get { return RoomRole.Power; } }
         public override string[] RequiresResearch { get { return Research; } }
         static readonly string[] Research = { "Electricity" };
+
+        /// <summary>
+        /// Electricity is a hard gate on every building this goal wants, and it cannot be
+        /// studied without somewhere to study. Naming the bench as a prerequisite is what makes
+        /// wanting power resolve into wanting a bench, exactly as wanting a freezer resolves
+        /// into wanting power — rather than the plan sitting on "Power (towards Refrigeration)"
+        /// while the one project it needs cannot advance by a single point. Refrigeration and
+        /// fortification inherit this through their own dependency on power.
+        /// </summary>
+        public override string[] Requires { get { return NeedsBench; } }
+        static readonly string[] NeedsBench = { ResearchCapacityGoal.Id };
 
         /// <summary>
         /// A generator that is actually producing, not a room with the word Power on it.

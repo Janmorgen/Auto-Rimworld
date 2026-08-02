@@ -68,6 +68,7 @@ namespace AutoColony.Goals
             new FarmGoal(),
             new FoodStockGoal(),
             new WeatherClothingGoal(),
+            new ResearchCapacityGoal(),
 
             new MasonryGoal(),
             new PowerGoal(),
