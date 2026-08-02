@@ -527,6 +527,7 @@ namespace AutoColony.Modules
                 QueueFurniture(ctx, room);
                 room.furnitureQueued = true;
                 ReportRoomStats(ctx, room);
+                NoteIfTheRoomGotNothing(ctx, room);
                 Note("furnished " + room.role + " room");
                 return;
             }
@@ -1528,6 +1529,36 @@ namespace AutoColony.Modules
                 "and building that nobody bleeding on the floor has",
                 ctx.state.colonistsDowned, where));
             Note("sleeping spot for a downed colonist — " + where);
+        }
+
+        readonly HashSet<string> emptyRoomNoted = new HashSet<string>();
+
+        /// <summary>
+        /// Says so when a room is furnished and its one essential item did not go in.
+        ///
+        /// The room is marked furnished either way, which is correct — the pass happened — and
+        /// silent, which is not. A Research room built in seven in-game hours then stood empty
+        /// for two days: no bench, no blueprint, no frame, and nothing anywhere in the record
+        /// saying a placement had been attempted at all, let alone why it failed. The colony had
+        /// 725 steel and 562 wood against a bench costing 75.
+        ///
+        /// The re-queue loop is supposed to catch this and did not, which is a second question.
+        /// This one only makes the first failure audible, at the moment it happens, rather than
+        /// after four rounds of a loop that may never start.
+        /// </summary>
+        void NoteIfTheRoomGotNothing(DirectorContext ctx, PlannedRoom room)
+        {
+            var key = KeyFurnitureFor(ctx, room.role);
+            if (key == null) return;                          // storage and dining need nothing
+            if (ExistingCount(ctx.map, room, key) > 0) return;
+
+            if (!emptyRoomNoted.Add(room.role.ToString() + room.Center)) return;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "the {0} room is finished and its {1} did not go in — {2}",
+                room.role, key.label,
+                lastPlacementFailure ?? "nothing was reported, which means the placement was " +
+                "never attempted on this pass"));
         }
 
         bool TopUpFurniture(DirectorContext ctx)
