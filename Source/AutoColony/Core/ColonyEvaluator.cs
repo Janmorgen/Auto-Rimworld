@@ -330,7 +330,7 @@ namespace AutoColony
 
             // --- defense readiness, scaled by the threat wealth actually attracts ---
             float expectedTurrets = AcMath.Clamp(end.wealthTotal / 25000f, 0f, 8f);
-            float defense = expectedTurrets < 0.5f ? 1f : AcMath.Clamp01(end.turrets / expectedTurrets);
+            float defense = expectedTurrets < 0.5f ? 1f : AcMath.Clamp01(end.poweredTurrets / expectedTurrets);
             breakdown.Add(new ScoreTerm("Defense", defense, WDefense));
 
             // --- conduct: time spent in crisis, and misery with no answer ---

@@ -621,7 +621,7 @@ namespace AutoColony
             m.outdoorTemperature = outdoorTemperature;
             m.wealthTotal = wealthTotal;
             m.colonistBeds = colonistBeds;
-            m.turrets = poweredTurrets;
+            m.poweredTurrets = poweredTurrets;
             m.fires = fires;
             m.firesNearBase = firesNearBase;
             m.researchFinished = researchFinished;

@@ -33,7 +33,15 @@ namespace AutoColony
         public float outdoorTemperature;
         public float wealthTotal;
         public int colonistBeds;
-        public int turrets;
+        /// <summary>
+        /// Turrets that can actually fire — never the raw built count.
+        ///
+        /// Named for what it carries. It was called `turrets` while being filled from
+        /// `poweredTurrets`, which is correct behaviour under a misleading name, and the name
+        /// cost a reader an incorrect "fix" to the defence score: an unpowered turret is a wall
+        /// decoration, this codebase knows it, and the field looked like it had forgotten.
+        /// </summary>
+        public int poweredTurrets;
         public int fires;
 
         /// <summary>

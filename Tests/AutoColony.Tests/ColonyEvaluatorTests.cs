@@ -23,7 +23,7 @@ namespace AutoColony.Tests
             m.daysOfFood = 10f;
             m.wealthTotal = 20000f;
             m.researchFinished = 10;
-            m.turrets = 1;
+            m.poweredTurrets = 1;
             return m;
         }
 
@@ -69,7 +69,7 @@ namespace AutoColony.Tests
                 m.avgHealth = rng.Value;
                 m.daysOfFood = rng.Value * 40f;
                 m.wealthTotal = rng.Value * 200000f;
-                m.turrets = rng.Range(0, 15);
+                m.poweredTurrets = rng.Range(0, 15);
                 m.researchFinished = rng.Range(0, 40);
 
                 float score = Score(m, rng.Range(0, 6));
