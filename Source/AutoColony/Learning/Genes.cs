@@ -113,6 +113,22 @@ namespace AutoColony.Learning
         /// </summary>
         public const string DefenseEngageRatio = "defense.engageRatio";
         public const string DefenseTurretCount = "defense.turretCount";
+
+        /// <summary>
+        /// Where colonists stand to fight, as a set of competing preferences rather than a rule.
+        ///
+        /// The director had no concept of position at all: everyone was sent to the base origin
+        /// and told to shoot whatever was nearest. How much cover is worth against how much
+        /// spacing has no fixed answer — it depends on whether the enemy throws grenades,
+        /// whether the colony has rifles or clubs, and how much of the base is walled — so these
+        /// are questions for the search rather than constants to assert.
+        /// </summary>
+        public const string CombatCoverWeight = "combat.coverWeight";
+        public const string CombatStandoffWeight = "combat.standoffWeight";
+        public const string CombatPreferredRange = "combat.preferredRange";
+        public const string CombatSpreadWeight = "combat.spreadWeight";
+        public const string CombatChokepointWeight = "combat.chokepointWeight";
+        public const string CombatIndoorsWeight = "combat.indoorsWeight";
         public const string FireResponseRadius = "defense.fireRadius";
         public const string FireRiskAversion = "defense.fireAversion";
 
@@ -180,6 +196,12 @@ namespace AutoColony.Learning
             Add(DefenseRetreatHealth, 0.1f, 0.9f, 0.45f, "Defense", "Health fraction to retreat at");
             Add(DefenseEngageRatio, 0f, 1.5f, 0.35f, "Defense", "Strength ratio needed to fight in the open");
             Add(DefenseTurretCount, 0f, 12f, 3f, "Defense", "Target turret count");
+            Add(CombatCoverWeight, 0f, 8f, 4f, "Combat positioning", "Value of cover");
+            Add(CombatStandoffWeight, 0f, 2f, 0.3f, "Combat positioning", "Value of holding a range");
+            Add(CombatPreferredRange, 2f, 30f, 12f, "Combat positioning", "Range to fight at");
+            Add(CombatSpreadWeight, 0f, 6f, 2f, "Combat positioning", "Value of spacing out");
+            Add(CombatChokepointWeight, 0f, 6f, 1.5f, "Combat positioning", "Value of a chokepoint");
+            Add(CombatIndoorsWeight, 0f, 6f, 1f, "Combat positioning", "Value of fighting indoors");
             // How far out a fire is still worth walking to. Too small and a fire creeps in;
             // too large and colonists cross the map for a blaze that was never coming.
             Add(FireResponseRadius, 10f, 120f, 45f, "Defense", "Range fires are fought within");

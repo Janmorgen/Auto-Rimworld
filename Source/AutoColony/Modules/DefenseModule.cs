@@ -417,7 +417,7 @@ namespace AutoColony.Modules
                     mobilised++;
                 }
 
-                SendToRally(pawn, rally, ctx.map);
+                SendToPosition(ctx, pawn, rally, NearestHostileCell(ctx));
 
                 // Drafting is not fighting. A drafted colonist with no orders stands where it
                 // was put and shoots only what happens to walk into its line of sight — which
@@ -620,18 +620,114 @@ namespace AutoColony.Modules
             return nearest;
         }
 
-        static void SendToRally(Pawn pawn, IntVec3 rally, Map map)
+        /// <summary>Cells already given to somebody this pass, so nobody is sent to stand on an ally.</summary>
+        readonly List<IntVec3> taken = new List<IntVec3>();
+
+        /// <summary>How far around the rally point to look for somewhere worth standing.</summary>
+        const int PositionSearchRadius = 12;
+
+        /// <summary>
+        /// Sends a colonist to the best place to fight from, rather than to a coordinate.
+        ///
+        /// Every drafted colonist used to be sent to the same cell — the base origin — and told
+        /// to shoot whatever was nearest. That is not a position: no cover, no spacing, no use
+        /// of a doorway, and one grenade catching all of them. The cells around the rally point
+        /// are now scored on cover, range, spacing and chokepoints, every weight of it a gene,
+        /// and each colonist takes the best one still free.
+        ///
+        /// A colonist already somewhere good is left alone. Re-issuing an order restarts the job
+        /// and they never loose a shot — the same trap the engage logic was already written
+        /// around — so moving has to be worth clearly more than standing still.
+        /// </summary>
+        void SendToPosition(DirectorContext ctx, Pawn pawn, IntVec3 rally, IntVec3 threatAt)
         {
             if (!rally.IsValid) return;
             if (pawn.CurJobDef == JobDefOf.Goto) return;
-            // Already close enough to be useful; let the pawn pick its own targets.
-            if ((pawn.Position - rally).LengthHorizontalSquared <= 36) return;
 
-            var cell = CellFinder.RandomClosewalkCellNear(rally, map, 3);
-            if (!cell.IsValid || !pawn.CanReach(cell, PathEndMode.OnCell, Danger.Deadly)) return;
+            var map = ctx.map;
+            var weights = PositionWeightsFrom(ctx);
 
-            var job = JobMaker.MakeJob(JobDefOf.Goto, cell);
+            float bestScore = float.NegativeInfinity;
+            var best = IntVec3.Invalid;
+
+            foreach (var cell in GenRadial.RadialCellsAround(rally, PositionSearchRadius, true))
+            {
+                if (!cell.InBounds(map) || !cell.Standable(map)) continue;
+                if (taken.Contains(cell)) continue;
+                if (!pawn.CanReach(cell, PathEndMode.OnCell, Danger.Deadly)) continue;
+
+                float score = Combat.FiringPosition.Score(FeaturesOf(map, cell, threatAt), weights);
+                if (score > bestScore) { bestScore = score; best = cell; }
+            }
+
+            if (!best.IsValid) return;
+
+            // Worth the walk? Compare against where they already are.
+            float current = Combat.FiringPosition.Score(
+                FeaturesOf(map, pawn.Position, threatAt), weights);
+            if (!Combat.FiringPosition.WorthMoving(current, bestScore))
+            {
+                taken.Add(pawn.Position);
+                return;
+            }
+
+            taken.Add(best);
+            var job = JobMaker.MakeJob(JobDefOf.Goto, best);
+            job.playerForced = true;
             pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);
+        }
+
+        Combat.PositionWeights PositionWeightsFrom(DirectorContext ctx)
+        {
+            var w = new Combat.PositionWeights();
+            w.cover = ctx.Gene(Genes.CombatCoverWeight);
+            w.standoff = ctx.Gene(Genes.CombatStandoffWeight);
+            w.preferredRange = ctx.Gene(Genes.CombatPreferredRange);
+            w.spread = ctx.Gene(Genes.CombatSpreadWeight);
+            w.chokepoint = ctx.Gene(Genes.CombatChokepointWeight);
+            w.indoors = ctx.Gene(Genes.CombatIndoorsWeight);
+            return w;
+        }
+
+        /// <summary>Reads what is true of a cell, which is the half the genome cannot supply.</summary>
+        Combat.PositionFeatures FeaturesOf(Map map, IntVec3 cell, IntVec3 threatAt)
+        {
+            var f = new Combat.PositionFeatures();
+
+            try
+            {
+                // Cover measured towards the threat specifically: a wall is only cover from the
+                // side the shooting comes from.
+                f.cover = threatAt.IsValid
+                    ? CoverUtility.CalculateOverallBlockChance(cell, threatAt, map)
+                    : 0f;
+
+                f.toThreat = threatAt.IsValid ? (cell - threatAt).LengthHorizontal : 999f;
+
+                float nearest = 999f;
+                for (int i = 0; i < taken.Count; i++)
+                {
+                    float d = (cell - taken[i]).LengthHorizontal;
+                    if (d < nearest) nearest = d;
+                }
+                f.toNearestAlly = nearest;
+
+                var room = cell.GetRoom(map);
+                f.indoors = room != null && !room.PsychologicallyOutdoors;
+
+                // A doorway is where attackers have to come one at a time.
+                var edifice = cell.GetEdifice(map);
+                f.chokepoint = edifice is Building_Door;
+                if (!f.chokepoint)
+                {
+                    var adjacent = cell.GetThingList(map);
+                    for (int i = 0; i < adjacent.Count; i++)
+                        if (adjacent[i] is Building_Door) { f.chokepoint = true; break; }
+                }
+            }
+            catch (Exception) { }
+
+            return f;
         }
 
         void StandDown(DirectorContext ctx)
