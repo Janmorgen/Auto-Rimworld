@@ -87,6 +87,15 @@ namespace AutoColony.Modules
         /// </summary>
         const int MaxCellAttempts = 8;
 
+        /// <summary>
+        /// How many times a room's walls may be started over before the site is given up.
+        ///
+        /// Generous, because the ordinary reason for restarting is that something destroyed the
+        /// walls and rebuilding is exactly right. It is the site that never finishes however
+        /// often it is tried that this is meant to catch.
+        /// </summary>
+        const int MaxShellAttempts = 6;
+
         protected override void Act(DirectorContext ctx)
         {
             var layout = ctx.layout;
@@ -194,6 +203,31 @@ namespace AutoColony.Modules
                     // than leaving a half-built room abandoned forever.
                     if (!HasPendingConstructionIn(ctx.map, room))
                     {
+                        // A site the colony keeps starting and never finishes is the wrong site.
+                        //
+                        // This path assumes the walls were lost — levelled by a raid, or the
+                        // blueprints cancelled — and that starting them again will work. When
+                        // the site itself is the problem that assumption never comes true, and
+                        // because an unfinished room counts against the concurrency limit, the
+                        // planner stops opening any room at all. One colony sat in that state
+                        // for five days: no second room, no bedroom, no bed, two colonists dead
+                        // on open ground.
+                        //
+                        // Giving the site up costs the walls already standing on it. Keeping it
+                        // costs every room the colony would otherwise have built, which is not a
+                        // close comparison.
+                        if (++room.shellAttempts > MaxShellAttempts)
+                        {
+                            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                                "giving up on the {0} room at {1} — its walls have been started " +
+                                "{2} times and never finished, so the site is the problem rather " +
+                                "than the building; freeing it and choosing somewhere else",
+                                room.role, room.Center, room.shellAttempts - 1));
+                            layout.rooms.RemoveAt(i);
+                            Note("abandoned an unbuildable " + room.role + " site");
+                            return;
+                        }
+
                         room.wallsQueued = false;
                         Note("re-queuing lost walls for " + room.role + " room");
                         return;
@@ -826,6 +860,22 @@ namespace AutoColony.Modules
                 if (!rect.InBounds(map)) continue;
                 if (OverlapsExisting(layout, rect)) continue;
 
+                // Nor on top of a building somebody else already owns.
+                //
+                // Overlap was only ever checked against the planner's own rooms, so the map
+                // itself never got a vote — and a map has ruins and abandoned settlements on it.
+                // One colony sited its kitchen squarely inside another faction's building: 20 of
+                // the 24 perimeter cells already held that faction's walls, and a cell with a
+                // wall in it will not take a wall blueprint.
+                //
+                // What made it fatal rather than untidy is that the shell could then never be
+                // finished, and an unfinished room holds the whole planner. Four free cells took
+                // blueprints, the other twenty never could, so the room stayed unfinished for
+                // ever; the concurrency limit counts it as the one room in progress and refuses
+                // to open another. That colony built nothing at all for five days, never had a
+                // bed, and lost two colonists on open ground with 1,422 units of wood in store.
+                if (PerimeterHeldByOthers(map, rect)) continue;
+
                 if (firstUsable < 0) firstUsable = slot;
 
                 // Scored rather than taken. Every slot used to give the same answer to a
@@ -959,6 +1009,34 @@ namespace AutoColony.Modules
             if (profile.resource != null) reasons.Add("wants to be near " + profile.resource);
             if (profile.compactness <= 0.3f) reasons.Add("wants distance from the rest");
             return reasons.Count > 0 ? string.Join(", ", reasons.ToArray()) : "no strong preference";
+        }
+
+        /// <summary>
+        /// Whether somebody else's building already stands on this footprint's perimeter.
+        ///
+        /// Only edifices count — the things that occupy a cell so completely that nothing can be
+        /// built in it. Loose items, plants and rubble are all clearable and are the ordinary
+        /// business of preparing a site.
+        ///
+        /// Anything with no faction is fair game too: unowned ruins can be deconstructed or built
+        /// around, and refusing every site with an old wall on it would rule out most of a map.
+        /// It is a building belonging to *someone* that the colony can neither remove nor use.
+        /// </summary>
+        static bool PerimeterHeldByOthers(Map map, CellRect rect)
+        {
+            var player = Faction.OfPlayer;
+
+            foreach (var cell in rect.EdgeCells)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var edifice = cell.GetEdifice(map);
+                if (edifice == null) continue;
+                if (edifice.Faction == null || edifice.Faction == player) continue;
+
+                return true;
+            }
+            return false;
         }
 
         static bool OverlapsExisting(BaseLayout layout, CellRect rect)
@@ -1204,13 +1282,21 @@ namespace AutoColony.Modules
             {
                 // Nothing landed. Said once per dry spell rather than every pass, because the
                 // colony will keep asking until it has something to build with.
+                //
+                // This used to name the cause rather than measure it: any dry pass was reported
+                // as having nothing to build from. That was wrong in the only run where it
+                // mattered — a colony that built nothing for five days, lost two colonists on
+                // open ground with no bed, and had 1,422 units of unforbidden wood the whole
+                // time. A message that guesses is worse than one that says nothing, because it
+                // ends the investigation it should have started.
                 if (!reportedNoShellMaterial)
                 {
                     reportedNoShellMaterial = true;
                     Chronicle.Record(ChronicleCategory.Build, string.Format(
-                        "cannot start the {0} room's walls — not one blueprint would place, which " +
-                        "is what having nothing to build them from looks like ({1})",
-                        room.role, wallStuff != null ? wallStuff.label : "no material at all"));
+                        "cannot start the {0} room's walls in {1} — not one of its {2} edge cells " +
+                        "would take a blueprint: {3}",
+                        room.role, wallStuff != null ? wallStuff.label : "no material at all",
+                        CountEdgeCells(rect), DescribeShellRefusals(ctx, room, wallStuff)));
                 }
                 return 0;
             }
@@ -1231,6 +1317,48 @@ namespace AutoColony.Modules
                 PlacementUtil.MarkRoof(map, cell);
             }
             return placedThisPass - before;
+        }
+
+        static int CountEdgeCells(CellRect rect)
+        {
+            int n = 0;
+            foreach (var cell in rect.EdgeCells) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Why each wall cell was refused, tallied so one line explains the whole perimeter.
+        ///
+        /// Counted rather than listed: twenty-four cells refused for the same reason is one fact,
+        /// and the interesting case is the perimeter that splits — half of it blocked by somebody
+        /// else's building and half of it fine — which a tally shows and a list buries.
+        /// </summary>
+        static string DescribeShellRefusals(DirectorContext ctx, PlannedRoom room, ThingDef stuff)
+        {
+            var map = ctx.map;
+            var wallDef = AcDefs.Wall;
+            if (wallDef == null) return "there is no wall def at all";
+
+            var tally = new Dictionary<string, int>();
+            foreach (var cell in room.Rect.EdgeCells)
+            {
+                string why = PlacementUtil.RefusalReason(map, wallDef, cell, Rot4.North, stuff)
+                             ?? "the game would have accepted it";
+
+                int seen;
+                tally[why] = tally.TryGetValue(why, out seen) ? seen + 1 : 1;
+            }
+
+            var ordered = new List<KeyValuePair<string, int>>(tally);
+            ordered.Sort((a, b) => b.Value.CompareTo(a.Value));
+
+            var text = new System.Text.StringBuilder();
+            for (int i = 0; i < ordered.Count && i < 3; i++)
+            {
+                if (i > 0) text.Append("; ");
+                text.Append(ordered[i].Value).Append(" × ").Append(ordered[i].Key);
+            }
+            return text.ToString();
         }
 
         /// <summary>True while any blueprint or frame is still outstanding on the room's walls.</summary>

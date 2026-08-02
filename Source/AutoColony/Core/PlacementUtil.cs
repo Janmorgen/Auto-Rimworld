@@ -79,6 +79,37 @@ namespace AutoColony
         }
 
         /// <summary>
+        /// Why the game would refuse this blueprint here, or null if it would take it.
+        ///
+        /// The same sequence of tests <see cref="TryPlace"/> runs, reported instead of collapsed
+        /// to false. A placement that fails is the single most common thing to have to diagnose
+        /// in this codebase and a bool says nothing about which of six causes it was — so the
+        /// planner guessed in its logs instead, and told a colony it had "nothing to build from"
+        /// while 1,422 units of wood sat unforbidden on the map.
+        ///
+        /// The last case defers to `CanPlaceBlueprintAt`, whose own reason string is written for
+        /// a player looking at a red box on screen and is better than anything worth restating.
+        /// </summary>
+        public static string RefusalReason(Map map, ThingDef def, IntVec3 cell, Rot4 rot,
+                                           ThingDef stuff)
+        {
+            if (map == null || def == null) return "no map or no def";
+            if (!ResearchDone(def)) return def.defName + " is not researched yet";
+            if (!cell.InBounds(map)) return "outside the map";
+            if (HasConstructionAt(map, cell, def) || HasAnyConstructionAt(map, cell))
+                return "something is already queued there";
+            if (def.MadeFromStuff && stuff == null) return "no material to build it from";
+
+            var report = GenConstruct.CanPlaceBlueprintAt(
+                def, cell, rot, map, false, null, null, def.MadeFromStuff ? stuff : null);
+            if (report.Accepted) return null;
+
+            return string.IsNullOrEmpty(report.Reason)
+                ? "the game refused it without saying why"
+                : report.Reason;
+        }
+
+        /// <summary>
         /// Places a build blueprint if the game will accept it. Returns false when the spot is
         /// blocked, already queued, or the def cannot legally go there.
         /// </summary>

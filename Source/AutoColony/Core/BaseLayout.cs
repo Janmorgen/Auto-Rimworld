@@ -36,6 +36,12 @@ namespace AutoColony
         /// </summary>
         public int roleChangedTick = -1;
 
+        /// <summary>
+        /// How many times the colony has started this room's walls over. A site it cannot
+        /// finish has to be given up eventually, and this is the only evidence that it is one.
+        /// </summary>
+        public int shellAttempts;
+
         public CellRect Rect { get { return new CellRect(minX, minZ, width, height); } }
 
         /// <summary>The floor area inside the walls.</summary>
@@ -63,6 +69,7 @@ namespace AutoColony
             Scribe_Values.Look(ref doorX, "doorX", 0);
             Scribe_Values.Look(ref doorZ, "doorZ", 0);
             Scribe_Values.Look(ref roleChangedTick, "roleChangedTick", -1);
+            Scribe_Values.Look(ref shellAttempts, "shellAttempts", 0);
         }
     }
 
