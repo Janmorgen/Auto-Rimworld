@@ -99,13 +99,7 @@ namespace AutoColony.Goals
             // threshold and is also the exact point past which nothing the colony decides can
             // arrive before the larder is empty. A colony there is not idle enough to be given a
             // research bench.
-            bool emergency = false;
-            for (int i = 0; i < goals.Count; i++)
-            {
-                var goal = goals[i];
-                if (goal.Horizon != GoalHorizon.Immediate) continue;
-                if (!Satisfied(goal, ctx)) { emergency = true; break; }
-            }
+            bool emergency = AnyImmediateOutstanding(ctx);
 
             ColonyGoal best = null;
             float bestScore = float.NegativeInfinity;
@@ -125,47 +119,7 @@ namespace AutoColony.Goals
                 float urgency = Urgency(goal, ctx);
                 if (record.blockedSince < 0) record.blockedSince = now;
 
-                // Nearer horizons pre-empt further ones, but only while they mean it.
-                //
-                // The rule used to be absolute: a fire must not lose to a very keenly wanted
-                // freezer, which is right, and it was implemented as horizon deciding everything
-                // and urgency merely breaking ties inside a horizon. So an immediate goal
-                // outranked the whole colony however nearly satisfied it was — and "Feed the
-                // colony" reports urgency 0 at anything past two days of food while staying
-                // unsatisfied until eight. A colony 7.2 days fed published "Immediate: Feed the
-                // colony" and did nothing else, for days.
-                //
-                // A goal that is barely wanted therefore drops into the next horizon's band,
-                // where a genuinely pressing goal one horizon out can beat it. Fire and raid
-                // report urgency 1 by construction and never fall through this.
-                //
-                // In practice it is the short-term tier this loosens. Those goals are satisfied
-                // at generous targets — eight days of food, everyone clothed, everything roofed —
-                // so a colony almost always has one of them mildly outstanding, and mildly
-                // outstanding was enough to outrank everything that compounds.
-                int band = (int)goal.Horizon;
-                if (urgency < PressingUrgency) band++;
-
-                // A goal that held the plan and did not move drops another band for a while.
-                if (now < record.demotedUntil) band++;
-
-                // Anything blocked long enough gets a turn, provided nothing is on fire.
-                //
-                // Banding alone cannot fix this: demoting every goal by one preserves the order
-                // among them, so the least-urgent immediate goal still outranks the most urgent
-                // long-term one. Research read 0.00 in every colony ever run — twenty-six of
-                // them, one lasting 37 days and seven epochs — because something nearer was
-                // always mildly unsatisfied and mildly unsatisfied was enough.
-                //
-                // So a goal nothing has let run for days is promoted outright for one pass. It is
-                // gated on no immediate goal being outstanding at all — no fire, no raid, two
-                // days of food in hand — which is the guarantee that this can never take the
-                // colony's attention off something that would kill it.
-                if (!emergency && record.blockedSince >= 0 &&
-                    now - record.blockedSince >= BlockedTicksBeforeATurn)
-                    band = 0;
-
-                float score = (10 - band) * 100f + urgency;
+                float score = ScoreOf(goal, ctx, now, emergency);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -176,7 +130,7 @@ namespace AutoColony.Goals
 
             if (best == null) return plan;
 
-            WatchTheFocus(best, bestUrgency, now);
+            WatchTheFocus(best, bestUrgency, now, ctx);
 
             plan.Wanted = best;
             plan.EmergencyActive = best.Horizon == GoalHorizon.Immediate;
@@ -320,7 +274,7 @@ namespace AutoColony.Goals
         /// because the fire is still burning is precisely the wrong response. This is for the
         /// goals that quietly go nowhere, not the ones that are loud about it.
         /// </summary>
-        void WatchTheFocus(ColonyGoal goal, float urgency, int now)
+        void WatchTheFocus(ColonyGoal goal, float urgency, int now, DirectorContext ctx)
         {
             var record = RecordFor(goal);
 
@@ -336,6 +290,28 @@ namespace AutoColony.Goals
 
             if (goal.Horizon == GoalHorizon.Immediate) return;
             if (record.focusSince < 0 || now - record.focusSince < FocusGraceTicks) return;
+
+            // A goal whose building is going up is not a goal going nowhere.
+            //
+            // Urgency is a reading of the finished state, and building improves it in steps: a
+            // bedroom reads "1 bed for 3 colonists" from the moment its walls are queued until
+            // the moment a second bed is finished, which is a good deal longer than half a day.
+            // Measuring the reading alone therefore calls ordinary construction a failure.
+            //
+            // Watched it do exactly that on its first outing: "Shelter everyone" stood down at
+            // 0.67 then, 0.67 now, while the bedroom it had asked for was half-built and the
+            // planner's own log said it was waiting on that room. The colony went to research
+            // with two of three colonists on the ground.
+            //
+            // So the question is whether the colony is visibly doing what the goal asked for,
+            // and a blueprint or frame standing in the room it wanted is the plainest possible
+            // evidence that it is.
+            if (WorkIsUnderway(goal, ctx))
+            {
+                record.focusSince = now;
+                record.urgencyAtFocus = urgency;
+                return;
+            }
 
             // Improving at all is enough. The question is whether the work is doing anything,
             // not whether it is doing it quickly.
@@ -355,6 +331,124 @@ namespace AutoColony.Goals
                 goal.Name, record.urgencyAtFocus, urgency));
 
             record.urgencyAtFocus = urgency;
+        }
+
+        /// <summary>
+        /// Whether anything is actually being built for this goal right now.
+        ///
+        /// Only asks about the room the goal named, which is the one thing a goal states plainly
+        /// enough to check. A goal that wants no room gets no exemption — there is nothing to
+        /// look at — and those are the ones the detector was written for anyway.
+        /// </summary>
+        static bool WorkIsUnderway(ColonyGoal goal, DirectorContext ctx)
+        {
+            if (ctx == null || ctx.map == null || ctx.layout == null) return false;
+
+            var wanted = goal.WantsRoom;
+            if (!wanted.HasValue) return false;
+
+            var rooms = ctx.layout.rooms;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                if (rooms[i].role != wanted.Value) continue;
+
+                foreach (var cell in rooms[i].Rect)
+                {
+                    if (!cell.InBounds(ctx.map)) continue;
+                    if (PlacementUtil.HasAnyConstructionAt(ctx.map, cell)) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// The best few goals with their scores, for the self-test to report alongside a probe.
+        ///
+        /// The probes exist to answer arbitration questions, and for anything long-term they
+        /// could not: two runs of identical code disagreed on four of twenty-four, because
+        /// long-term goals are separated by urgency alone and Fortify reads its urgency straight
+        /// off the map's fire risk. Whichever colony the quicktest happened to spawn decided the
+        /// winner, and a flipped coin looked exactly like a regression.
+        ///
+        /// Rather than pin the weather — which would make the probe answer a question about a
+        /// map that does not exist — the probe now reports what it was choosing between. A
+        /// two-point margin and a two-hundred-point one are different findings, and only one of
+        /// them is worth investigating.
+        /// </summary>
+        public string RankingFor(DirectorContext ctx, int take)
+        {
+            var scored = new List<KeyValuePair<string, float>>();
+            int now = CurrentTick();
+            bool emergency = AnyImmediateOutstanding(ctx);
+
+            for (int i = 0; i < goals.Count; i++)
+            {
+                var goal = goals[i];
+                if (Satisfied(goal, ctx)) continue;
+
+                scored.Add(new KeyValuePair<string, float>(
+                    goal.Name, ScoreOf(goal, ctx, now, emergency)));
+            }
+
+            scored.Sort((a, b) => b.Value.CompareTo(a.Value));
+
+            var sb = new StringBuilder();
+            for (int i = 0; i < scored.Count && i < take; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(scored[i].Key).Append(' ').Append(scored[i].Value.ToString("0.00"));
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// What a goal is worth this pass. The one place the ordering is decided, so the planner
+        /// and anything reporting on it cannot drift apart.
+        ///
+        /// Nearer horizons pre-empt further ones, but only while they mean it. The rule used to
+        /// be absolute — horizon decided everything and urgency merely broke ties within a
+        /// horizon — which is right for a fire and wrong for the tier below it. Short-term goals
+        /// are satisfied at generous targets, eight days of food and everyone clothed and
+        /// everything roofed, so a colony almost always has one of them mildly outstanding, and
+        /// mildly outstanding was enough to outrank everything that compounds. Research read
+        /// 0.00 in every colony ever run.
+        ///
+        /// So a goal below the pressing mark drops into the next band, where a goal one horizon
+        /// out that genuinely means it can beat it. Fire and raid report urgency 1 by
+        /// construction and never fall through that.
+        ///
+        /// Banding alone cannot fix the research case, because demoting everything by one
+        /// preserves the order among them. A goal nothing has let run for three days is
+        /// therefore promoted outright — gated on no immediate goal being outstanding at all, no
+        /// fire, no raid and two days of food in hand, which is the guarantee that this can never
+        /// take the colony's attention off something that would kill it.
+        /// </summary>
+        float ScoreOf(ColonyGoal goal, DirectorContext ctx, int now, bool emergency)
+        {
+            float urgency = Urgency(goal, ctx);
+            var record = RecordFor(goal);
+
+            int band = (int)goal.Horizon;
+            if (urgency < PressingUrgency) band++;
+
+            // A goal that held the plan and did not move drops another band for a while.
+            if (now < record.demotedUntil) band++;
+
+            if (!emergency && record.blockedSince >= 0 &&
+                now - record.blockedSince >= BlockedTicksBeforeATurn)
+                band = 0;
+
+            return (10 - band) * 100f + urgency;
+        }
+
+        bool AnyImmediateOutstanding(DirectorContext ctx)
+        {
+            for (int i = 0; i < goals.Count; i++)
+            {
+                if (goals[i].Horizon != GoalHorizon.Immediate) continue;
+                if (!Satisfied(goals[i], ctx)) return true;
+            }
+            return false;
         }
 
         static int CurrentTick()

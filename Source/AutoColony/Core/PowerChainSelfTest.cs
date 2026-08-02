@@ -345,14 +345,27 @@ namespace AutoColony
             ctx.layout = layout;
             ctx.genome = StrategyGenome.Default();
 
-            var plan = new GoalPlanner().Plan(ctx);
+            var planner = new GoalPlanner();
+            var plan = planner.Plan(ctx);
 
+            // The runner-up matters as much as the winner.
+            //
+            // These probes are the only tool for checking arbitration, and for anything
+            // long-term they could not do it: two runs of identical code disagreed on four of
+            // twenty-four probes. Long-term goals separate on urgency alone and Fortify reads
+            // its urgency straight off the map's fire risk, so whichever colony the quicktest
+            // happened to spawn decided the winner — and a flipped coin was indistinguishable
+            // from a regression.
+            //
+            // Printing what it was choosing between makes the difference readable. A margin of
+            // two hundred points is an arbitration rule; a margin of two is the weather.
             Chronicle.Record(ChronicleCategory.System, string.Format(
-                "SELFTEST probe ({0}) [{1}] -> focus={2}  wanted={3}  research={4}",
+                "SELFTEST probe ({0}) [{1}] -> focus={2}  wanted={3}  research={4}  ranked: {5}",
                 round, label,
                 plan.Focus != null ? plan.Focus.Name : "none",
                 plan.Wanted != null ? plan.Wanted.Name : "none",
-                plan.ResearchWanted ?? "none"));
+                plan.ResearchWanted ?? "none",
+                planner.RankingFor(ctx, 3)));
         }
 
         // ---------------------------------------------------------------- wiring probe
