@@ -240,18 +240,53 @@ namespace AutoColony.Modules
             lastFireCount = count;
             lastNearestFire = nearest;
 
-            if (count == 0) { frontNoted = false; return false; }
+            if (count == 0)
+            {
+                frontNoted = false;
+                beyondReachNoted = false;
+                committedToFront = false;
+                return false;
+            }
 
             int able = ctx.state.ableColonists != null ? ctx.state.ableColonists.Count : 0;
+
+            // Having gone out to a fire, stay at it until it is out.
+            //
+            // Growth is what identifies a front worth meeting, and growth is bursty — a front
+            // goes 0 to 2, then 2 to 2, then 2 to 3. Deciding afresh every pass therefore
+            // disengages on the flat samples, and the first version of this did exactly that:
+            // three contradictory lines in one in-game hour, "going out to meet it", "claimed 60
+            // cells", then "leaving them" and "fires near the colony are out" while three cells
+            // were still burning. Work priorities went back to normal in the middle of the fire.
+            //
+            // Growth answers whether to start. It is the wrong question for whether to stop, and
+            // the answers to stopping are that the fire is out or that it has outgrown the people
+            // fighting it.
+            if (committedToFront)
+            {
+                if (FireFront.Fightable(count, able)) return true;
+
+                committedToFront = false;
+                NoteFrontBeyondReach(ctx, count, able);
+                return false;
+            }
+
             bool closing = FireFront.IsClosing(count, previousCount, nearest, previousNearest, able);
 
-            if (closing) NoteClosingFront(ctx, count, previousCount, nearest);
+            if (closing)
+            {
+                committedToFront = true;
+                NoteClosingFront(ctx, count, previousCount, nearest);
+            }
             else if (previousCount >= 0 && count > previousCount &&
                      !FireFront.Fightable(count, able))
                 NoteFrontBeyondReach(ctx, count, able);
 
             return closing;
         }
+
+        /// <summary>True while the colony is working a fire it went out to meet.</summary>
+        bool committedToFront;
 
         bool frontNoted;
 
