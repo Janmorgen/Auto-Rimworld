@@ -239,8 +239,22 @@ namespace AutoColony.Upkeep
         /// </summary>
         public static float Priority(DefectKind kind, float severity)
         {
+            return Priority(kind, severity, 1f);
+        }
+
+        /// <summary>
+        /// As above, scaled by how much the room in question matters.
+        ///
+        /// Ranking on the fault alone treated every place as interchangeable — a dark room scored
+        /// the same whether it was the only kitchen or a spare bedroom nobody sleeps in. The room
+        /// term is what stops a colony lighting an empty store while the room everyone eats in is
+        /// the actual problem.
+        /// </summary>
+        public static float Priority(DefectKind kind, float severity, float roomImportance)
+        {
             if (severity <= 0f) return 0f;
-            return severity * Weight(kind);
+            if (roomImportance <= 0f) roomImportance = 1f;
+            return severity * Weight(kind) * roomImportance;
         }
 
         static float Weight(DefectKind kind)

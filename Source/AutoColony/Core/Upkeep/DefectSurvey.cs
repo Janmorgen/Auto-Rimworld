@@ -26,7 +26,13 @@ namespace AutoColony.Upkeep
         /// <summary>What to say about it in the chronicle.</summary>
         public string what = "";
 
-        public float Priority { get { return DefectPolicy.Priority(kind, severity); } }
+        /// <summary>
+        /// How much the room this defect is in matters, 1 when it belongs to no room. Set by the
+        /// survey, which is the only thing that knows the base's shape.
+        /// </summary>
+        public float roomImportance = 1f;
+
+        public float Priority { get { return DefectPolicy.Priority(kind, severity, roomImportance); } }
     }
 
     /// <summary>
@@ -51,6 +57,19 @@ namespace AutoColony.Upkeep
         public static List<ColonyDefect> Survey(Map map, ColonyState state, BaseLayout layout,
                                                 List<UnmetComplaint> unhandled)
         {
+            return Survey(map, state, layout, unhandled, 0.8f, 0.6f);
+        }
+
+        /// <summary>
+        /// As above, weighting each room's faults by how much that room matters.
+        ///
+        /// The weights come from the genome, so how much to favour a room the colony depends on
+        /// over a room that is merely busy is learned across epochs rather than asserted here.
+        /// </summary>
+        public static List<ColonyDefect> Survey(Map map, ColonyState state, BaseLayout layout,
+                                                List<UnmetComplaint> unhandled,
+                                                float essentialWeight, float occupancyWeight)
+        {
             var defects = new List<ColonyDefect>();
             if (map == null || state == null) return defects;
 
@@ -60,7 +79,7 @@ namespace AutoColony.Upkeep
             SurveyExposedPower(map, state, defects);
             SurveyDead(map, complaints, defects);
             SurveyComforts(complaints, defects);
-            SurveyRooms(map, state, means, complaints, defects);
+            SurveyRooms(map, state, means, complaints, defects, essentialWeight, occupancyWeight);
             SurveyOverbuilding(map, state, layout, means, defects);
 
             defects.Sort(delegate(ColonyDefect a, ColonyDefect b)
@@ -237,7 +256,8 @@ namespace AutoColony.Upkeep
         // ------------------------------------------------------------ rooms
 
         static void SurveyRooms(Map map, ColonyState state, float means,
-                                Dictionary<DefectKind, float> complaints, List<ColonyDefect> defects)
+                                Dictionary<DefectKind, float> complaints, List<ColonyDefect> defects,
+                                float essentialWeight, float occupancyWeight)
         {
             // Only rooms colonists actually sleep in. A dark storeroom bothers nobody.
             var seen = new HashSet<Room>();
@@ -251,8 +271,38 @@ namespace AutoColony.Upkeep
                 var room = bed != null && bed.Spawned ? bed.GetRoom() : null;
                 if (room == null || room.PsychologicallyOutdoors || !seen.Add(room)) continue;
 
+                int before = defects.Count;
                 InspectBedroom(map, room, means, complaints, defects);
+
+                // How much this particular room's faults matter. A three-person barracks and a
+                // spare room nobody sleeps in produce the same defects and are not the same
+                // problem — which the ranking could not previously express, because it saw the
+                // fault and never the place.
+                var facts = new Rooms.RoomFacts();
+                facts.users = SleepersIn(map, room, state);
+                facts.colonists = state.colonists;
+                facts.essential = false;    // bedrooms are not what the colony runs on
+                facts.unique = false;
+
+                float importance = Rooms.RoomImportance.Of(facts, essentialWeight, occupancyWeight);
+                for (int d = before; d < defects.Count; d++) defects[d].roomImportance = importance;
             }
+        }
+
+        /// <summary>Colonists who actually sleep in this room, by owned bed.</summary>
+        static int SleepersIn(Map map, Room room, ColonyState state)
+        {
+            int sleepers = 0;
+            for (int i = 0; i < state.allColonists.Count; i++)
+            {
+                var pawn = state.allColonists[i];
+                if (pawn == null || pawn.ownership == null) continue;
+
+                var bed = pawn.ownership.OwnedBed;
+                if (bed == null || !bed.Spawned) continue;
+                if (bed.GetRoom() == room) sleepers++;
+            }
+            return sleepers;
         }
 
         static void InspectBedroom(Map map, Room room, float means,

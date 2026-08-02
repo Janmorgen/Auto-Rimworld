@@ -57,6 +57,18 @@ namespace AutoColony.Learning
         public const string MealsPerColonist = "meals.perColonist";
         public const string ProductionBuffer = "production.bufferFactor";
 
+        /// <summary>
+        /// How much a room being depended on, and how much a room being busy, raise the priority
+        /// of fixing something wrong with it.
+        ///
+        /// Genes rather than constants because the trade-off is genuinely strategic: favouring
+        /// the essential room suits a colony one failure from collapse, favouring the busy one
+        /// suits a large settled colony where mood is the binding constraint. There is no single
+        /// right answer, which is what makes it a question for the search.
+        /// </summary>
+        public const string RoomEssentialWeight = "room.essentialWeight";
+        public const string RoomOccupancyWeight = "room.occupancyWeight";
+
         // ---- work assignment shape --------------------------------------------------
         public const string WorkSkillWeight = "work.skillWeight";
         public const string WorkPassionWeight = "work.passionWeight";
@@ -135,6 +147,8 @@ namespace AutoColony.Learning
 
             Add(MealsPerColonist, 1f, 15f, 5f, "Production", "Cooked meals per colonist");
             Add(ProductionBuffer, 1f, 3f, 1.5f, "Production", "Overshoot factor on bill targets");
+            Add(RoomEssentialWeight, 0f, 2f, 0.8f, "Rooms", "Weight on a room the colony depends on");
+            Add(RoomOccupancyWeight, 0f, 2f, 0.6f, "Rooms", "Weight on how busy a room is");
 
             Add(WorkSkillWeight, 0f, 3f, 1f, "Work", "Weight on skill level");
             Add(WorkPassionWeight, 0f, 3f, 1f, "Work", "Weight on passion");

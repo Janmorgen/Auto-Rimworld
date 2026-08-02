@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AutoColony.Learning;
 using AutoColony.Upkeep;
 using RimWorld;
 using Verse;
@@ -51,7 +52,9 @@ namespace AutoColony.Modules
             if (!crisis && CancelStaleOrders(ctx)) return;
 
             unhandled.Clear();
-            var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled);
+            var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled,
+                                              ctx.Gene(Genes.RoomEssentialWeight),
+                                              ctx.Gene(Genes.RoomOccupancyWeight));
 
             Report(ctx, BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists),
                    defects.Count);
