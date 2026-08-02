@@ -30,6 +30,12 @@ namespace AutoColony
         public int doorX;
         public int doorZ;
 
+        /// <summary>
+        /// When this room last changed what it is for, so it cannot be changed again straight
+        /// away. -1 for a room that has never been repurposed.
+        /// </summary>
+        public int roleChangedTick = -1;
+
         public CellRect Rect { get { return new CellRect(minX, minZ, width, height); } }
 
         /// <summary>The floor area inside the walls.</summary>
@@ -56,6 +62,7 @@ namespace AutoColony
             Scribe_Values.Look(ref furnitureQueued, "furnitureQueued", false);
             Scribe_Values.Look(ref doorX, "doorX", 0);
             Scribe_Values.Look(ref doorZ, "doorZ", 0);
+            Scribe_Values.Look(ref roleChangedTick, "roleChangedTick", -1);
         }
     }
 

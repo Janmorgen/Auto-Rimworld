@@ -322,6 +322,42 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
+        /// Whether the colony would ask for a room of this role again the moment it lost one.
+        ///
+        /// Deliberately the same question <see cref="TryChooseNextRole"/> answers, from the other
+        /// side: it offers the planner every role the layout does not have, so any role on that
+        /// list is one the colony wants back. A prison is the only conditional case — the colony
+        /// stops wanting one once nothing has been captured and no raid has landed — and that is
+        /// exactly the shape of room repurposing was introduced for, a shell whose purpose has
+        /// genuinely lapsed rather than one still in demand.
+        /// </summary>
+        static bool RoleStillWanted(DirectorContext ctx, RoomRole role)
+        {
+            if (role == RoomRole.Prison)
+                return ctx.state.raidsSurvived > 0 || ctx.state.downedStrangers > 0;
+
+            return true;
+        }
+
+        /// <summary>
+        /// How long a room keeps a new job before the plan may reconsider it. One in-game day,
+        /// which is about what the colony needs to furnish a room it has just been given.
+        /// </summary>
+        const int RepurposeCooldownTicks = 60000;
+
+        readonly HashSet<int> repurposeHeldNoted = new HashSet<int>();
+
+        /// <summary>Records a conversion being declined, once per room, so inaction explains itself.</summary>
+        void NoteRepurposeHeld(PlannedRoom room)
+        {
+            if (!repurposeHeldNoted.Add(room.minX * 10000 + room.minZ)) return;
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "left the {0} room as it is — it was given that job less than a day ago, and a " +
+                "shell that changes purpose faster than it can be furnished is never any of them",
+                room.role));
+        }
+
+        /// <summary>
         /// Gives an existing, finished room a new job instead of building another one.
         ///
         /// The walls are the expensive part — roughly a hundred and twenty units a shell, and
@@ -364,6 +400,51 @@ namespace AutoColony.Modules
                     if (wanted.HasValue && room.role == wanted.Value) continue;
                 }
 
+                // Giving up the last room of a role the colony still wants does not gain a room,
+                // it moves the shortage — and the planner will ask for the old role again on the
+                // very next pass, because what it picks from is the set of roles the layout does
+                // not have. Converting the only Workshop into a Research room takes Workshop out
+                // of the layout and therefore puts it straight back into the options.
+                //
+                // That is a closed loop with nothing random about its outcome, and it ran: one
+                // shell went Workshop, Research, Workshop, Dining, Hospital, Workshop in fourteen
+                // in-game hours, six conversions ending exactly where it started. Because every
+                // conversion strips the furniture that made the room what it was, it was never
+                // any of those things long enough to be furnished — the colony had a workshop on
+                // paper for two days and never owned a workbench.
+                //
+                // `Expendable` was meant to be this test and stops one step short: it protects
+                // the last Kitchen, Storage, Bedroom and Power room, which is the same idea with
+                // an incomplete list. The rest of the enumeration belongs here rather than there,
+                // because tearing a room down for material when the colony is destitute is a
+                // fair use of the last Dining room and swapping its label is not.
+                if (layout.CountRooms(room.role) <= 1 && RoleStillWanted(ctx, room.role)) continue;
+
+                // A room that has just been given a job keeps it for a while.
+                //
+                // The guard above stops the plan eating the room it is currently asking for, and
+                // that was enough while only two roles were in contention. It cannot stop a
+                // cycle, because in a cycle every single conversion is locally correct: the plan
+                // wants a workshop and the research room is spare, so it takes it; an hour later
+                // the plan wants a dining room and the workshop is spare, so it takes that. The
+                // want rotates and no individual step ever looks wrong.
+                //
+                // Watched one shell go Workshop, Research, Workshop, Dining, Hospital, Workshop
+                // in fourteen in-game hours — six conversions ending exactly where it started,
+                // and because every conversion strips the furniture that made the room what it
+                // was, it was never any of them for long enough to be furnished at all.
+                //
+                // The saving that justifies repurposing is real once and a pure loss repeated:
+                // the shell is reused but the fittings are paid for again every time. So a room
+                // has to have been left alone for a day before its job is reconsidered, which is
+                // also roughly how long the colony needs to furnish one.
+                if (room.roleChangedTick >= 0 &&
+                    Find.TickManager.TicksGame - room.roleChangedTick < RepurposeCooldownTicks)
+                {
+                    NoteRepurposeHeld(room);
+                    continue;
+                }
+
                 // Only a shell that is actually finished. A half-built room offers no saving
                 // over starting one where the plan wants it.
                 if (!room.wallsQueued || !ShellComplete(ctx.map, room)) continue;
@@ -377,6 +458,7 @@ namespace AutoColony.Modules
 
                 room.role = role;
                 room.furnitureQueued = false;   // furnished for its new purpose on a later pass
+                room.roleChangedTick = Find.TickManager.TicksGame;
 
                 ctx.Credit(BanditId, role.ToString());
                 Chronicle.Record(ChronicleCategory.Build, string.Format(
