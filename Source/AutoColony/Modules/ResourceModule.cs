@@ -297,7 +297,10 @@ namespace AutoColony.Modules
             // larder filled and the same animal is being explicitly passed over in the log every
             // sweep. The director decides again every pass; the standing orders have to be
             // decided again with it.
-            ReleaseUnwantedHunts(ctx, strength, desperation, radiusSq, origin);
+            // What survives that cull is every hunt the colony still endorses at this strength
+            // and this desperation — which is the only honest measure of how much food is
+            // already on its way.
+            int alreadyHunting = ReleaseUnwantedHunts(ctx, strength, desperation, radiusSq, origin);
 
             taken.Clear();
             declined.Clear();
@@ -324,7 +327,26 @@ namespace AutoColony.Modules
             // would rather not fight, it fights anyway: refusing is not survival, it is just a
             // slower way to lose. The least dangerous target is taken, since that is the fight
             // most likely to be survived.
-            if (done == 0 && desperation > 0.85f && candidates.Count > 0)
+            //
+            // But `done == 0` does not mean there is nothing safe to hunt. Candidates exclude
+            // anything already designated, so once the safe prey is all marked — which is what
+            // a working hunt module does within a couple of passes — the only animals left to
+            // consider are the ones it deliberately refused, and nothing new can be taken no
+            // matter how much food is on its way. The escalation then fires on the least
+            // dangerous *undesignated* animal, which is precisely the most dangerous animal on
+            // the map, for the reason that every safer one is already spoken for.
+            //
+            // That killed a colony inside six hours. Three passes in the same in-game hour: the
+            // first marked a Red fox, the second marked a Rat, the third found nothing new to
+            // mark and sent everyone after a Warg at 0.61x. An hour earlier the same reasoning
+            // had bought a Megasloth at 0.49x. Neither died; both went manhunter and came home.
+            // Three colonists became one, and a colony that had 11.6 days of meat lying in its
+            // own fields by that afternoon never got to eat any of it.
+            //
+            // So the premise is checked rather than assumed. The conditions live in
+            // <see cref="HuntPolicy"/> where they can be argued with in a test.
+            if (HuntPolicy.LastResortWarranted(done, alreadyHunting, ctx.state.colonistsDowned,
+                                               desperation, candidates.Count))
             {
                 var lastResort = candidates[0];
                 map.designationManager.AddDesignation(new Designation(lastResort, des));
@@ -342,10 +364,18 @@ namespace AutoColony.Modules
             // every sweep, and a log that repeats itself is a log nobody can read.
             if (taken.Count > 0 || declined.Count > 0)
             {
+                // When nothing new was taken, say what is already out. Otherwise a pass that
+                // marked nothing reads identically whether the colony has eight hunts running
+                // or none at all — and that is the distinction the last resort turns on.
+                string inFlight = taken.Count == 0 && alreadyHunting > 0
+                    ? "; " + alreadyHunting + " hunts already out"
+                    : "";
+
                 Chronicle.Record(ChronicleCategory.Hunt, string.Format(
-                    "{0:0.0} days of food — hunting {1}{2} [{3}]",
+                    "{0:0.0} days of food — hunting {1}{2}{3} [{4}]",
                     daysOfFood,
                     taken.Count > 0 ? Describe(taken) : "nothing",
+                    inFlight,
                     declined.Count > 0 ? "; passed over " + Describe(declined) : "",
                     CombatAssessment.Explain(strength, largestDeclined, desperation)));
             }
@@ -360,9 +390,12 @@ namespace AutoColony.Modules
         /// desperation, it has wandered outside the radius the colony is willing to walk, or it
         /// is dead and the designation is moot. Anything still worth hunting is left alone —
         /// re-issuing a designation restarts the job and the hunter never fires.
+        ///
+        /// Returns how many hunts are still standing afterwards, which is the colony's real
+        /// answer to "is any food already coming".
         /// </summary>
-        void ReleaseUnwantedHunts(DirectorContext ctx, float strength, float desperation,
-                                  int radiusSq, IntVec3 origin)
+        int ReleaseUnwantedHunts(DirectorContext ctx, float strength, float desperation,
+                                 int radiusSq, IntVec3 origin)
         {
             var map = ctx.map;
             var des = DesignationDefOf.Hunt;
@@ -372,6 +405,8 @@ namespace AutoColony.Modules
             // Copied before iterating: removing a designation mutates the manager's own list.
             standing.Clear();
             foreach (var d in map.designationManager.SpawnedDesignationsOfDef(des)) standing.Add(d);
+
+            int kept = 0;
 
             for (int i = standing.Count - 1; i >= 0; i--)
             {
@@ -385,7 +420,7 @@ namespace AutoColony.Modules
                 bool notWorthIt = !gone && !tooFar &&
                                   !CombatAssessment.ShouldEngage(strength, ThreatOf(animal), desperation);
 
-                if (!gone && !tooFar && !notWorthIt) continue;
+                if (!gone && !tooFar && !notWorthIt) { kept++; continue; }
 
                 map.designationManager.RemoveDesignation(designation);
                 if (!gone) Tally(released, animal);
@@ -396,6 +431,8 @@ namespace AutoColony.Modules
                     "called off the hunt on " + Describe(released) +
                     " — no longer worth taking, and a standing designation pulls hunters onto " +
                     "whichever marked animal is nearest rather than the one now chosen");
+
+            return kept;
         }
 
         /// <summary>Days of unprocessed meat that count as enough already in hand.</summary>

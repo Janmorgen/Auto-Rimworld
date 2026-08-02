@@ -48,7 +48,11 @@ namespace AutoColony.Modules
             // Fire first, and before anything else. It spreads far faster than the work
             // scheduler reconsiders priorities, and an unattended fire will take a base apart
             // while the director is still deciding who should be hauling.
-            if (ctx.state.firesNearBase > 0) HandleFires(ctx);
+            //
+            // A fire is met where it is rather than where the colony is: by the time a front
+            // crosses the response radius it is no longer the fire that could have been put out.
+            bool closing = TrackFireFront(ctx);
+            if (ctx.state.firesNearBase > 0 || closing) HandleFires(ctx, closing);
             else if (ctx.state.fires > 0) NoteDistantFire(ctx);
 
             if (ThreatActive(ctx))
@@ -58,11 +62,16 @@ namespace AutoColony.Modules
             }
 
             StandDown(ctx);
-            if (ctx.state.firesNearBase == 0 && firefightingUnderway)
+
+            // Fighting a front that has not arrived yet is still firefighting. Standing down on
+            // `firesNearBase` alone would call it off on the very pass it was ordered, since a
+            // front the colony went out to meet is by definition not near the base.
+            if (ctx.state.firesNearBase == 0 && !closing && firefightingUnderway)
             {
                 firefightingUnderway = false;
                 distantFireNoted = false;
                 hotRoomNoted = false;
+                beyondReachNoted = false;
                 Chronicle.Record(ChronicleCategory.Fire, "fires near the colony are out");
             }
 
@@ -211,7 +220,64 @@ namespace AutoColony.Modules
         /// reconsidered every few in-game hours, which is far too slow, so the work module is
         /// pushed to re-run immediately rather than waiting for its turn.
         /// </summary>
-        void HandleFires(DirectorContext ctx)
+        int lastFireCount = -1;
+        float lastNearestFire = -1f;
+
+        /// <summary>
+        /// Samples the fire front and says whether to go out and meet it.
+        ///
+        /// Two samples are what separates a front that is coming from one that never was; the
+        /// judgement itself is <see cref="FireFront"/>, this only remembers the previous one.
+        /// </summary>
+        bool TrackFireFront(DirectorContext ctx)
+        {
+            int count = ctx.state.fires;
+            float nearest = ctx.state.nearestFireDistance;
+
+            int previousCount = lastFireCount;
+            float previousNearest = lastNearestFire;
+
+            lastFireCount = count;
+            lastNearestFire = nearest;
+
+            if (count == 0) { frontNoted = false; return false; }
+
+            int able = ctx.state.ableColonists != null ? ctx.state.ableColonists.Count : 0;
+            bool closing = FireFront.IsClosing(count, previousCount, nearest, previousNearest, able);
+
+            if (closing) NoteClosingFront(ctx, count, previousCount, nearest);
+            else if (previousCount >= 0 && count > previousCount &&
+                     !FireFront.Fightable(count, able))
+                NoteFrontBeyondReach(ctx, count, able);
+
+            return closing;
+        }
+
+        bool frontNoted;
+
+        void NoteClosingFront(DirectorContext ctx, int count, int previous, float nearest)
+        {
+            if (frontNoted) return;
+            frontNoted = true;
+            Chronicle.Record(ChronicleCategory.Fire, string.Format(
+                "fire front is spreading ({0} up from {1}, nearest {2:0}) — going out to meet it " +
+                "now rather than waiting for it to reach the response radius",
+                count, previous, nearest));
+        }
+
+        bool beyondReachNoted;
+
+        void NoteFrontBeyondReach(DirectorContext ctx, int count, int able)
+        {
+            if (beyondReachNoted) return;
+            beyondReachNoted = true;
+            Chronicle.Record(ChronicleCategory.Fire, string.Format(
+                "{0} fires burning and {1} able colonists — past what they could beat out, so " +
+                "nobody is sent into it",
+                count, able));
+        }
+
+        void HandleFires(DirectorContext ctx, bool meetTheFront)
         {
             var map = ctx.map;
             var fireDef = AcDefs.Fire;
@@ -232,8 +298,12 @@ namespace AutoColony.Modules
                 // Only the fires that could actually reach the colony. Claiming a distant
                 // wildfire sends colonists across the map to fight something that was never
                 // coming, while whatever is burning at home goes unattended.
+                //
+                // Unless the front is on its way, in which case every cell of it is a fire that
+                // could reach the colony and the radius is measuring the wrong thing.
                 bool inHome = home != null && home[fire.Position];
-                if (!inHome && (fire.Position - origin).LengthHorizontalSquared > radiusSq) continue;
+                if (!meetTheFront && !inHome &&
+                    (fire.Position - origin).LengthHorizontalSquared > radiusSq) continue;
 
                 // A room the fire has already won is not a room to send anyone into.
                 //
