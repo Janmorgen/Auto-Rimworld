@@ -41,6 +41,8 @@
     <Compile Include="../../Source/AutoColony/Core/Rooms/RoomImportance.cs" Link="Production/RoomImportance.cs" />
     <Compile Include="../../Source/AutoColony/Core/Combat/FiringPosition.cs" Link="Production/FiringPosition.cs" />
     <Compile Include="../../Source/AutoColony/Core/Rooms/FurniturePlacement.cs" Link="Production/FurniturePlacement.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Rooms/RoomSiting.cs" Link="Production/RoomSiting.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Rooms/RoomProfiles.cs" Link="Production/RoomProfiles.cs" />
     <Compile Include="../../Source/AutoColony/Core/Conditions/ConditionResponse.cs" Link="Production/ConditionResponse.cs" />
     <Compile Include="../../Source/AutoColony/Core/Goals/ResearchChain.cs" Link="Production/ResearchChain.cs" />
     <Compile Include="../../Source/AutoColony/Core/Upkeep/Defects.cs" Link="Production/Defects.cs" />

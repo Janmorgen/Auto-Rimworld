@@ -184,6 +184,15 @@ namespace AutoColony
             }
             Genes.RegisterUpkeepWeights(keys, defaults);
 
+            // Where each kind of room wants to go, and how big it wants to be.
+            foreach (RoomRole role in System.Enum.GetValues(typeof(RoomRole)))
+            {
+                var profile = AutoColony.Rooms.RoomProfiles.For(role.ToString());
+                Genes.RegisterSiting(role.ToString(), profile.compactness, profile.evenness,
+                                     profile.partnerAffinity, profile.resourceAffinity,
+                                     profile.width, profile.height);
+            }
+
             // Where each kind of furniture wants to stand, as four competing preferences per
             // kind. A bed and a workbench do not want the same cell and never did.
             foreach (AutoColony.Rooms.FurnitureKind kind in

@@ -255,6 +255,32 @@ namespace AutoColony.Learning
         /// back, and distance from other furniture — because a bed and a workbench want
         /// genuinely opposite things and a single ordering served neither.
         /// </summary>
+        /// <summary>
+        /// Registers a role's siting preferences and its dimensions.
+        ///
+        /// Where a room goes was a fixed pattern that gave every role the same answer to a
+        /// question that differs completely between them, and its size was one number shared by
+        /// all of them. A store wants to be central and large; a bedroom wants to be small and
+        /// close; a prison wants to be far away.
+        /// </summary>
+        public static void RegisterSiting(string role, float compactness, float evenness,
+                                          float partner, float resource, int width, int height)
+        {
+            if (string.IsNullOrEmpty(role)) return;
+            Register(new GeneSpec("site." + role + ".compactness", 0f, 3f, compactness,
+                                  "Room siting", role + " closeness to base"));
+            Register(new GeneSpec("site." + role + ".evenness", 0f, 3f, evenness,
+                                  "Room siting", role + " even spacing"));
+            Register(new GeneSpec("site." + role + ".partner", 0f, 3f, partner,
+                                  "Room siting", role + " closeness to partner room"));
+            Register(new GeneSpec("site." + role + ".resource", 0f, 3f, resource,
+                                  "Room siting", role + " closeness to resource"));
+            Register(new GeneSpec("site." + role + ".width", 5f, 13f, width,
+                                  "Room siting", role + " width"));
+            Register(new GeneSpec("site." + role + ".height", 5f, 13f, height,
+                                  "Room siting", role + " height"));
+        }
+
         public static void RegisterPlacementWeight(string kind, string aspect, float def)
         {
             if (string.IsNullOrEmpty(kind) || string.IsNullOrEmpty(aspect)) return;

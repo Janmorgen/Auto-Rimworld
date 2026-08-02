@@ -455,6 +455,15 @@ namespace AutoColony.Modules
             return BuildingMeans.BedsPerRoom(Means(ctx), preferred, ctx.state.colonists);
         }
 
+        /// <summary>A dimension gene, clamped to what is actually buildable and useful.</summary>
+        static int SizeGene(DirectorContext ctx, string key, int fallback)
+        {
+            int size = ctx.GeneInt(key);
+            if (size < 5) size = fallback < 5 ? 5 : fallback;
+            if (size > 13) size = 13;
+            return size;
+        }
+
         static int RoomSize(DirectorContext ctx)
         {
             int size = ctx.GeneInt(Genes.BaseRoomSize);
@@ -546,7 +555,24 @@ namespace AutoColony.Modules
         {
             var layout = ctx.layout;
             var map = ctx.map;
-            int size = RoomSize(ctx);
+
+            // Dimensions are per role now, not one number shared by every room. A store that
+            // fills up stops being a store; a bedroom is better small, because RimWorld rewards
+            // a tidy little room over a large bare one and every extra cell is wall to build.
+            var profile = Rooms.RoomProfiles.For(role.ToString());
+            int width = SizeGene(ctx, Rooms.RoomSiting.WidthKey(role.ToString()), profile.width);
+            int height = SizeGene(ctx, Rooms.RoomSiting.HeightKey(role.ToString()), profile.height);
+
+            var weights = new Rooms.SiteWeights();
+            weights.compactness = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Compactness));
+            weights.evenness = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Evenness));
+            weights.partnerAffinity = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Partner));
+            weights.resourceAffinity = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Resource));
+
+            float bestScore = float.NegativeInfinity;
+            var bestRect = CellRect.Empty;
+            bool bestNorth = true;
+            System.Func<bool> bestFound = delegate { return bestScore > float.NegativeInfinity; };
 
             // Try successive slots until one lands somewhere buildable. Slots are capped so a
             // hemmed-in base stops searching instead of marching rooms off across the map.
@@ -559,30 +585,128 @@ namespace AutoColony.Modules
 
                 // Fan out alternately left and right of the origin.
                 int lateral = ((index % 2) == 0 ? 1 : -1) * ((index + 1) / 2);
-                int xMin = layout.origin.x + lateral * (size - 1);
+                int xMin = layout.origin.x + lateral * (width - 1);
                 int zMin = north
                     ? layout.origin.z + 2
-                    : layout.origin.z - 1 - (size - 1);
+                    : layout.origin.z - 1 - (height - 1);
 
-                var rect = new CellRect(xMin, zMin, size, size);
+                var rect = new CellRect(xMin, zMin, width, height);
                 if (!rect.InBounds(map)) continue;
-                if (PlacementUtil.BuildableFraction(map, rect) < 0.8f) continue;
                 if (OverlapsExisting(layout, rect)) continue;
 
-                var room = new PlannedRoom();
-                room.minX = xMin;
-                room.minZ = zMin;
-                room.width = size;
-                room.height = size;
-                room.role = role;
-                room.doorX = xMin + size / 2;
-                room.doorZ = north ? zMin : zMin + size - 1;
+                // Scored rather than taken. Every slot used to give the same answer to a
+                // question that differs completely by role — a store wants the middle of the
+                // base, a workshop wants to be beside that store, a prison wants to be nowhere
+                // near either — so the first slot that fitted was as good as the planner could
+                // ever say.
+                float score = Rooms.RoomSiting.Score(SiteFeaturesFor(ctx, rect, profile), weights);
+                if (score <= bestScore) continue;
 
-                layout.rooms.Add(room);
-                return room;
+                bestScore = score;
+                bestRect = rect;
+                bestNorth = north;
             }
 
-            return null;
+            if (!bestFound()) return null;
+
+            var room = new PlannedRoom();
+            room.minX = bestRect.minX;
+            room.minZ = bestRect.minZ;
+            room.width = width;
+            room.height = height;
+            room.role = role;
+            room.doorX = bestRect.minX + width / 2;
+            room.doorZ = bestNorth ? bestRect.minZ : bestRect.minZ + height - 1;
+
+            layout.rooms.Add(room);
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "sited the {0} room {1}x{2} at {3} — {4}",
+                role, width, height, room.Center, DescribeSiting(profile)));
+
+            return room;
+        }
+
+        /// <summary>What the siting model needs to know about a candidate footprint.</summary>
+        Rooms.SiteFeatures SiteFeaturesFor(DirectorContext ctx, CellRect rect,
+                                           Rooms.RoomProfiles.Profile profile)
+        {
+            var f = new Rooms.SiteFeatures();
+            var map = ctx.map;
+            var centre = rect.CenterCell;
+
+            f.buildable = PlacementUtil.BuildableFraction(map, rect);
+            f.fromOrigin = (centre - ctx.layout.origin).LengthHorizontal;
+
+            var rooms = ctx.layout.rooms;
+            float nearest = 999f;
+            float partner = 999f;
+
+            if (siteDistances == null || siteDistances.Length < rooms.Count)
+                siteDistances = new float[rooms.Count + 8];
+
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                float d = (centre - rooms[i].Center).LengthHorizontal;
+                siteDistances[i] = d;
+                if (d < nearest) nearest = d;
+                if (profile.partner != null && rooms[i].role.ToString() == profile.partner && d < partner)
+                    partner = d;
+            }
+
+            f.toNearestRoom = nearest;
+            f.toPartnerRoom = partner;
+            f.unevenness = Rooms.RoomSiting.Unevenness(siteDistances, rooms.Count);
+            f.toResource = profile.resource != null
+                ? DistanceToResource(map, centre, profile.resource)
+                : 0f;
+
+            return f;
+        }
+
+        float[] siteDistances;
+
+        /// <summary>
+        /// How far the nearest of a kind of resource is. Sampled outward rather than scanning
+        /// the map, since this runs once per candidate footprint.
+        /// </summary>
+        static float DistanceToResource(Map map, IntVec3 from, string resource)
+        {
+            const int Limit = 40;
+
+            foreach (var cell in GenRadial.RadialCellsAround(from, Limit, true))
+            {
+                if (!cell.InBounds(map)) continue;
+
+                if (resource == "rock")
+                {
+                    var edifice = cell.GetEdifice(map);
+                    if (edifice != null && edifice.def.mineable)
+                        return (cell - from).LengthHorizontal;
+                }
+                else if (resource == "wood")
+                {
+                    var plant = cell.GetPlant(map);
+                    if (plant != null && plant.def.plant != null && plant.def.plant.IsTree)
+                        return (cell - from).LengthHorizontal;
+                }
+                else if (resource == "soil")
+                {
+                    if (map.fertilityGrid.FertilityAt(cell) >= 0.7f)
+                        return (cell - from).LengthHorizontal;
+                }
+            }
+            return Limit;
+        }
+
+        static string DescribeSiting(Rooms.RoomProfiles.Profile profile)
+        {
+            var reasons = new List<string>();
+            if (profile.evenness >= 1f) reasons.Add("wants to sit evenly among the other rooms");
+            if (profile.partner != null) reasons.Add("wants to be near the " + profile.partner);
+            if (profile.resource != null) reasons.Add("wants to be near " + profile.resource);
+            if (profile.compactness <= 0.3f) reasons.Add("wants distance from the rest");
+            return reasons.Count > 0 ? string.Join(", ", reasons.ToArray()) : "no strong preference";
         }
 
         static bool OverlapsExisting(BaseLayout layout, CellRect rect)
