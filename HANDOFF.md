@@ -322,8 +322,60 @@ slow, so it is worth fixing first.
 6. **Combat positioning.** Everyone rallies to one point; no cover, no chokepoints, and no
    doctor held back when someone is downed.
 
+## The round of 2026-08-02: two decisions tested on the wrong quantity
+
+Both of these were the director acting on its own initiative, and both chose the worst option
+available for the same underlying reason — the test asked where something *was* rather than
+where it was *going*. Neither was a coding error; both conditions read correctly and meant
+something other than what they said.
+
+**The hunt escalation fired on a false premise.** It exists to break a starve-or-fight deadlock
+and its reasoning is right: refusing food is not survival, only a slower way to lose. But it
+triggered on "this pass designated nothing", and the candidate list excludes anything already
+designated. A working hunt module marks all the safe prey within a pass or two — after which no
+pass can designate anything new, every pass concludes there is nothing safe left, and the
+escalation picks the least dangerous *undesignated* animal. Which is, for precisely that reason,
+the most dangerous animal on the map.
+
+Run 22, three passes inside one in-game hour: marked a Red fox, marked a Rat, then sent everyone
+after a Warg at 0.61x. An hour earlier the same reasoning had bought a Megasloth at 0.49x.
+Neither animal died. Both went manhunter and followed the hunters home. Three colonists became
+one in six hours, and the 11.6 days of meat lying in the fields that afternoon fed nobody.
+
+Now in `HuntPolicy.LastResortWarranted`: standing hunts mean food is already coming, and
+casualties mean the strength the fight was judged on has already gone.
+
+**The fire response had the same shape.** Anything outside the response radius was left, on the
+reasoning that a distant wildfire was never coming and chasing one leaves the base unattended —
+also correct, and also tested on the wrong quantity. Four fires a hundred cells out were
+correctly judged distant. Four became thirteen, forty-three, a hundred and twenty-three;
+twenty-seven in-game hours later 255 cells were burning and the colony had done nothing
+throughout, because the front never crossed the line. It grew until the line was inside it.
+
+Now in `FireFront.IsClosing`: two samples separate a front that is coming from one that never
+was. Growing and not receding is met where it is; already past what the people present could
+beat out is not answered at all, because sending one colonist into two hundred fires loses the
+colonist and not the fire.
+
+Offline tests 251 → 270.
+
+Two things about this worth carrying forward:
+
+- **`FightableFiresPerColonist = 6` is a judgement, not a measurement.** It is calibrated to
+  make the one observed failure (4 fires, 1 colonist) come out "go", and to make 43-and-1 come
+  out "no". The true number depends on travel time and spread rate and is probably lower for a
+  distant front than a near one. Watch it in game before trusting it.
+- **Meeting a distant front grows the Home area permanently.** Nothing in the director ever
+  shrinks it. Claiming is capped at 200 cells per pass and burned ground has little to haul or
+  clean, so the cost is bounded and mostly inert — but it is a real cost and it accumulates.
+
 ## Traps worth knowing before you touch it
 
+- **A condition that reads correctly can still mean something else.** `done == 0` was a true
+  statement about the pass and a false statement about the colony; `distance > radius` was a true
+  statement about the fire and a false statement about the danger. Both cost a colony. When a
+  decision keys off a derived quantity, ask what that quantity excludes — the hunt candidates
+  excluded exactly the animals that made the premise false.
 - **Existence is not function.** A kitchen with no stove cannot cook; an unpowered turret is a
   wall decoration; a Power room is not power; a solar panel under a roof produces nothing. All
   four shipped as bugs. Check for the capability, not the object — and when you write the check,
