@@ -434,6 +434,24 @@ namespace AutoColony.Upkeep
             for (int i = 0; i < layout.rooms.Count; i++)
             {
                 var planned = layout.rooms[i];
+
+                // Only rooms the colony actually finished building.
+                //
+                // Reclaiming is for a colony that has fallen on hard times *since it built out* —
+                // standing rooms it no longer needs, holding material it now does. A room still
+                // going up is not that, and taking one produces a loop rather than material: the
+                // planner wanted it a moment ago and wants it just as much afterwards, so it
+                // sites the same room again, in the same place, and pays for the walls twice.
+                //
+                // Watched exactly that. A bedroom sited at (134,110) on day 1, its walls queued,
+                // reclaimed at day 2 06h with means at 0.02, and sited again at (134,110) three
+                // in-game hours later. Each lap spent material to recover less of it.
+                //
+                // A colony that cannot afford a room it has started is a real problem and it has
+                // its own answer: consolidation withdraws the unstarted blueprints and leaves
+                // every wall standing. That path loses nothing. This one was destroying work.
+                if (!planned.furnitureQueued) continue;
+
                 if (!Expendable(map, layout, planned)) continue;
                 surplus.Add(planned);
             }
