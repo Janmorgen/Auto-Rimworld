@@ -262,6 +262,20 @@ namespace AutoColony.Upkeep
         {
             AddIfFelt(complaints, defects, DefectKind.NoTable, "nowhere to eat off a table");
             AddIfFelt(complaints, defects, DefectKind.ColdRoom, "colonists are cold");
+
+            // Heat, which every other part of this already knew how to answer.
+            //
+            // `EnvironmentHot` and `SleptInHeat` both map to HotRoom, HotRoom maps to AddCooler,
+            // HotRoom carries the same 1.3 weight as cold because both kill, and AddCooler knows
+            // to fall back on a passive cooler — fifty wood, no research, no grid. Every piece of
+            // the answer was in place and wired to every other piece. Nothing ever asked whether
+            // anybody was hot, so AddCooler could not fire from this path at all.
+            //
+            // A colony burned to death at 45C in one run and another put a colonist on the floor
+            // at 51C, with the unmet-complaint list carrying no mention of heat on either
+            // occasion. That is the tell: not a remedy that failed, but a number that never moved.
+            AddIfFelt(complaints, defects, DefectKind.HotRoom, "colonists are too hot");
+
             AddIfFelt(complaints, defects, DefectKind.Cheerless, "nothing to do but work");
         }
 
