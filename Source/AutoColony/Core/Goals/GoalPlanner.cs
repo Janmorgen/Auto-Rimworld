@@ -130,6 +130,7 @@ namespace AutoColony.Goals
 
             if (best == null) return plan;
 
+            lastWanted = best.Name;
             WatchTheFocus(best, bestUrgency, now, ctx);
 
             plan.Wanted = best;
@@ -223,6 +224,18 @@ namespace AutoColony.Goals
         /// missing, so this is roughly "more than a third short of what it wants".
         /// </summary>
         const float PressingUrgency = 0.4f;
+
+        /// <summary>
+        /// How much better a rival has to be to take the plan off whatever holds it.
+        ///
+        /// Larger than the spread that separates the long-term goals from each other — six
+        /// hundredths of a point, measured — and vastly smaller than the hundred points between
+        /// horizons, so it settles chatter without ever standing in front of an emergency.
+        /// </summary>
+        const float IncumbentMargin = 0.15f;
+
+        /// <summary>The goal the plan settled on last pass, which keeps a head start on this one.</summary>
+        string lastWanted;
 
         /// <summary>How long a goal may be passed over before it is given a turn. Three days.</summary>
         const int BlockedTicksBeforeATurn = 180000;
@@ -427,6 +440,7 @@ namespace AutoColony.Goals
         {
             float urgency = Urgency(goal, ctx);
             var record = RecordFor(goal);
+            float score_bonus = 0f;
 
             int band = (int)goal.Horizon;
             if (urgency < PressingUrgency) band++;
@@ -438,7 +452,24 @@ namespace AutoColony.Goals
                 now - record.blockedSince >= BlockedTicksBeforeATurn)
                 band = 0;
 
-            return (10 - band) * 100f + urgency;
+            // Whatever the colony is already working on keeps a small head start.
+            //
+            // Long-term goals separate on urgency alone and several of them read theirs off the
+            // map, so three of them sat within six hundredths of a point in the self-test and the
+            // ordering among them changed with the weather. Scoring a tie one way or the other is
+            // free. Acting on it is not, and everything downstream of the plan acts.
+            //
+            // Four separate things were damaged by single-pass flips before this went in: a
+            // Workshop opened through the spare slot and split a colony's builders for three
+            // days; consolidation withdrew a finished research room's bench because the room was
+            // not the focus that pass; and then it took the walls of the next research room for
+            // the same reason. Each was patched where it surfaced. This is the cause.
+            //
+            // Deliberately far smaller than the hundred-point gap between horizons, so it can
+            // only ever settle a near-tie and can never delay an emergency by even one pass.
+            if (goal.Name == lastWanted) score_bonus = IncumbentMargin;
+
+            return (10 - band) * 100f + urgency + score_bonus;
         }
 
         bool AnyImmediateOutstanding(DirectorContext ctx)
