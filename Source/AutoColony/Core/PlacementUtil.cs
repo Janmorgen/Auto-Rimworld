@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using Verse;
@@ -74,8 +75,40 @@ namespace AutoColony
             var report = GenConstruct.CanPlaceBlueprintAt(def, cell, rot, map, false, null, null, stuff);
             if (!report.Accepted) return false;
 
+            // A "spot" is not built, it is designated.
+            //
+            // Crafting spots, butcher spots and their kin cost nothing and have WorkToBuild 0.
+            // Queued as a blueprint they produce a frame with no work in it, which a colonist
+            // walks to, cannot complete, and botches — so the spot never appears, the colonist's
+            // trip is wasted, and the planner sees the furniture still missing and queues it
+            // again. Spawning them outright is what the game itself does with a zero-work,
+            // zero-cost building.
+            if (IsSpot(def))
+            {
+                var spot = ThingMaker.MakeThing(def, stuff);
+                spot.SetFaction(Faction.OfPlayer, null);
+                GenSpawn.Spawn(spot, cell, map, rot);
+                return true;
+            }
+
             GenConstruct.PlaceBlueprintForBuild(def, cell, map, rot, Faction.OfPlayer, stuff);
             return true;
+        }
+
+        /// <summary>
+        /// Whether this is a zero-work, zero-cost marker rather than something anybody builds.
+        ///
+        /// Tested on the def's own numbers rather than by listing names, so modded spots behave
+        /// the same way and nothing has to be kept in sync.
+        /// </summary>
+        public static bool IsSpot(ThingDef def)
+        {
+            if (def == null) return false;
+            if (def.costList != null && def.costList.Count > 0) return false;
+            if (def.costStuffCount > 0) return false;
+
+            try { return def.GetStatValueAbstract(StatDefOf.WorkToBuild) <= 0f; }
+            catch (Exception) { return false; }
         }
 
         /// <summary>

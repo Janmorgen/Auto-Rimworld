@@ -237,6 +237,16 @@ namespace AutoColony.Modules
 
             candidates.Sort((a, b) => ThreatOf(a).CompareTo(ThreatOf(b)));
 
+            // Withdraw hunts the colony no longer wants.
+            //
+            // A designation outlives the reasoning that produced it. Colonists do not hunt the
+            // animal the director chose — they hunt the nearest *designated* one, so a Megasloth
+            // marked an hour ago while desperate keeps pulling hunters onto it long after the
+            // larder filled and the same animal is being explicitly passed over in the log every
+            // sweep. The director decides again every pass; the standing orders have to be
+            // decided again with it.
+            ReleaseUnwantedHunts(ctx, strength, desperation, radiusSq, origin);
+
             taken.Clear();
             declined.Clear();
             largestDeclined = 0f;
@@ -290,6 +300,54 @@ namespace AutoColony.Modules
 
             return done;
         }
+
+        /// <summary>
+        /// Cancels hunt designations the colony would not choose again now.
+        ///
+        /// Three reasons to withdraw one: the animal is no longer worth fighting at the current
+        /// desperation, it has wandered outside the radius the colony is willing to walk, or it
+        /// is dead and the designation is moot. Anything still worth hunting is left alone —
+        /// re-issuing a designation restarts the job and the hunter never fires.
+        /// </summary>
+        void ReleaseUnwantedHunts(DirectorContext ctx, float strength, float desperation,
+                                  int radiusSq, IntVec3 origin)
+        {
+            var map = ctx.map;
+            var des = DesignationDefOf.Hunt;
+
+            released.Clear();
+
+            // Copied before iterating: removing a designation mutates the manager's own list.
+            standing.Clear();
+            foreach (var d in map.designationManager.SpawnedDesignationsOfDef(des)) standing.Add(d);
+
+            for (int i = standing.Count - 1; i >= 0; i--)
+            {
+                var designation = standing[i];
+                var animal = designation.target.Thing as Pawn;
+                if (animal == null) continue;
+
+                bool gone = animal.Dead || !animal.Spawned;
+                bool tooFar = !gone &&
+                              (animal.Position - origin).LengthHorizontalSquared > radiusSq;
+                bool notWorthIt = !gone && !tooFar &&
+                                  !CombatAssessment.ShouldEngage(strength, ThreatOf(animal), desperation);
+
+                if (!gone && !tooFar && !notWorthIt) continue;
+
+                map.designationManager.RemoveDesignation(designation);
+                if (!gone) Tally(released, animal);
+            }
+
+            if (released.Count > 0)
+                Chronicle.Record(ChronicleCategory.Hunt,
+                    "called off the hunt on " + Describe(released) +
+                    " — no longer worth taking, and a standing designation pulls hunters onto " +
+                    "whichever marked animal is nearest rather than the one now chosen");
+        }
+
+        readonly Dictionary<string, int> released = new Dictionary<string, int>();
+        readonly List<Designation> standing = new List<Designation>();
 
         readonly List<Pawn> candidates = new List<Pawn>();
         readonly Dictionary<string, int> taken = new Dictionary<string, int>();

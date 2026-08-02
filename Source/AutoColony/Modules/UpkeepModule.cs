@@ -185,8 +185,18 @@ namespace AutoColony.Modules
             var grave = AcDefs.Grave;
             if (grave == null) return false;
 
-            // One spare grave is enough; they hold one each, so only dig when none is waiting.
-            if (EmptyGraveExists(ctx.map)) return false;
+            // Digging the grave is not burying anybody.
+            //
+            // They are two separate actions, and only the first was ever taken: a colony would
+            // build a grave, stand next to it with the body still lying where it fell, and go on
+            // paying the -10 for an unburied colonist indefinitely. Carrying the corpse to the
+            // grave is an ordinary hauling job, but only for a grave whose storage settings
+            // accept that corpse and a corpse nobody has forbidden — and almost everything on a
+            // RimWorld map arrives forbidden.
+            if (EmptyGraveExists(ctx.map))
+            {
+                return ReleaseTheDeadForBurial(ctx);
+            }
 
             var near = defect.thing != null && defect.thing.Spawned
                 ? defect.thing.Position : ctx.Origin;
@@ -200,6 +210,61 @@ namespace AutoColony.Modules
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// Makes an existing empty grave actually usable: the grave willing to take the body,
+        /// and the body free to be carried.
+        ///
+        /// Returns true only when something was changed, so the caller does not report a remedy
+        /// on a pass where nothing happened.
+        /// </summary>
+        static bool ReleaseTheDeadForBurial(DirectorContext ctx)
+        {
+            var map = ctx.map;
+            bool changed = false;
+
+            var corpses = map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse);
+            for (int i = 0; i < corpses.Count; i++)
+            {
+                var corpse = corpses[i] as Corpse;
+                if (corpse == null || !corpse.Spawned) continue;
+                if (corpse.InnerPawn == null) continue;
+
+                // Colonists and their friends. Raider bodies are not a mood problem and burying
+                // them would spend the graves the colony dug for its own.
+                if (corpse.InnerPawn.Faction != Faction.OfPlayer) continue;
+
+                if (corpse.IsForbidden(Faction.OfPlayer))
+                {
+                    corpse.SetForbidden(false, false);
+                    changed = true;
+                }
+            }
+
+            // And a grave that will accept one. A grave's storage filter can exclude the very
+            // corpse it was dug for, in which case the haul job never exists to be taken.
+            var graveDef = AcDefs.Grave;
+            var graves = graveDef != null ? map.listerThings.ThingsOfDef(graveDef) : null;
+            for (int i = 0; graves != null && i < graves.Count; i++)
+            {
+                var building = graves[i] as Building_Grave;
+                if (building == null || building.HasCorpse) continue;
+
+                var settings = building.GetStoreSettings();
+                if (settings == null || settings.filter == null) continue;
+                if (settings.filter.AllowedDefCount > 0) continue;
+
+                settings.filter.SetAllowAll(null);
+                changed = true;
+            }
+
+            if (changed)
+                Chronicle.Record(ChronicleCategory.Build,
+                    "unforbade the dead and opened a grave to them — digging one and burying " +
+                    "someone in it are two different jobs, and only the first was ever ordered");
+
+            return changed;
         }
 
         static bool EmptyGraveExists(Map map)
@@ -247,20 +312,32 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
-        /// Cooling, which unlike warmth has no low-technology answer.
+        /// Cooling, by whichever means the colony can manage — and it can manage one without
+        /// power, which an earlier version of this comment wrongly denied.
         ///
-        /// A cooler needs both AirConditioning and a working grid, so a colony without either
-        /// genuinely cannot fix this and the complaint belongs on the reported list rather than
-        /// being silently dropped. Naming it is the point: EnvironmentHot was mapped to nothing
-        /// at all, so the largest single complaint in one run's survey was invisible to every
-        /// part of the director that could have acted on it.
+        /// A passive cooler costs fifty wood, needs no research and needs no electricity. It is
+        /// the exact counterpart of the campfire on the cold side, and writing "heat has no
+        /// low-technology answer" put EnvironmentHot back on the unfixable list for every colony
+        /// without a grid — which is most of them, for most of their lives.
+        ///
+        /// The electric cooler is better where there is power to run it, so it is tried first;
+        /// the passive one is what a pre-electricity colony actually gets.
         /// </summary>
         static bool AddCooler(DirectorContext ctx)
         {
-            if (ctx.state.workingGenerators == 0) return false;
             var cooler = AcDefs.Cooler;
-            if (cooler == null || !PlacementUtil.ResearchDone(cooler)) return false;
-            return PlaceInBase(ctx, cooler, 1);
+            if (ctx.state.workingGenerators > 0 && cooler != null &&
+                PlacementUtil.ResearchDone(cooler) && PlaceInBase(ctx, cooler, 1))
+                return true;
+
+            var passive = AcDefs.Thing("PassiveCooler");
+            if (passive == null || !PlacementUtil.ResearchDone(passive)) return false;
+            if (!PlaceInBase(ctx, passive, 1)) return false;
+
+            Chronicle.Record(ChronicleCategory.Build,
+                "passive cooler placed — fifty wood, no research and no grid, which is the " +
+                "answer a colony without electricity actually has to heat");
+            return true;
         }
 
         /// <summary>
