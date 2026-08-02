@@ -63,7 +63,27 @@ namespace AutoColony.Modules
 
                 if (existing == null)
                 {
-                    var bill = new Bill_Production(recipe, null);
+                    // The recipe decides what class of bill it needs, so let it.
+                    //
+                    // Anything made in stages — all apparel, all smithing — carries an
+                    // `unfinishedThingDef`, and RimWorld's own crafting toil casts the bill to
+                    // `Bill_ProductionWithUft` without checking. Handed a plain `Bill_Production`
+                    // it throws `InvalidCastException` the moment a colonist starts work, so the
+                    // job dies, the garment is never made, and it repeats for as long as the bill
+                    // stands. `MakeNewBill` returns whichever subclass the recipe requires.
+                    //
+                    // Watched live: five apparel bills on an electric tailoring bench, and every
+                    // attempt to work any of them threw. It is the first exception this mod has
+                    // produced in ten colonies, and it hid behind the fault isolation — the throw
+                    // happens inside the pawn's job driver, not inside a director module, so
+                    // nothing was disabled and nothing was reported.
+                    //
+                    // It also explains a great deal more than a crash. No clothing could ever be
+                    // made, so "Clothe the colony" could never be satisfied, so the short-term
+                    // horizon never cleared — which is half of why no colony has ever reached a
+                    // long-term goal and why Research and Defense score 0.00 in every epoch.
+                    var bill = recipe.MakeNewBill() as Bill_Production;
+                    if (bill == null) continue;
                     ConfigureBill(bill, desired);
                     PreferInsulatingStuff(bill, recipe, ctx);
                     table.billStack.AddBill(bill);
