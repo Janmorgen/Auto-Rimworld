@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AutoColony.Learning;
 using AutoColony.Upkeep;
@@ -596,9 +597,73 @@ namespace AutoColony.Modules
 
         // ------------------------------------------------------------ construction
 
+        /// <summary>
+        /// Clears what is standing where the room is going before anything is queued on top.
+        ///
+        /// Nothing did this, and the consequences ran in both directions. A tree in the wall
+        /// line is not an edifice, so placement was simply refused there and the room could
+        /// never finish — it sat half-built forever while the planner counted it as outstanding
+        /// work. A boulder in the wall line *is* an edifice, so it read as a finished wall and
+        /// the room was declared complete around an obstruction the colony had not built and
+        /// could not heat.
+        ///
+        /// Both stop being possible if the ground is cleared first. Rock is mined, which also
+        /// returns material; plants are cut, which returns wood. Neither is wasted work — it is
+        /// work the colony was going to be blocked by otherwise.
+        /// </summary>
+        int ClearFootprint(DirectorContext ctx, PlannedRoom room)
+        {
+            var map = ctx.map;
+            int ordered = 0;
+
+            foreach (var cell in room.Rect)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var edifice = cell.GetEdifice(map);
+                if (edifice != null)
+                {
+                    // Natural rock only. Anything the colony built is its own business, and
+                    // tearing down a neighbouring room's shared wall is how a base gets opened
+                    // to the sky.
+                    if (edifice.def.mineable && edifice.Faction == null &&
+                        map.designationManager.DesignationOn(edifice, DesignationDefOf.Mine) == null)
+                    {
+                        map.designationManager.AddDesignation(
+                            new Designation(edifice, DesignationDefOf.Mine));
+                        ordered++;
+                    }
+                    continue;
+                }
+
+                var plant = cell.GetPlant(map);
+                if (plant == null) continue;
+                if (map.designationManager.DesignationOn(plant, DesignationDefOf.CutPlant) != null) continue;
+                if (map.designationManager.DesignationOn(plant, DesignationDefOf.HarvestPlant) != null) continue;
+
+                // Harvest anything worth taking, cut the rest; both clear the cell.
+                var how = plant.def.plant != null && plant.def.plant.harvestedThingDef != null
+                    ? DesignationDefOf.HarvestPlant
+                    : DesignationDefOf.CutPlant;
+
+                map.designationManager.AddDesignation(new Designation(plant, how));
+                ordered++;
+            }
+
+            return ordered;
+        }
+
         void QueueShell(DirectorContext ctx, PlannedRoom room)
         {
             var map = ctx.map;
+
+            // Ground first. A wall cannot be placed through a tree, and a boulder left in the
+            // wall line would be mistaken for one.
+            int cleared = ClearFootprint(ctx, room);
+            if (cleared > 0)
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "clearing {0} obstructions from the {1} room's footprint before building it",
+                    cleared, room.role));
 
             // Material is a reading of the conditions, not a fixed taste. Storage leans harder
             // toward stone than the rest: it is where the colony's value ends up, so a fire
@@ -683,6 +748,20 @@ namespace AutoColony.Modules
         }
 
         /// <summary>True once no wall cell is still missing a finished building.</summary>
+        /// <summary>
+        /// Whether the room is actually a room.
+        ///
+        /// The old test asked whether every edge cell held an edifice, which answers a different
+        /// question. A natural rock formation is an edifice, so a boulder sitting in the wall
+        /// line counted as a finished wall — and the game, which decides enclosure by whether
+        /// air can escape rather than by what is in the cells, disagreed. Rooms therefore
+        /// reported themselves complete while standing open: no insulation, no protection from
+        /// weather, and every temperature and roof decision built on top of it was wrong.
+        ///
+        /// So it asks the game instead. Every interior cell has to belong to one enclosed room
+        /// that does not reach the map edge, which is the same judgement RimWorld makes when it
+        /// decides whether a heater is heating anything.
+        /// </summary>
         static bool ShellComplete(Map map, PlannedRoom room)
         {
             var door = room.Door;
@@ -692,7 +771,35 @@ namespace AutoColony.Modules
                 if (!cell.InBounds(map)) continue;
                 if (cell.GetEdifice(map) == null) return false;
             }
-            return true;
+
+            return Enclosed(map, room);
+        }
+
+        /// <summary>
+        /// Asks the game whether the interior is one sealed space rather than part of outdoors.
+        ///
+        /// Deliberately tolerant of an unroofed room — walls go up before roofs, and a shell
+        /// with its walls closed is complete for the planner's purposes — but not of one that
+        /// leaks into the map, which is the case the edge test could not see.
+        /// </summary>
+        static bool Enclosed(Map map, PlannedRoom room)
+        {
+            try
+            {
+                Room first = null;
+                foreach (var cell in room.Interior)
+                {
+                    if (!cell.InBounds(map)) return false;
+
+                    var here = cell.GetRoom(map);
+                    if (here == null || here.TouchesMapEdge) return false;
+
+                    if (first == null) first = here;
+                    else if (here != first) return false;   // split by something standing inside
+                }
+                return first != null;
+            }
+            catch (Exception) { return false; }
         }
 
         void QueueFurniture(DirectorContext ctx, PlannedRoom room)
