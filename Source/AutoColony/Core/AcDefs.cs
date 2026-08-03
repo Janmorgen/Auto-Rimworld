@@ -34,6 +34,31 @@ namespace AutoColony
             return d;
         }
 
+        static readonly Dictionary<string, RoomStatDef> roomStatCache =
+            new Dictionary<string, RoomStatDef>();
+
+        /// <summary>
+        /// A room stat by name, for the ones <c>RoomStatDefOf</c> does not carry.
+        ///
+        /// RimWorld defines eleven room stats and exposes only the five visible ones as static
+        /// fields. The hidden six are the interesting ones — they are what cleanliness and
+        /// impressiveness actually *do* — so reaching them needs the database.
+        /// </summary>
+        public static RoomStatDef RoomStat(string defName)
+        {
+            RoomStatDef d;
+            if (roomStatCache.TryGetValue(defName, out d)) return d;
+            d = DefDatabase<RoomStatDef>.GetNamedSilentFail(defName);
+            roomStatCache[defName] = d;
+            return d;
+        }
+
+        /// <summary>How often this kitchen poisons a meal. Falls from 5% to 0% with cleanliness.</summary>
+        public static RoomStatDef FoodPoisonChanceStat { get { return RoomStat("FoodPoisonChance"); } }
+
+        /// <summary>What this room multiplies research by. 0.75x when filthy, 1.15x when spotless.</summary>
+        public static RoomStatDef ResearchSpeedFactorStat { get { return RoomStat("ResearchSpeedFactor"); } }
+
         public static ThingDef Cloth { get { return Thing("Cloth"); } }
         public static ThingDef Fire { get { return Thing("Fire"); } }
         public static ThingDef Wall { get { return Thing("Wall"); } }

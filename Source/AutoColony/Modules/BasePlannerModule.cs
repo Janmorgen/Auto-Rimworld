@@ -2273,6 +2273,19 @@ namespace AutoColony.Modules
         /// room turned out was invisible and furniture placement could not be judged at all.
         /// The stats are only meaningful for an enclosed room, which is the other reason the
         /// completeness test had to start asking the game whether the walls actually close.
+        ///
+        /// The role is the part that matters most and was missing longest. The planner keeps
+        /// its own <see cref="RoomRole"/> and trusts its own bookkeeping about what it built,
+        /// while the game holds the authoritative answer to what the room actually *became* —
+        /// a Research room with no bench in it is not a Laboratory to RimWorld, it is a plain
+        /// Room. That disagreement is the cheapest functional test there is and nothing was
+        /// asking for it. It is reported rather than judged: what each role ought to classify
+        /// as is a question about worker internals this has not measured yet, and asserting an
+        /// expectation before reading one would be the same guess that has cost time already.
+        ///
+        /// Unlike impressiveness, the role is safe to read the moment a room is finished. It
+        /// asks what is standing in the room, not how anyone feels about it, so it does not
+        /// have the new-room-scores-badly problem that keeps beauty out of the defect survey.
         /// </summary>
         static void ReportRoomStats(DirectorContext ctx, PlannedRoom planned)
         {
@@ -2282,15 +2295,42 @@ namespace AutoColony.Modules
                 if (room == null || room.TouchesMapEdge || room.PsychologicallyOutdoors) return;
 
                 Chronicle.Record(ChronicleCategory.Build, string.Format(
-                    "{0} room finished — space {1:0.0}, beauty {2:0.0}, cleanliness {3:0.00}, " +
-                    "impressiveness {4:0.0}",
+                    "{0} room finished — the game calls it a {1} — space {2:0.0}, beauty {3:0.0}, " +
+                    "cleanliness {4:0.00}, impressiveness {5:0.0}{6}",
                     planned.role,
+                    room.Role != null ? room.Role.defName : "nothing at all",
                     room.GetStat(RoomStatDefOf.Space),
                     room.GetStat(RoomStatDefOf.Beauty),
                     room.GetStat(RoomStatDefOf.Cleanliness),
-                    room.GetStat(RoomStatDefOf.Impressiveness)));
+                    room.GetStat(RoomStatDefOf.Impressiveness),
+                    WhatCleanlinessBought(room, planned.role)));
             }
             catch (Exception) { }
+        }
+
+        /// <summary>
+        /// The consequence of a room's cleanliness, for the two roles where it has one.
+        ///
+        /// Both of these are hidden stats derived from cleanliness by a curve, and both land
+        /// on rooms the planner already builds: a kitchen decides how often meals poison the
+        /// colony, a research room decides how fast anything gets studied. Neither was ever
+        /// read, so the planner could not tell a kitchen worth having from one that was making
+        /// people ill. Reported next to the cleanliness it comes from, since the raw number
+        /// means nothing without the curve applied to it.
+        /// </summary>
+        static string WhatCleanlinessBought(Room room, RoomRole role)
+        {
+            try
+            {
+                if (role == RoomRole.Kitchen && AcDefs.FoodPoisonChanceStat != null)
+                    return ", food poisoning " +
+                           room.GetStat(AcDefs.FoodPoisonChanceStat).ToStringPercent("0.0");
+                if (role == RoomRole.Research && AcDefs.ResearchSpeedFactorStat != null)
+                    return ", research speed " +
+                           room.GetStat(AcDefs.ResearchSpeedFactorStat).ToStringPercent("0");
+            }
+            catch (Exception) { }
+            return "";
         }
 
         /// <summary>What this def wants from a cell, which is not the same for all of them.</summary>
