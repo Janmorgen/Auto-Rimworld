@@ -181,7 +181,11 @@ namespace AutoColony
             // Far enough out that it does not sit on the spot the planner wants for its own
             // rooms, near enough that hauling to it is not a day's walk.
             CellRect rect;
-            if (!FindClearRect(map, origin, 9, 9, 14, 26, out rect)) return "nowhere clear to put it";
+            // A wide band, not a ring. Fourteen to twenty-six cells is twelve cells of search
+            // on a map that may be mountain or marsh in every direction — it found nowhere at
+            // all on the first map it was asked, and the colony then ran on loose meals that
+            // drained exactly as before.
+            if (!FindClearRect(map, origin, 9, 9, 10, 60, out rect)) return "nowhere clear to put it";
 
             var stuff = GenStuff.DefaultStuffFor(wall);
             int walls = 0;
