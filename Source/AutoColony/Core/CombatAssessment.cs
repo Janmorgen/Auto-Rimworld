@@ -116,6 +116,31 @@ namespace AutoColony
             return colonyStrength >= threat * required;
         }
 
+        /// <summary>
+        /// Whether to start a fight with prey that will fight back.
+        ///
+        /// The judgement itself lives in <see cref="HuntPolicy"/>, where it can be argued with
+        /// in a test — this file needs RimWorld types and so cannot be. Kept here as the entry
+        /// point because every other combat judgement is.
+        ///
+        /// Twice now a cougar hunt has cost a colony. Run 36 took one at 1.57x and had a
+        /// colonist mauled; run 56 declined the same animal twice at a 1.5x bar, then took it at
+        /// 1.13x once hunger had lowered the bar to 1.1x, and lost two colonists to the revenge
+        /// two days later — with the fight arriving when the colony was at 0.44x, because the
+        /// first mauling had already put people on the floor.
+        ///
+        /// That last part is the reason a marginal ratio is worse than it looks: the hunt is
+        /// judged at today's strength and the revenge arrives at tomorrow's.
+        ///
+        /// Genuine starvation still has its own door. <c>HuntPolicy.LastResortWarranted</c>
+        /// takes the least dangerous animal on the map when nothing safe is left and desperation
+        /// is past 0.85, which is the case this floor would otherwise strand.
+        /// </summary>
+        public static bool ShouldHuntDangerous(float colonyStrength, float threat, float desperation)
+        {
+            return HuntPolicy.WorthHunting(colonyStrength, threat, true, desperation, DesperateRatio);
+        }
+
         /// <summary>Human-readable form of the same judgement, for the chronicle.</summary>
         public static string Explain(float colonyStrength, float threat, float desperation)
         {

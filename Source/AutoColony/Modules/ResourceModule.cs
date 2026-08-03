@@ -312,7 +312,13 @@ namespace AutoColony.Modules
                 var animal = candidates[i];
                 float threat = ThreatOf(animal);
 
-                if (!CombatAssessment.ShouldEngage(strength, threat, desperation))
+                // Prey that fights back is held to a floor hunger cannot talk it out of.
+                bool safe = !FightsBack(animal);
+                bool worthIt = safe
+                    ? CombatAssessment.ShouldEngage(strength, threat, desperation)
+                    : CombatAssessment.ShouldHuntDangerous(strength, threat, desperation);
+
+                if (!worthIt)
                 {
                     Tally(declined, animal);
                     continue;
@@ -418,7 +424,11 @@ namespace AutoColony.Modules
                 bool tooFar = !gone &&
                               (animal.Position - origin).LengthHorizontalSquared > radiusSq;
                 bool notWorthIt = !gone && !tooFar &&
-                                  !CombatAssessment.ShouldEngage(strength, ThreatOf(animal), desperation);
+                                  !(FightsBack(animal)
+                                        ? CombatAssessment.ShouldHuntDangerous(
+                                              strength, ThreatOf(animal), desperation)
+                                        : CombatAssessment.ShouldEngage(
+                                              strength, ThreatOf(animal), desperation));
 
                 if (!gone && !tooFar && !notWorthIt) { kept++; continue; }
 

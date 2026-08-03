@@ -51,5 +51,45 @@ namespace AutoColony
 
             return true;
         }
+
+        /// <summary>Strength a comfortable colony wants before picking any elective fight.</summary>
+        public const float ComfortableRatio = 2.0f;
+
+        /// <summary>
+        /// The floor under an elective fight with prey that fights back.
+        ///
+        /// Desperation lowers the ordinary bar all the way to 0.5x on the reasoning that
+        /// refusing is not the safe option. That is true of a raid at the door and true of
+        /// hunting a hare. It is false of walking up to a cougar that is not attacking anybody:
+        /// there refusing *is* the safe option, and losing costs colonists, which makes the
+        /// hunger that justified the risk permanently worse.
+        ///
+        /// Twice now a cougar has cost a colony. Run 36 took one at 1.57x and had a colonist
+        /// mauled. Run 56 declined the same animal twice against a 1.5x bar, took it at 1.13x
+        /// once hunger had lowered the bar to 1.1x, and lost two colonists to the revenge two
+        /// days later — by which time the colony was fighting at 0.44x, because the first
+        /// mauling had already put people on the floor. A marginal ratio is worse than it looks:
+        /// the hunt is judged at today's strength and the revenge arrives at tomorrow's.
+        ///
+        /// Genuine starvation keeps its own door in <see cref="LastResortWarranted"/>, which
+        /// takes the least dangerous animal on the map when nothing safe is left.
+        /// </summary>
+        public const float DangerousPreyFloor = 1.5f;
+
+        /// <summary>Strength needed before starting a fight with prey of this kind.</summary>
+        public static float RequiredRatio(bool preyFightsBack, float desperation, float desperateRatio)
+        {
+            float d = desperation < 0f ? 0f : (desperation > 1f ? 1f : desperation);
+            float floor = preyFightsBack ? DangerousPreyFloor : desperateRatio;
+            return ComfortableRatio + (floor - ComfortableRatio) * d;
+        }
+
+        /// <summary>Whether this colony should start that fight.</summary>
+        public static bool WorthHunting(float colonyStrength, float threat, bool preyFightsBack,
+                                        float desperation, float desperateRatio)
+        {
+            if (threat <= 0f) return true;
+            return colonyStrength >= threat * RequiredRatio(preyFightsBack, desperation, desperateRatio);
+        }
     }
 }
