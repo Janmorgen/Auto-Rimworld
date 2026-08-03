@@ -40,7 +40,19 @@ namespace AutoColony.Rooms
                     var room = planned.Center.GetRoom(map);
                     if (room == null || room.TouchesMapEdge || room.PsychologicallyOutdoors) continue;
 
-                    int space = Stage(RoomStatDefOf.Space, room.GetStat(RoomStatDefOf.Space));
+                    // Space as the shell scored it, impressiveness as it stands now.
+                    //
+                    // The two are not alike. Impressiveness genuinely changes as a room is
+                    // furnished and kept, so the live reading is the true one. Space does not —
+                    // the walls are where they were put — but its *measurement* drops as
+                    // furniture goes in, because cells under an impassable building leave the
+                    // room's region. Judged live, a kitchen is marked down for owning a stove
+                    // and a workshop for owning its benches, which is the opposite of what this
+                    // term is for. Measured in run 53: a 7x7 kitchen rated average-sized when
+                    // its walls closed and rather tight once the stove was in.
+                    int space = planned.shellSpaceStage >= 0
+                        ? planned.shellSpaceStage
+                        : Stage(RoomStatDefOf.Space, room.GetStat(RoomStatDefOf.Space));
                     int impressiveness = Stage(RoomStatDefOf.Impressiveness,
                                                room.GetStat(RoomStatDefOf.Impressiveness));
 

@@ -69,6 +69,19 @@ namespace AutoColony
         public int height = 7;
         public RoomRole role;
         public bool wallsQueued;
+
+        /// <summary>
+        /// The Space band the room scored when its walls closed, before any furniture went in.
+        ///
+        /// Space is decided by the walls and nothing else, but the *measurement* is not: cells
+        /// under an impassable building leave the room's region, so a furnished room reads
+        /// smaller than the shell that was built. A 7x7 kitchen rated average-sized empty and
+        /// rather tight once it held a stove and a butcher table — and judging it live would
+        /// mark it down for owning the equipment it exists for.
+        ///
+        /// -1 until the room has been finished and rated once.
+        /// </summary>
+        public int shellSpaceStage = -1;
         public bool furnitureQueued;
         public int doorX;
         public int doorZ;
@@ -113,6 +126,7 @@ namespace AutoColony
             Scribe_Values.Look(ref width, "width", 7);
             Scribe_Values.Look(ref height, "height", 7);
             Scribe_Values.Look(ref role, "role", RoomRole.Storage);
+            Scribe_Values.Look(ref shellSpaceStage, "shellSpaceStage", -1);
             Scribe_Values.Look(ref wallsQueued, "wallsQueued", false);
             Scribe_Values.Look(ref furnitureQueued, "furnitureQueued", false);
             Scribe_Values.Look(ref doorX, "doorX", 0);

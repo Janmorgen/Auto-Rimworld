@@ -67,6 +67,12 @@ namespace AutoColony.Rooms
                     break;
 
                 case "Kitchen":
+                    // Wider than the default, because a kitchen holds more than its name
+                    // suggests: a stove, a butcher table and a butcher spot, all of them
+                    // impassable. Measured at 7x7 in run 53 — average-sized empty, rather tight
+                    // once furnished, which is under the floor its own role asks for.
+                    p.width = 9;
+                    p.height = 7;
                     p.partner = "Storage";
                     p.partnerAffinity = 1.2f;
                     break;

@@ -103,6 +103,24 @@ cleanliness by curve, and are therefore work-priority telemetry rather than buil
 - `ResearchSpeedFactor` — 0.75× at cleanliness −5, 1.15× at +1
 - `FoodPoisonChance` — 5% at −5, 0% at −2
 
+### Furniture shrinks the Space *measurement*
+
+Cells under an impassable building leave the room's region, so a furnished room measures
+smaller than the shell that was built. Measured in run 53:
+
+| Room | Shell | Furnished |
+|---|---|---|
+| Kitchen 7×7 (stove + butcher table) | `average-sized` 35.0 | **`rather tight`** |
+| Research 9×7 (3×2 bench) | `average-sized` 49.0 | `average-sized` |
+
+The walls did not move. Anything judging a room on space has to decide which question it is
+asking: *how big was it built* (measure the shell, before furniture) or *how much floor is left*
+(measure it live). Judged live, a kitchen is marked down for owning a stove — so the director
+records the shell's band at completion and judges against that.
+
+It also means a 7×7 is not big enough for a room holding two or three impassable buildings. The
+Kitchen profile went to 9×7 on this evidence.
+
 ### Measured room sizes
 
 | Room | Interior | Space |

@@ -2616,6 +2616,10 @@ namespace AutoColony.Modules
                     impressiveness,
                     WhatCleanlinessBought(room, planned.role)));
 
+                // Kept for the census, which samples as the colony runs and would otherwise
+                // measure the room through its own furniture.
+                planned.shellSpaceStage = BandIndex(RoomStatDefOf.Space, space);
+
                 JudgeTheRoom(planned, room, space, spaceBand, impressiveness, impressivenessBand);
             }
             catch (Exception) { }
