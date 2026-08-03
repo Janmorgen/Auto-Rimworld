@@ -65,6 +65,20 @@ which does fire.
 So the room response is useful only for a mid-sized colony that has slack and is grieving. That
 is a real case, and it is not the case that kills colonies.
 
+## Mood collapse also produces violence
+
+Run 57 died on day 25 having taken no predator hunts at all — the floor in `HuntPolicy` worked,
+zero revenges — and its epoch began with `Berserk: Stumpy`. A colonist in a mental break is not
+merely a colonist who has stopped working; berserk attacks the others. In a colony of three
+that is a second attacker inside the walls.
+
+So the spiral has a shorter path than "deaths cost mood, mood costs labour, lost labour costs
+lives". It also runs: mood costs a break, the break costs injuries, injuries cost mood. Nothing
+external has to arrive for the colony to hurt itself.
+
+Worth knowing before designing a response, because it changes what "in time" means. A rec room
+answers boredom over days. A berserk colonist happens in an afternoon.
+
 ## Where a fix would actually go
 
 Not another builder. The colonies dying here need *labour*, and the levers that do not need it
