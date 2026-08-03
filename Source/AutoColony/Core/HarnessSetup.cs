@@ -319,7 +319,13 @@ namespace AutoColony
             {
                 if ((centre - origin).LengthHorizontal < minDist) continue;
 
-                var candidate = CellRect.CenteredOn(centre, width / 2, height / 2);
+                // Built from the corner rather than with CenteredOn, whose three-argument form
+                // takes the full width and height and was being handed half of each — so every
+                // 9x7 room was a 4x3 box with a two-cell interior, and every 7x7 was a 3x3 whose
+                // one interior cell the door opened straight out of. That is why the sizes came
+                // back identical on two different maps: they were never about the map.
+                var candidate = new CellRect(centre.x - width / 2, centre.z - height / 2,
+                                             width, height);
                 if (!candidate.InBounds(map)) continue;
 
                 // One cell of clearance all round, so neighbours do not share a wall and a
@@ -380,6 +386,16 @@ namespace AutoColony
             public bool markPrison;
 
             /// <summary>
+            /// Whether the beds get assigned to somebody.
+            ///
+            /// A bedroom is not a room with a bed in it, it is a room with somebody's bed in it.
+            /// `RoomRoleWorker_Bedroom` and `_Barracks` both count *owned* beds, so a room full
+            /// of unclaimed ones is a plain Room — which is also the real reason the planner's
+            /// finished bedrooms read as Room, a thing previously put down to pending blueprints.
+            /// </summary>
+            public bool assignBeds;
+
+            /// <summary>
             /// Whether the interior is zoned for storage.
             ///
             /// A storeroom is not shelves in a room, it is a room things are *stored* in — the
@@ -403,12 +419,12 @@ namespace AutoColony
             var plans = new List<RoomPlan>();
 
             // One bed is a bedroom. This is the good case and the reference for the next one.
-            plans.Add(Plan("Bedroom", "Bedroom", 7, 7, new[] { "Bed", "TorchLamp" }));
+            plans.Add(Plan("Bedroom", "Bedroom", 7, 7, new[] { "Bed", "TorchLamp" }, assign: true));
 
             // Three beds in the same room is not a fuller bedroom, it is a barracks — a strictly
             // worse mood curve, -7 at the floor against -2. Built deliberately to show the pair.
             plans.Add(Plan("Barracks (3 beds)", "Barracks", 9, 7,
-                           new[] { "Bed", "Bed", "Bed", "TorchLamp" }));
+                           new[] { "Bed", "Bed", "Bed", "TorchLamp" }, assign: true));
 
             // A table and chairs. Chairs matter: a table alone is furniture, the room only reads
             // as somewhere to eat once there is somewhere to sit.
@@ -456,7 +472,8 @@ namespace AutoColony
         }
 
         static RoomPlan Plan(string label, string expected, int w, int h, string[] contents,
-                             bool medical = false, bool prison = false, bool stockpile = false)
+                             bool medical = false, bool prison = false, bool stockpile = false,
+                             bool assign = false)
         {
             var p = new RoomPlan();
             p.label = label;
@@ -467,6 +484,7 @@ namespace AutoColony
             p.markMedical = medical;
             p.markPrison = prison;
             p.stockpile = stockpile;
+            p.assignBeds = assign;
             return p;
         }
 
@@ -526,12 +544,14 @@ namespace AutoColony
                 if (thing != null) placed.Add(thing);
             }
 
+            int nextOwner = 0;
             for (int i = 0; i < placed.Count; i++)
             {
                 var bed = placed[i] as Building_Bed;
                 if (bed == null) continue;
                 if (plan.markPrison) MarkAsPrisonBed(bed);
                 else if (plan.markMedical) bed.Medical = true;
+                else if (plan.assignBeds) AssignBed(map, bed, nextOwner++);
             }
 
             if (plan.stockpile) ZoneAndStock(map, interior);
@@ -554,6 +574,25 @@ namespace AutoColony
                 if (cell.InBounds(map) && cell.GetEdifice(map) == null) return cell;
 
             return rect.CenterCell;
+        }
+
+        /// <summary>
+        /// Gives a bed an owner, which is what turns a room with a bed into a bedroom.
+        ///
+        /// The assignment has to go through the bed's own comp rather than being written onto
+        /// the pawn: ownership is held on both sides and the role worker reads the bed's.
+        /// </summary>
+        static void AssignBed(Map map, Building_Bed bed, int which)
+        {
+            var colonists = map.mapPawns.FreeColonists;
+            if (colonists.Count == 0) return;
+
+            var pawn = colonists[which % colonists.Count];
+            var comp = bed.GetComp<CompAssignableToPawn>();
+            if (comp != null) comp.TryAssignPawn(pawn);
+
+            var room = bed.GetRoom();
+            if (room != null) room.Notify_BedTypeChanged();
         }
 
         /// <summary>
@@ -594,6 +633,17 @@ namespace AutoColony
             {
                 for (int r = 0; r < rotations.Length; r++)
                 {
+                    // The whole footprint has to be inside the room, not just the cell it is
+                    // anchored on. A research bench is three by two and a stove two by two, and
+                    // GenSpawn will happily stand one across the wall line — an edifice spawned
+                    // onto a wall *replaces* the wall, so the room quietly opened onto the map
+                    // and read as outdoors with every stat at its roomless default. That is what
+                    // singled out Research, Workshop and Kitchen: they are the rooms whose
+                    // contents are bigger than one cell.
+                    var footprint = GenAdj.OccupiedRect(cell, rotations[r], def.size);
+                    if (!interior.Contains(new IntVec3(footprint.minX, 0, footprint.minZ)) ||
+                        !interior.Contains(new IntVec3(footprint.maxX, 0, footprint.maxZ))) continue;
+
                     if (!GenSpawn.CanSpawnAt(def, cell, map, rotations[r])) continue;
 
                     var thing = ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
@@ -613,12 +663,31 @@ namespace AutoColony
             string actual = room.Role != null ? room.Role.defName : "none";
             string mark = actual == expected ? "as expected" : "EXPECTED " + expected;
 
-            return string.Format("{0} ({1}) — {2} cells, outdoors {3}, openRoof {4}, edge {5} — " +
-                                 "space {6:0.0}, beauty {7:0.0}, cleanliness {8:0.00}, " +
-                                 "impressiveness {9:0.0}",
+            // What is standing in there now, rather than what was placed. The two disagreed —
+            // rooms reported four items placed and held a torch — and until that is measured at
+            // the same moment as the verdict there is no telling which half is wrong.
+            int buildings = 0, ownedBeds = 0;
+            foreach (var roomCell in room.Cells)
+            {
+                var things = roomCell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    if (things[i] == null || things[i].Position != roomCell) continue;
+                    if (things[i].def.category != ThingCategory.Building) continue;
+                    buildings++;
+                    var bed = things[i] as Building_Bed;
+                    if (bed != null && bed.OwnersForReading != null &&
+                        bed.OwnersForReading.Count > 0) ownedBeds++;
+                }
+            }
+
+            return string.Format("{0} ({1}) — {2} cells, standing {6} buildings ({7} owned beds), " +
+                                 "outdoors {3}, openRoof {4}, edge {5} — " +
+                                 "space {8:0.0}, beauty {9:0.0}, cleanliness {10:0.00}, " +
+                                 "impressiveness {11:0.0}",
                                  actual, mark,
                                  room.CellCount, room.PsychologicallyOutdoors,
-                                 room.OpenRoofCount, room.TouchesMapEdge,
+                                 room.OpenRoofCount, room.TouchesMapEdge, buildings, ownedBeds,
                                  room.GetStat(RoomStatDefOf.Space),
                                  room.GetStat(RoomStatDefOf.Beauty),
                                  room.GetStat(RoomStatDefOf.Cleanliness),

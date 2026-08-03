@@ -162,13 +162,17 @@ namespace AutoColony
         /// </summary>
         static void Showcase(Map map)
         {
+            // Cleared before the freezer, not after. Calling it afterwards threw away the one
+            // reservation that already existed, so a showcase room was sited straight on top of
+            // the freezer and its ClearCell took the cooler out of the wall.
+            HarnessSetup.ForgetRects();
+
             string freezer = HarnessSetup.BuildStockedFreezer(map);
             Chronicle.Record(ChronicleCategory.System, "SCENARIO freezer: " + freezer);
 
             var origin = HarnessSetup.ColonistOrigin(map);
             var plans = HarnessSetup.Showcase();
             showcaseCentres.Clear();
-            HarnessSetup.ForgetRects();
 
             // Packed in around the colonists rather than flung across the map.
             //
@@ -181,7 +185,7 @@ namespace AutoColony
             for (int i = 0; i < plans.Count; i++)
             {
                 string report;
-                var centre = HarnessSetup.BuildRoom(map, origin, plans[i], NearestRoom, 45, out report);
+                var centre = HarnessSetup.BuildRoom(map, origin, plans[i], NearestRoom, 70, out report);
                 showcaseCentres.Add(centre);
                 Chronicle.Record(ChronicleCategory.System, "SCENARIO room: " + report);
             }
