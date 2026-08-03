@@ -29,6 +29,47 @@ namespace AutoColony
         /// behaviour, then adjusted for what is actually happening: rain suppresses fire, and
         /// something already burning is not a forecast but a fact.
         /// </summary>
+        /// <summary>
+        /// The risk a *permanent* decision should be made against.
+        ///
+        /// <see cref="Assess"/> is a reading of right now, and right now is the wrong timescale
+        /// for choosing what a wall is made of. It multiplies the danger away by current
+        /// rainfall, which is correct for "should somebody go and beat that fire out" and
+        /// nonsense for "will this building be standing in a month" — rain today says nothing
+        /// about next Jugust.
+        ///
+        /// Run 65 is the case. Seven rooms queued over six days on a permanent-summer map, and
+        /// the recorded risk was 0.00 or 0.10 every single time, so the walls went up in wood
+        /// and steel. On day 11 a raid started one fire that reached a hundred and thirty in
+        /// nine hours at 36C and killed the colony. The director never saw a fire risk above a
+        /// tenth on a map whose biome is called permanent summer.
+        ///
+        /// So the rain discount is dropped and the heat premium kept. Everything else — the
+        /// game's own danger figure, live fires, raiders, unroofed power in the wet — still
+        /// applies, because those are facts about the site rather than about the hour.
+        /// </summary>
+        public static float Lasting(Map map, ColonyState state)
+        {
+            float now = Assess(map, state);
+
+            float baseline = 0.3f;
+            if (map != null && map.fireWatcher != null)
+                baseline = AcMath.Clamp01(map.fireWatcher.FireDanger);
+
+            // Undo the weather. A wall outlives the shower that was falling when it was ordered.
+            if (map != null && map.weatherManager != null)
+            {
+                float rain = AcMath.Clamp01(map.weatherManager.RainRate);
+                if (rain > 0f) baseline = AcMath.Max(baseline, AcMath.Clamp01(baseline + rain * 0.5f));
+            }
+
+            // A map that runs hot is a map that burns, whatever today is doing.
+            if (map != null && map.mapTemperature != null && map.mapTemperature.OutdoorTemp > 25f)
+                baseline += 0.15f;
+
+            return AcMath.Clamp01(AcMath.Max(now, baseline));
+        }
+
         public static float Assess(Map map, ColonyState state)
         {
             if (map == null) return 0.3f;

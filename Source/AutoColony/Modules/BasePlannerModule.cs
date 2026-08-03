@@ -2047,7 +2047,9 @@ namespace AutoColony.Modules
             // Material is a reading of the conditions, not a fixed taste. Storage leans harder
             // toward stone than the rest: it is where the colony's value ends up, so a fire
             // there is not an inconvenience but the loss of everything worth hauling indoors.
-            float risk = FireRisk.Assess(map, ctx.state);
+            // What the walls are made of outlives the weather that was falling when they were
+            // ordered, so this asks for the lasting risk rather than the current one.
+            float risk = FireRisk.Lasting(map, ctx.state);
             float stonePref = room.role == RoomRole.Storage
                 ? FireRisk.StorageStonePreference(ctx, risk)
                 : FireRisk.StonePreference(ctx, risk);
