@@ -1815,6 +1815,19 @@ namespace AutoColony.Modules
             var casualty = FirstDownedColonist(ctx);
             var origin = casualty != null ? casualty.Position : ctx.Origin;
 
+            // One is enough, and this path had no way of knowing that.
+            //
+            // The room branch above checks ExistingCount and skips a room that already has a
+            // spot. This branch checked nothing, and it is the branch taken whenever anything
+            // is burning — `avoidRooms` skips the rooms entirely then. So a fire plus a casualty
+            // meant one more spot every pass: run 64 went from five beds to sixteen in twelve
+            // in-game hours on day 14, with three colonists, and stayed there.
+            //
+            // Silently, too. NoteSleepingSpot guards on a module-wide bool set once ever, so
+            // placements two through eleven wrote nothing at all — the same flag-hides-the-rest
+            // shape as reportedNoShellMaterial, fixed elsewhere in this codebase earlier today.
+            if (SpotAlreadyNear(ctx.map, origin, def)) return false;
+
             foreach (var cell in GenRadial.RadialCellsAround(origin, 12, true))
             {
                 if (!cell.InBounds(ctx.map)) continue;
@@ -1839,12 +1852,36 @@ namespace AutoColony.Modules
             return null;
         }
 
-        bool sleepingSpotNoted;
+        /// <summary>
+        /// Whether somewhere to lie down already exists within reach of a casualty.
+        ///
+        /// Any bed counts, not just a spot: the point is that the person on the floor has
+        /// somewhere to be carried to, and a real bed answers that better than another patch of
+        /// marked ground.
+        /// </summary>
+        static bool SpotAlreadyNear(Map map, IntVec3 origin, ThingDef spotDef)
+        {
+            foreach (var cell in GenRadial.RadialCellsAround(origin, 12, true))
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var bed = things[i] as Building_Bed;
+                    if (bed != null && bed.Spawned && bed.ForColonists && !bed.Medical) return true;
+                }
+            }
+            return false;
+        }
+
+
 
         void NoteSleepingSpot(DirectorContext ctx, string where)
         {
-            if (sleepingSpotNoted) return;
-            sleepingSpotNoted = true;
+            // Reported every time, because with the placement guarded above each one is a real
+            // event rather than a repeat. The flag this used to carry made eleven placements
+            // look like one, which is how the count reached sixteen beds unnoticed.
 
             Chronicle.Record(ChronicleCategory.Health, string.Format(
                 "{0} down and no bed would go up — laid a sleeping spot in {1}. It costs nothing " +
