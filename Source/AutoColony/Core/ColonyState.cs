@@ -31,6 +31,24 @@ namespace AutoColony
         public float minMood = 1f;
 
         /// <summary>
+        /// Colonists who are actually going hungry — <c>Need_Food.Starving</c>, the game's own
+        /// definition, which is the point at which malnutrition starts accruing.
+        ///
+        /// Nothing measured this before, which is why the score could never see the way most of
+        /// these colonies end. Run 56 finished with Food security 1.00, 8.8 days in the larder,
+        /// and its last colonist on the floor at NeedFood 44.0; run 59 the same with 9.4 days.
+        /// "Is there food" and "is anybody eating" only diverge when the colony is dying, and
+        /// only the first was ever asked.
+        /// </summary>
+        public int colonistsStarving;
+
+        /// <summary>
+        /// The hungriest colonist's food need, 0 to 1. The average would hide exactly the person
+        /// in trouble, for the same reason it does with mood — see <see cref="minMood"/>.
+        /// </summary>
+        public float minFood = 1f;
+
+        /// <summary>
         /// Couples among the colonists, counted once per pair.
         ///
         /// Two people who share a bed and are not given one carry
@@ -491,6 +509,13 @@ namespace AutoColony
                     catch (Exception) { }
                 }
 
+                if (p.needs != null && p.needs.food != null)
+                {
+                    if (p.needs.food.Starving) s.colonistsStarving++;
+                    float level = p.needs.food.CurLevelPercentage;
+                    if (level < s.minFood) s.minFood = level;
+                }
+
                 if (p.needs != null && p.needs.mood != null)
                 {
                     float mood = p.needs.mood.CurLevel;
@@ -509,6 +534,7 @@ namespace AutoColony
             s.avgMood = moodCount > 0f ? moodSum / moodCount : 0.5f;
             s.avgHealth = s.colonists > 0 ? healthSum / s.colonists : 1f;
             if (moodCount == 0f) s.minMood = 0.5f;
+            if (s.colonists == 0) s.minFood = 1f;
 
             s.prisoners = map.mapPawns.PrisonersOfColonyCount;
 
@@ -846,6 +872,8 @@ namespace AutoColony
             m.colonistsInMentalState = colonistsInMentalState;
             m.avgMood = avgMood;
             m.minMood = minMood;
+            m.minFood = minFood;
+            m.colonistsStarving = colonistsStarving;
             m.avgHealth = avgHealth;
             m.daysOfFood = daysOfFood;
             m.outdoorTemperature = outdoorTemperature;

@@ -314,13 +314,26 @@ namespace AutoColony.Modules
             // those over weeks and of an empty larder in days.
             bool starving = s.daysOfFood < 1f;
 
+            // Somebody going hungry with a full larder is a different emergency, and answering
+            // it the same way makes it worse.
+            //
+            // Seven colonies have died with Food security at or near 1.00 — run 56 with 8.8
+            // days in store and its last colonist on the floor, run 59 with 9.4. The larder was
+            // never the problem: the food was not reaching the person. Hunting harder there
+            // spends the hands that would have carried a meal over, so this raises the two work
+            // types that actually close the distance — feeding a patient is a Doctor job, and
+            // food nobody has hauled into a stockpile is food nobody can be fed from.
+            bool notReachingThem = s.colonistsStarving > 0 && s.daysOfFood >= 1f;
+
             // Emergencies first: fire and untreated casualties outrank everything.
             // Only fires that could reach the colony justify dropping everything; a distant
             // wildfire is not worth a work-hour.
             Need("Firefighter", s.firesNearBase > 0 ? 6f : 1f);
             Need("Patient", 1f);
             Need("PatientBedRest", 1f);
-            Need("Doctor", s.colonistsDowned > 0 ? 4f : (s.avgHealth < 0.9f ? 2f : 1f));
+            Need("Doctor", notReachingThem ? 5f
+                         : s.colonistsDowned > 0 ? 4f
+                         : (s.avgHealth < 0.9f ? 2f : 1f));
 
             // Sowing in a season nothing grows in is work that produces nothing.
             //
@@ -357,7 +370,9 @@ namespace AutoColony.Modules
             // rather than tidy, so it outranks ordinary hauling as the map dries out.
             float fireRisk = FireRisk.Assess(ctx.map, s);
             float outdoorPressure = s.itemsOutdoors > 0 ? AcMath.Clamp01(s.itemsOutdoors / 40f) : 0f;
-            Need("Hauling", 1.1f + fireRisk * outdoorPressure * 2f);
+            // Hauling is normally kept off the top of the table on purpose, but food nobody has
+            // carried into a stockpile is food a hungry colonist cannot be fed from.
+            Need("Hauling", (notReachingThem ? 4f : 1.1f) + fireRisk * outdoorPressure * 2f);
             Need("Smithing", 1f);
             // Tailoring rose with the *cloth pile*, which says how much raw material is spare
             // and nothing about whether anyone is cold. The apparel work added a bench, a bill,

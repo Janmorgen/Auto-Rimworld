@@ -25,6 +25,12 @@ namespace AutoColony
         /// three a contented pair hides someone at 0.05 completely — run 58 sat at avgMood 0.48
         /// with a colonist carrying MySonDied at -20 who went berserk.</summary>
         public float minMood;
+
+        /// <summary>The hungriest colonist's food need, 0 to 1.</summary>
+        public float minFood;
+
+        /// <summary>Colonists the game itself calls starving.</summary>
+        public int colonistsStarving;
         public float avgHealth;
 
         // sustenance and economy
