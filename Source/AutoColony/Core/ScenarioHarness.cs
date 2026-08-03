@@ -25,6 +25,8 @@ namespace AutoColony
     ///                    each reported against what it was expected to classify as
     ///   research         fed, housed and supplied, so the only thing left to watch is whether
     ///                    the planner gets a bench into a research room
+    ///   casualty         as `research`, and then a colonist put on the floor with nothing
+    ///                    burning — the case that killed run 38 four times over
     ///
     /// The last one is the mirror of `starve` and `strip`, and exists for the same reason in
     /// reverse. Those two take things away to see what the colony does without them; this hands
@@ -105,6 +107,7 @@ namespace AutoColony
                 else if (scenario == "heatwave") FireCondition(map, "HeatWave");
                 else if (scenario == "eclipse") FireCondition(map, "SolarFlare");
                 else if (scenario == "corpse") KillAColonist(map);
+                else if (scenario == "casualty") { ClearTheWayToResearch(map); DownAColonist(map); }
                 else if (scenario == "manhunters") FireIncident(map, "ManhunterPack", 400f);
                 else if (scenario == "infestation") FireIncident(map, "Infestation", 500f);
                 else if (scenario == "starve") RemoveAllFood(map);
@@ -472,6 +475,61 @@ namespace AutoColony
         /// Leaves a colonist's corpse on the ground — the state that cost a real colony a
         /// standing -10 mood penalty for eleven days because nothing ever buried anyone.
         /// </summary>
+        /// <summary>
+        /// Puts a colonist on the floor, alive, far from anyone, and leaves them there.
+        ///
+        /// The gap this tests killed run 38: every one of its four deaths was a pawn who was
+        /// downed and then died rather than being killed outright, with five days of food in
+        /// the larder they could not walk to. Evacuation only ran when something was burning,
+        /// so nothing ever carried them anywhere. The backstop that now answers that has never
+        /// been seen work, because a colony has to have a casualty first and the `downed`
+        /// scenario spawns a downed *stranger*, which is a different code path entirely.
+        ///
+        /// Damaged rather than hediff-ed, because being downed by injury is the state the
+        /// colony actually meets. Kept off the last colonist: a colony of one that goes down is
+        /// lost by definition and proves nothing about rescuing.
+        /// </summary>
+        static void DownAColonist(Map map)
+        {
+            var colonists = map.mapPawns.FreeColonists;
+            if (colonists.Count <= 2)
+            {
+                Chronicle.Record(ChronicleCategory.System,
+                    "SCENARIO casualty: too few colonists — somebody has to be left standing to " +
+                    "do the carrying, or this tests nothing");
+                return;
+            }
+
+            var victim = colonists[colonists.Count - 1];
+            string name = victim.LabelShortCap;
+
+            // Beaten down rather than shot: blunt damage to a limb drops a pawn without the
+            // bleeding that would make this a test of whether they die before anyone arrives.
+            int guard = 0;
+            while (!victim.Downed && !victim.Dead && guard++ < 40)
+            {
+                BodyPartRecord part = null;
+                foreach (var candidate in victim.health.hediffSet.GetNotMissingParts())
+                {
+                    if (candidate != null && candidate.def == BodyPartDefOf.Leg) { part = candidate; break; }
+                }
+                victim.TakeDamage(new DamageInfo(DamageDefOf.Blunt, 8f, 0f, -1f, null, part));
+            }
+
+            if (!victim.Downed)
+            {
+                Chronicle.Record(ChronicleCategory.System,
+                    "SCENARIO casualty: could not put " + name + " down in 40 blows");
+                return;
+            }
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SCENARIO casualty: {0} is down at {1} and nothing is burning — whether anybody " +
+                "comes for them is the director's, and an hour on the floor is the point at " +
+                "which it should stop waiting",
+                name, victim.Position));
+        }
+
         static void KillAColonist(Map map)
         {
             var colonists = map.mapPawns.FreeColonists;
