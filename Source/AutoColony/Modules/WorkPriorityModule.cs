@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AutoColony.Learning;
 using RimWorld;
@@ -35,8 +36,19 @@ namespace AutoColony.Modules
 
         readonly Dictionary<string, float> needs = new Dictionary<string, float>();
 
-        /// <summary>The best Construction level anybody in the colony has.</summary>
+        /// <summary>The best level anybody in the colony has, per skill that matters here.</summary>
         int bestConstruction;
+        int bestMedicine;
+
+        /// <summary>
+        /// Whether the colony is past the point of preferring the right person for the job.
+        ///
+        /// Two people on the floor, or a threat at the door, and the question stops being "who
+        /// is best at this" and becomes "who is free". A colony of three cannot afford to leave
+        /// a casualty untended because the good doctor is busy — the second-best pair of hands
+        /// beats the best pair that is elsewhere.
+        /// </summary>
+        bool desperate;
 
         /// <summary>
         /// Construction below this botches often enough to be a net loss.
@@ -50,44 +62,108 @@ namespace AutoColony.Modules
         void NoteTheBestBuilder(DirectorContext ctx)
         {
             bestConstruction = 0;
+            bestMedicine = 0;
+
             var all = ctx.state.allColonists;
             for (int i = 0; i < all.Count; i++)
             {
                 var pawn = all[i];
                 if (pawn == null || pawn.skills == null) continue;
-                var skill = pawn.skills.GetSkill(SkillDefOf.Construction);
-                if (skill != null && !skill.TotallyDisabled && skill.Level > bestConstruction)
-                    bestConstruction = skill.Level;
+                if (pawn.Downed || pawn.Dead) continue;      // not available to do anything
+
+                bestConstruction = Best(bestConstruction, pawn, SkillDefOf.Construction);
+                bestMedicine = Best(bestMedicine, pawn, SkillDefOf.Medicine);
+            }
+
+            var s = ctx.state;
+            desperate = s.colonistsDowned >= 2 || s.hostilesNearBase > 0 || s.firesNearBase > 0;
+        }
+
+        static int Best(int sofar, Pawn pawn, SkillDef def)
+        {
+            var skill = pawn.skills.GetSkill(def);
+            if (skill == null || skill.TotallyDisabled) return sofar;
+            return skill.Level > sofar ? skill.Level : sofar;
+        }
+
+        /// <summary>
+        /// How this colonist's score for a work type is adjusted against the rest of the colony.
+        ///
+        /// Everything else here scores a colonist against their *own* other options and never
+        /// against anybody else's, so a need pushes a work type up every list at once —
+        /// including the person least able to do it. That is right for hauling and wrong
+        /// wherever skill decides whether the work helps or hurts.
+        ///
+        /// Three cases, and the third is why this is not simply "prefer the best":
+        ///
+        ///  - **Construction.** A botched build eats the materials and yields nothing, so a poor
+        ///    builder turns wood into rubble. Demoted below level 4 when somebody better exists.
+        ///
+        ///  - **Doctor.** Tending quality decides whether a wound heals or festers, so the best
+        ///    medic is preferred — but only while there is slack. With two colonists down, or a
+        ///    threat at the door, the second-best pair of hands beats the best pair that is
+        ///    elsewhere, and the demotion lifts entirely.
+        ///
+        ///  - **Patient.** Not a skill at all. A hurt colonist has to *accept* treatment, and
+        ///    one who is seriously hurt has nothing more important to do than lie still. This
+        ///    was a flat 1.0 for everybody, hurt or not, which is the same as telling a bleeding
+        ///    colonist that resting is as urgent as hauling.
+        /// </summary>
+        float SkillFit(Pawn pawn, WorkTypeDef wt)
+        {
+            switch (wt.defName)
+            {
+                case "Patient": return PatientUrgency(pawn, 6f);
+                case "PatientBedRest": return PatientUrgency(pawn, 4f);
+                case "Construction": return Demote(pawn, SkillDefOf.Construction, bestConstruction, false);
+                case "Doctor": return Demote(pawn, SkillDefOf.Medicine, bestMedicine, true);
+                default: return 1f;
             }
         }
 
         /// <summary>
-        /// How much to hold this colonist back from building, given who else could do it.
-        ///
-        /// Everything here scores a colonist against their *own* other options and never against
-        /// the rest of the colony, so when blueprints are pending the need pushes Construction up
-        /// everybody's list at once — including the person who cannot lay a wall without
-        /// wasting it. Watched on two colonies in a row as "Construction botched" floating over
-        /// a half-built room, on a map where the shelter was urgent and the wood was finite.
-        ///
-        /// A demotion rather than a ban. RimWorld works down the priority list, so a shaky
-        /// builder still builds when the good one is asleep, hurt, or busy — which is exactly
-        /// the fallback a three-person colony needs and a ban would remove.
+        /// How much a colonist needs to be a patient right now, which is about their body and
+        /// not their skills.
         /// </summary>
-        float BuilderPenalty(Pawn pawn, WorkTypeDef wt)
+        static float PatientUrgency(Pawn pawn, float whenSerious)
         {
-            if (wt.defName != "Construction" || pawn.skills == null) return 1f;
+            try
+            {
+                if (pawn.health == null) return 1f;
 
-            var skill = pawn.skills.GetSkill(SkillDefOf.Construction);
+                // Bleeding or on the floor: nothing else this colonist could be doing matters.
+                if (pawn.Downed || pawn.health.hediffSet.BleedRateTotal > 0.01f) return whenSerious;
+
+                // Wounded and waiting for treatment. Worth putting above ordinary work, not
+                // above everything.
+                if (pawn.health.HasHediffsNeedingTend()) return 2f;
+            }
+            catch (Exception) { }
+            return 1f;
+        }
+
+        /// <summary>
+        /// Holds a colonist back from work somebody else does materially better.
+        ///
+        /// A demotion and never a ban: RimWorld works down the priority list, so the shaky one
+        /// still steps in when the good one is asleep, hurt or busy, which is the fallback a
+        /// three-person colony lives on. And if the best in the colony is shaky too it changes
+        /// nothing, because the work still has to happen.
+        /// </summary>
+        float Demote(Pawn pawn, SkillDef def, int bestInColony, bool liftsWhenDesperate)
+        {
+            if (pawn.skills == null) return 1f;
+            if (liftsWhenDesperate && desperate) return 1f;
+
+            var skill = pawn.skills.GetSkill(def);
             if (skill == null || skill.TotallyDisabled) return 1f;
 
-            // Somebody has to build. If the best in the colony is shaky too, this changes
-            // nothing and the work still gets done by whoever is least bad at it.
-            if (bestConstruction <= ShakyBuilder) return 1f;
+            if (bestInColony <= ShakyBuilder) return 1f;
             if (skill.Level >= ShakyBuilder) return 1f;
 
             return 0.45f;
         }
+
 
         protected override void Act(DirectorContext ctx)
         {
@@ -238,7 +314,7 @@ namespace AutoColony.Modules
                                             + skillW * skill
                                             + passionW * passion
                                             + needW * (need - 1f))
-                              * BuilderPenalty(pawn, wt);
+                              * SkillFit(pawn, wt);
 
                 scored.Add(new KeyValuePair<WorkTypeDef, float>(wt, score));
             }
