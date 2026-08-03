@@ -1260,7 +1260,25 @@ namespace AutoColony.Modules
             for (int trial = wanted; trial >= 9; trial -= 2)
                 if (FindGrazing(ctx, trial, pasture, fence, fenceStuff, gate, gateStuff, out rect))
                 { size = trial; break; }
-            if (size == 0) return;
+
+            // Say so rather than returning quietly. The perimeter check was deliberately made
+            // stricter — a fence has to be buildable on every cell or the pen never closes —
+            // and the cost of that is maps where no site qualifies at all. A silent no-op looks
+            // identical to a feature that is switched off, and the game is meanwhile showing
+            // the player a "Pen needed" alert nobody is answering.
+            if (size == 0)
+            {
+                if (!penSiteNoted)
+                {
+                    penSiteNoted = true;
+                    Chronicle.Record(ChronicleCategory.Build, string.Format(
+                        "wanted a pen for {0} animals and found nowhere to put one — no {1}x{1} " +
+                        "down to 9x9 within 45 cells has a perimeter a fence can be built on and " +
+                        "enough grazing inside it. The game is asking for a pen and the colony " +
+                        "cannot answer", ctx.state.tamedAnimals, wanted));
+                }
+                return;
+            }
 
             // The gate cell is skipped rather than fenced and then gated. A blueprint already
             // standing on the cell makes the gate placement fail, and a pen with no gate is the
@@ -1304,6 +1322,7 @@ namespace AutoColony.Modules
         }
 
         /// <summary>Finds an open, growable patch big enough to be worth fencing.</summary>
+        bool penSiteNoted;
         bool penVerdictGiven;
         bool penFailureNoted;
         int penMarkerStandingSince = -1;
@@ -1656,7 +1675,14 @@ namespace AutoColony.Modules
                     // either one anywhere in the rectangle disqualifies the site outright.
                     if (map.roofGrid.Roofed(cell)) { blocked = true; break; }
                     if (map.zoneManager.ZoneAt(cell) != null) { blocked = true; break; }
-                    if (cell.GetEdifice(map) != null || !cell.Standable(map)) { obstructed++; continue; }
+                    // Trees do not count. A tree is PassThroughOnly, so Standable is false for
+                    // it, and counting that as obstruction rejected every candidate on a jungle
+                    // map — the colony sat under a "Pen needed" alert it could not answer. A
+                    // tree in a paddock is chopped or grazed around; a boulder or a pond is not.
+                    var terrain = cell.GetTerrain(map);
+                    if (cell.GetEdifice(map) != null ||
+                        (terrain != null && terrain.passability != Traversability.Standable))
+                    { obstructed++; continue; }
                     if (map.fertilityGrid.FertilityAt(cell) >= 0.5f) growable++;
                 }
                 if (blocked || cells == 0) continue;
