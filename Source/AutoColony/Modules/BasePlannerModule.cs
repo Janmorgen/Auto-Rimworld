@@ -648,6 +648,7 @@ namespace AutoColony.Modules
 
             MarkPrisonBeds(ctx);
             MarkMedicalBeds(ctx);
+            EnsureAnimalPen(ctx);
 
             // Opening a building project is not how a fire or a raid is answered, and the labour
             // it claims is the labour the emergency needs. Everything already reserved carries on
@@ -1183,6 +1184,108 @@ namespace AutoColony.Modules
                     }
                 }
             }
+        }
+
+        /// <summary>How wide a pen is fenced. Bigger encloses more grazing and costs more fence.</summary>
+        const int PenSize = 13;
+
+        /// <summary>
+        /// Fences an outdoor pen for the colony's animals, with a gate and a marker.
+        ///
+        /// A pen is not a barn and not a room, which is why none of the room machinery fits it:
+        /// the perimeter is fence rather than wall, it is deliberately unroofed, and what makes
+        /// it a pen at all is a marker standing inside the enclosure. Neither the fence nor the
+        /// marker needs research and both are built from whatever is in store.
+        ///
+        /// The reason to prefer it over the barn is that it feeds itself. The grass caught
+        /// inside the perimeter is forage, so a large enough pen carries its animals with no
+        /// hauling and no fodder — where a shed needs somebody to carry food to it every day,
+        /// out of the same larder the colonists eat from. The barn earns its place in a winter
+        /// hard enough to kill the grazing; the pen earns its place the rest of the year.
+        ///
+        /// Built once, when there are animals to hold and nothing holding them.
+        /// </summary>
+        void EnsureAnimalPen(DirectorContext ctx)
+        {
+            if (ctx.state.tamedAnimals <= 0) return;
+
+            var fence = AcDefs.Fence;
+            var marker = AcDefs.PenMarker;
+            if (fence == null || marker == null) return;
+
+            try
+            {
+                if (ctx.map.listerBuildings.AllBuildingsColonistOfDef(marker).Any()) return;
+            }
+            catch (Exception) { return; }
+
+            // Grass, not gravel. The whole advantage of a pen over a shed is what grows inside
+            // it, so a pen fenced across bare rock feeds nobody and costs the same.
+            CellRect rect;
+            if (!FindGrazing(ctx, PenSize, out rect)) return;
+
+            int placed = 0;
+            foreach (var cell in rect.EdgeCells)
+            {
+                if (!cell.InBounds(ctx.map)) continue;
+                if (cell.GetEdifice(ctx.map) != null) continue;
+                if (PlacementUtil.TryPlace(ctx.map, fence, cell, Rot4.North, null)) placed++;
+            }
+            if (placed == 0) return;
+
+            // A gate, or nothing gets in or out — including the animals it is meant to hold.
+            var gateCell = new IntVec3(rect.minX + rect.Width / 2, 0, rect.minZ);
+            if (AcDefs.FenceGate != null)
+                PlacementUtil.TryPlace(ctx.map, AcDefs.FenceGate, gateCell, Rot4.North, null);
+
+            bool marked = false;
+            foreach (var cell in rect.ContractedBy(1))
+            {
+                if (!cell.InBounds(ctx.map)) continue;
+                if (PlacementUtil.TryPlace(ctx.map, marker, cell, Rot4.North, null)) { marked = true; break; }
+            }
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "fencing a {0}x{0} pen at {1} for {2} animals — {3} fence sections and {4}. The " +
+                "grass inside it is their food, which is the difference between a pen and a shed " +
+                "somebody has to carry fodder to every day",
+                PenSize, rect.CenterCell, ctx.state.tamedAnimals, placed,
+                marked ? "a pen marker" : "NO MARKER — the game will not treat it as a pen"));
+            Note("fenced an animal pen");
+        }
+
+        /// <summary>Finds an open, growable patch big enough to be worth fencing.</summary>
+        static bool FindGrazing(DirectorContext ctx, int size, out CellRect rect)
+        {
+            rect = default(CellRect);
+            var map = ctx.map;
+
+            foreach (var centre in GenRadial.RadialCellsAround(ctx.Origin, 45, true))
+            {
+                if ((centre - ctx.Origin).LengthHorizontal < 12) continue;
+
+                var candidate = new CellRect(centre.x - size / 2, centre.z - size / 2, size, size);
+                if (!candidate.InBounds(map)) continue;
+
+                int growable = 0, cells = 0;
+                bool blocked = false;
+                foreach (var cell in candidate)
+                {
+                    cells++;
+                    if (cell.GetEdifice(map) != null || !cell.Standable(map)) { blocked = true; break; }
+                    if (map.roofGrid.Roofed(cell)) { blocked = true; break; }
+                    if (map.zoneManager.ZoneAt(cell) != null) { blocked = true; break; }
+                    if (map.fertilityGrid.FertilityAt(cell) >= 0.5f) growable++;
+                }
+                if (blocked || cells == 0) continue;
+
+                // Mostly grazing, or it is a fence around nothing.
+                if (growable * 2 < cells) continue;
+
+                rect = candidate;
+                return true;
+            }
+            return false;
         }
 
         void MarkPrisonBeds(DirectorContext ctx)

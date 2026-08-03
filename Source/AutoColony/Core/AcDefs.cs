@@ -134,6 +134,19 @@ namespace AutoColony
 
         /// <summary>A flap an animal can pass without leaving the door open to the weather.</summary>
         public static ThingDef AnimalFlap { get { return Thing("AnimalFlap"); } }
+
+        /// <summary>
+        /// Fence, gate and pen marker — the three pieces of an outdoor animal pen.
+        ///
+        /// A pen is not a barn and not a room: fences rather than walls, no roof by design, and
+        /// a marker somewhere inside that tells the game the enclosure is a pen. None of the
+        /// three needs research, all are made from whatever is in store, and the enclosed
+        /// vegetation feeds the animals for nothing — which is the whole reason to build one
+        /// rather than haul fodder to a shed.
+        /// </summary>
+        public static ThingDef Fence { get { return Thing("Fence"); } }
+        public static ThingDef FenceGate { get { return Thing("FenceGate"); } }
+        public static ThingDef PenMarker { get { return Thing("PenMarker"); } }
         public static ThingDef Heater { get { return Thing("Heater"); } }
 
         /// <summary>Stuff candidates for walls/furniture, cheapest and most available first.</summary>
