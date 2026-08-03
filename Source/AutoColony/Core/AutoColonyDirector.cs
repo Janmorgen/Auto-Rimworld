@@ -572,12 +572,44 @@ namespace AutoColony
                     {
                         var corpse = corpses[i] as Corpse;
                         if (corpse != null && corpse.InnerPawn != null &&
-                            corpse.InnerPawn.ThingID == thingId) return "died";
+                            corpse.InnerPawn.ThingID == thingId)
+                            return "died of " + WhatKilled(corpse.InnerPawn);
                     }
                 }
             }
             catch (Exception) { }
             return "gone from the colony — taken, lost or walked out";
+        }
+
+        /// <summary>
+        /// What actually killed a colonist, read off the body.
+        ///
+        /// The chronicle recorded that somebody died and what their health and mood were, and
+        /// never what killed them — so a whole session of deaths read as "health 1.00, downed",
+        /// which is the same line for heatstroke, for starvation and for blood loss.
+        /// `SummaryHealthPercent` measures damaged body parts and ignores hediffs entirely, so
+        /// the three most common ways a colony loses somebody all report perfect health right up
+        /// to the moment they stop.
+        ///
+        /// The lethal hediff is the one to name. Failing that, the worst one on the body, which
+        /// is nearly always the answer anyway.
+        /// </summary>
+        static string WhatKilled(Pawn pawn)
+        {
+            try
+            {
+                if (pawn.health == null || pawn.health.hediffSet == null) return "something unrecorded";
+
+                Hediff worst = null;
+                foreach (var hediff in pawn.health.hediffSet.hediffs)
+                {
+                    if (hediff == null) continue;
+                    if (hediff.CurStage != null && hediff.CurStage.lifeThreatening) return hediff.LabelCap;
+                    if (worst == null || hediff.Severity > worst.Severity) worst = hediff;
+                }
+                return worst != null ? worst.LabelCap : "no injury the body records";
+            }
+            catch (Exception) { return "something unrecorded"; }
         }
 
         /// <summary>Colony vitals are written to the chronicle every two in-game hours.</summary>
