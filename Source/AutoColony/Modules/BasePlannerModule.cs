@@ -1332,7 +1332,29 @@ namespace AutoColony.Modules
             // joy buildings were already being built; they simply had nowhere to go, so they
             // were scattered by a remedy into whichever room had a free cell and never gathered
             // anywhere. This is the room they were always for.
-            if (!layout.HasRoom(RoomRole.Recreation)) options.Add(RoomRole.Recreation.ToString());
+            if (!layout.HasRoom(RoomRole.Recreation))
+            {
+                // And it stops being discretionary when the colony is coming apart.
+                //
+                // The only thing that has ever answered mood here is two work-priority nudges,
+                // and nothing in planning responded to it at all — so the director could name
+                // mood collapse as a cause of death in the postmortem and do nothing about it
+                // while it was happening. Run 54 spent 34% of an epoch with somebody breaking,
+                // carrying MyLoverDied and Pain in the "cannot fix yet" column, and built one
+                // joy building in ten days.
+                //
+                // Grief cannot be remedied and that is exactly why this matters: when the mood
+                // being lost is to things nothing can undo, the answer is to win back what can
+                // be won elsewhere. Recreation is the largest lever the colony owns and the only
+                // one with no downside band.
+                if (MoodIsCollapsing(ctx))
+                {
+                    role = RoomRole.Recreation;
+                    NoteMoodDrivenRecRoom(ctx);
+                    return true;
+                }
+                options.Add(RoomRole.Recreation.ToString());
+            }
 
             // Only once there is a body. An empty tomb is walls the colony paid for and cannot
             // eat, and the mood penalty it answers does not exist until somebody has died.
@@ -2628,6 +2650,33 @@ namespace AutoColony.Modules
                 JudgeTheRoom(planned, room, space, spaceBand, impressiveness, impressivenessBand);
             }
             catch (Exception) { }
+        }
+
+        /// <summary>
+        /// Whether the colony is in the state the postmortem calls mood collapse.
+        ///
+        /// The same two thresholds that decide it after the fact, so there is one definition of
+        /// "coming apart" rather than two that can drift.
+        /// </summary>
+        static bool MoodIsCollapsing(DirectorContext ctx)
+        {
+            var s = ctx.state;
+            if (s.colonists <= 0) return false;
+            if (s.avgMood < Postmortem.MoodCollapse) return true;
+            return s.colonistsInMentalState / (float)s.colonists >= Postmortem.ProlongedBreaking;
+        }
+
+        readonly HashSet<int> moodRecRoomNoted = new HashSet<int>();
+
+        void NoteMoodDrivenRecRoom(DirectorContext ctx)
+        {
+            if (!moodRecRoomNoted.Add(ctx.layout.rooms.Count)) return;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "opening a recreation room ahead of everything else — mood is {0:0.00} with {1} " +
+                "of {2} breaking, and what is being lost is mostly grief, which nothing undoes. " +
+                "Winning mood back somewhere it can be won is the only answer left",
+                ctx.state.avgMood, ctx.state.colonistsInMentalState, ctx.state.colonists));
         }
 
         /// <summary>Rooms whose verdict has been re-read once their furniture actually stood.</summary>

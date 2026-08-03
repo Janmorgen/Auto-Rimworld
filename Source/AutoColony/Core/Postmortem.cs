@@ -63,8 +63,17 @@ namespace AutoColony
         const float ProlongedDowned = 0.25f;
 
         const float ProlongedFire = 0.2f;
-        const float ProlongedBreaking = 0.2f;
-        const float MoodCollapse = 0.3f;
+
+        /// <summary>
+        /// Mood bad enough, or breaking often enough, to be what killed a colony.
+        ///
+        /// Public because the planner now uses the same two numbers to decide a colony is in
+        /// trouble *while* it is happening. They were only ever read at the postmortem, which
+        /// meant the director could name mood collapse as a cause of death and had no response
+        /// to it in life. One definition, used in both places.
+        /// </summary>
+        public const float ProlongedBreaking = 0.2f;
+        public const float MoodCollapse = 0.3f;
 
         /// <summary>
         /// The single most likely cause. Ordered by how directly the evidence implicates it,
