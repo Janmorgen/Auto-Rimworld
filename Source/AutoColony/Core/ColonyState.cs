@@ -626,7 +626,19 @@ namespace AutoColony
                 var grow = zones[i] as Zone_Growing;
                 if (grow == null) continue;
 
-                s.growingCells += grow.Cells.Count;
+                // Only the cells that can actually grow something.
+                //
+                // A roofed cell with no sun lamp over it grows nothing however long it is
+                // tended, and counting it told the food goals the fields were bigger than they
+                // were — "169 of 180 growing cells" reads as solved whether or not half of it
+                // is in the dark under a room somebody built on top of it later.
+                foreach (var cell in grow.Cells)
+                {
+                    if (!cell.InBounds(map)) continue;
+                    if (map.roofGrid != null && map.roofGrid.Roofed(cell) &&
+                        (map.glowGrid == null || map.glowGrid.GroundGlowAt(cell) < 0.51f)) continue;
+                    s.growingCells++;
+                }
 
                 var plant = grow.GetPlantDefToGrow();
                 if (plant != null) crops.Add(plant.defName);

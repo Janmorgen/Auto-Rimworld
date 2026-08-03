@@ -156,9 +156,62 @@ namespace AutoColony.Modules
 
         // ------------------------------------------------------------ growing
 
+        /// <summary>Ground glow a plant needs to grow. Below this it simply sits there.</summary>
+        const float GrowingLight = 0.51f;
+
+        /// <summary>
+        /// Takes back growing cells that have ended up in the dark.
+        ///
+        /// The placement search already refuses cells inside a planned room, and it cannot help,
+        /// because the ordering runs both ways: a field is laid on day nought and a room is
+        /// sited over it a week later, or a room is planned and the field laid across its
+        /// blueprints — which is where "Added zone over zone-incompatible thing Blueprint" in
+        /// the warning log was coming from.
+        ///
+        /// Either way the cells end up roofed, and a roofed cell grows nothing without a
+        /// powered sun lamp over it. The colony then tends a field that cannot produce, and the
+        /// growing-cell count says the food problem is solved.
+        ///
+        /// So this is a maintenance pass rather than a placement rule: whatever the reason a
+        /// cell went dark, it stops being a field.
+        /// </summary>
+        void ReleaseDarkenedFields(DirectorContext ctx)
+        {
+            var map = ctx.map;
+            if (map.zoneManager == null || map.glowGrid == null) return;
+
+            int released = 0;
+            foreach (var zone in map.zoneManager.AllZones)
+            {
+                var g = zone as Zone_Growing;
+                if (g == null) continue;
+
+                var doomed = new List<IntVec3>();
+                foreach (var cell in g.Cells)
+                {
+                    if (!cell.InBounds(map)) continue;
+                    if (!map.roofGrid.Roofed(cell)) continue;          // open sky is fine
+                    if (map.glowGrid.GroundGlowAt(cell) >= GrowingLight) continue;  // lamp over it
+                    doomed.Add(cell);
+                }
+
+                for (int i = 0; i < doomed.Count; i++) { g.RemoveCell(doomed[i]); released++; }
+            }
+
+            if (released > 0)
+            {
+                Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                    "took {0} growing cells back out of the field — they have ended up under a " +
+                    "roof with no sun lamp over them, where nothing grows however long it is tended",
+                    released));
+                Note("released " + released + " darkened growing cells");
+            }
+        }
+
         void EnsureGrowingZone(DirectorContext ctx)
         {
             var map = ctx.map;
+            ReleaseDarkenedFields(ctx);
             int wanted = (int)(ctx.state.colonists * ctx.Gene(Genes.GrowingCellsPerColonist));
             if (wanted <= 0) return;
 
