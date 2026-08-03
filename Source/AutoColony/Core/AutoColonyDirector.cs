@@ -536,9 +536,15 @@ namespace AutoColony
             var sorted = new List<ScoreTerm>(breakdown);
             sorted.Sort((a, b) => a.raw.CompareTo(b.raw));
 
-            var sb = new System.Text.StringBuilder("weakest: ");
-            int n = Math.Min(3, sorted.Count);
-            for (int i = 0; i < n; i++)
+            // Every term, weakest first — not the worst three.
+            //
+            // Three was enough while the terms were all long-standing, and stopped being enough
+            // the moment one was added in order to be watched: Room quality went in to give the
+            // room-siting genes a gradient, and then could not be seen at all unless it was
+            // among the three worst things about the colony. An epoch line is written once every
+            // ten days and can afford to say what it measured.
+            var sb = new System.Text.StringBuilder("weakest first: ");
+            for (int i = 0; i < sorted.Count; i++)
             {
                 if (i > 0) sb.Append(", ");
                 sb.Append(sorted[i].name).Append(' ').Append(sorted[i].raw.ToString("0.00"));
