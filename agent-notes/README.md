@@ -11,6 +11,7 @@ director is playing, and would still be true if the mod were rewritten from scra
 | Note | Covers |
 |---|---|
 | [rimworld-rooms.md](rimworld-rooms.md) | What makes a room, how RimWorld classifies the fifteen room roles, room stats and their bands, mood curves, and the placement API traps found the hard way |
+| [food-preservation.md](food-preservation.md) | Why a colony that hunts perfectly can starve indefinitely on a hot map, measured; rot rates, pemmican, and the deadlock the director has no answer to |
 
 ## How these were established
 
