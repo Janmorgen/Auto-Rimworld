@@ -646,7 +646,18 @@ namespace AutoColony
 
                 // Where the year is, not just where today is.
                 s.season = GenLocalDate.Season(map);
-                s.growingSeasonNow = PlantUtility.GrowthSeasonNow(map.Center, map, null);
+                // Asked of the outdoor temperature, not of a cell.
+                //
+                // The first version asked PlantUtility.GrowthSeasonNow about map.Center, which
+                // is a cell like any other — under a mountain roof on this map — and it
+                // answered for that cell rather than for the fields. The report said "Spring,
+                // nothing grows outdoors, 17C", which is how the mistake showed up an hour
+                // after being written.
+                //
+                // Plants grow between freezing and 58C and stop outside it, so the outdoor
+                // temperature is the whole answer for an outdoor field and does not depend on
+                // which cell happens to be the middle of the map.
+                s.growingSeasonNow = s.outdoorTemperature > 0f && s.outdoorTemperature < 58f;
                 s.winterComing = s.season == Season.Fall || s.season == Season.Winter
                                  || s.season == Season.PermanentWinter;
 
