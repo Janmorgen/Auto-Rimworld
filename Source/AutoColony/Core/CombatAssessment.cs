@@ -141,10 +141,22 @@ namespace AutoColony
             return HuntPolicy.WorthHunting(colonyStrength, threat, true, desperation, DesperateRatio);
         }
 
-        /// <summary>Human-readable form of the same judgement, for the chronicle.</summary>
+        /// <summary>
+        /// Human-readable form of the same judgement, for the chronicle.
+        ///
+        /// The threat passed here is the largest animal the pass *declined*, and
+        /// <c>ThreatOf</c> returns zero for anything that does not fight back — so a non-zero
+        /// value means the bar that actually applied was the dangerous-prey floor, not the
+        /// ordinary one. Printing the ordinary one anyway produced a line reporting "need 0.9x"
+        /// beside a wolf refused at 0.97x, which is a diagnostic contradicting the decision it
+        /// is describing. This project has lost enough hours to messages that named a cause
+        /// nobody had checked.
+        /// </summary>
         public static string Explain(float colonyStrength, float threat, float desperation)
         {
-            float required = Lerp(ComfortableRatio, DesperateRatio, AcMath.Clamp(desperation, 0f, 1f));
+            float required = threat > 0f
+                ? HuntPolicy.RequiredRatio(true, desperation, DesperateRatio)
+                : Lerp(ComfortableRatio, DesperateRatio, AcMath.Clamp(desperation, 0f, 1f));
             return string.Format(
                 System.Globalization.CultureInfo.InvariantCulture,
                 "strength {0:0} vs threat {1:0}, need {2:0.0}x at desperation {3:0.00}",
