@@ -1478,17 +1478,29 @@ namespace AutoColony.Modules
                 string leanSeason = "?";
                 var perSeason = new System.Text.StringBuilder();
 
+                var labels = new string[4];
                 for (int q = 0; q < 4; q++)
                 {
-                    float supply = perQuadrum[q];
                     // Quadrum to season depends on which hemisphere the colony landed in, so ask
                     // rather than assume. Mid-quadrum is (q + 0.5) / 4 of the way through a year.
-                    string season = SeasonUtility.Label(
+                    labels[q] = SeasonUtility.Label(
                         SeasonUtility.GetReportedSeason((q + 0.5f) / 4f, latitude));
-                    if (perSeason.Length > 0) perSeason.Append(", ");
-                    perSeason.AppendFormat("{0} {1:0.00}", season, supply);
-                    if (supply < lean) { lean = supply; leanSeason = season; }
+                    if (perQuadrum[q] < lean) { lean = perQuadrum[q]; leanSeason = labels[q]; }
                 }
+
+                // Some maps have no seasons. A tropical one reports "permanent summer" for every
+                // quadrum, and listing it four times over says nothing four times — worse, it
+                // makes a year-round shortfall look like a seasonal one, which is a different
+                // problem with a different answer.
+                bool seasonless = labels[0] == labels[1] && labels[1] == labels[2] && labels[2] == labels[3];
+                if (seasonless)
+                    perSeason.AppendFormat("{0} all year, {1:0.00}", labels[0], perQuadrum[0]);
+                else
+                    for (int q = 0; q < 4; q++)
+                    {
+                        if (perSeason.Length > 0) perSeason.Append(", ");
+                        perSeason.AppendFormat("{0} {1:0.00}", labels[q], perQuadrum[q]);
+                    }
 
                 float need = HerdNutritionPerDay(ctx, calc);
 
@@ -1508,6 +1520,11 @@ namespace AutoColony.Modules
                         "the herd eats {0:0.00} a day against {1:0.00} foraged in {2} — it feeds " +
                         "itself, but with nothing spare, so one more animal puts it short",
                         need, lean, leanSeason);
+                else if (seasonless)
+                    verdict = string.Format(
+                        "the herd eats {0:0.00} a day and this ground forages {1:0.00} — with no " +
+                        "seasons here that shortfall never lifts, so the pen feeds them every day " +
+                        "of the year or it does not feed them at all", need, lean);
                 else
                     verdict = string.Format(
                         "the herd eats {0:0.00} a day and {1} forages only {2:0.00} — this pen needs " +
