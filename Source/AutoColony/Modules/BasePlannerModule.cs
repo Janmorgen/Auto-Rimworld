@@ -1369,18 +1369,24 @@ namespace AutoColony.Modules
                     float latitude = Find.WorldGrid.LongLatOf(ctx.map.Tile).y;
                     float lean = float.MaxValue;
                     string leanSeason = "?";
+                    var labels = new string[4];
                     for (int q = 0; q < 4; q++)
                     {
                         float supply = calc.nutritionPerDayPerQuadrum.ForQuadrum((Quadrum)q);
-                        if (supply < lean)
-                        {
-                            lean = supply;
-                            leanSeason = SeasonUtility.Label(
-                                SeasonUtility.GetReportedSeason((q + 0.5f) / 4f, latitude));
-                        }
+                        labels[q] = SeasonUtility.Label(
+                            SeasonUtility.GetReportedSeason((q + 0.5f) / 4f, latitude));
+                        if (supply < lean) { lean = supply; leanSeason = labels[q]; }
                     }
-                    forage = string.Format(" It grazes {0} cells and forages {1:0.00} a day in {2}, its leanest season.",
-                        calc.numCells, lean, leanSeason);
+
+                    // "0.11 a day in permanent summer, its leanest season" — a map with no
+                    // seasons does not have a lean one, and calling it that invites the reader
+                    // to wait for a better quarter that never comes.
+                    bool seasonless = labels[0] == labels[1] && labels[1] == labels[2] && labels[2] == labels[3];
+                    forage = seasonless
+                        ? string.Format(" It grazes {0} cells and forages {1:0.00} a day, every day — {2} here has no seasons.",
+                            calc.numCells, lean, labels[0])
+                        : string.Format(" It grazes {0} cells and forages {1:0.00} a day in {2}, its leanest season.",
+                            calc.numCells, lean, leanSeason);
                 }
             }
             catch (Exception) { }
