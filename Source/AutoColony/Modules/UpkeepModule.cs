@@ -1002,10 +1002,52 @@ namespace AutoColony.Modules
         /// material, and furniture standing in an unwalled square is just something else to
         /// deteriorate.
         /// </summary>
+        /// <summary>
+        /// Asks the colony to strip the roof off a room it is about to pull down.
+        ///
+        /// Only the room's own cells, and never one shared with a neighbour — the same rule the
+        /// demolition itself follows, for the same reason. Taking the roof off the room next
+        /// door is the problem this is meant to prevent, not a smaller version of it.
+        /// </summary>
+        static void MarkForNoRoof(DirectorContext ctx, PlannedRoom planned)
+        {
+            var area = ctx.map.areaManager != null ? ctx.map.areaManager.NoRoof : null;
+            if (area == null) return;
+
+            foreach (var cell in planned.Rect)
+            {
+                if (!cell.InBounds(ctx.map)) continue;
+                if (SharedWithAnotherRoom(ctx.layout, planned, cell)) continue;
+                if (ctx.map.roofGrid == null || !ctx.map.roofGrid.Roofed(cell)) continue;
+
+                // Natural rock overhead is not this room's roof and cannot be taken off by
+                // asking; ordering it would leave a standing job nobody can finish.
+                var roof = ctx.map.roofGrid.RoofAt(cell);
+                if (roof != null && roof.isNatural) continue;
+
+                area[cell] = true;
+            }
+        }
+
         static bool Reclaim(DirectorContext ctx, ColonyDefect defect)
         {
             var planned = defect.plannedRoom;
             if (planned == null || ctx.layout == null) return false;
+
+            // The roof comes off before the walls that hold it up.
+            //
+            // Reclaiming took the walls and left the roof, which is how a roof behaves when its
+            // support disappears: it falls, on whatever is underneath. Run 61 reclaimed four
+            // rooms across days 11 to 13, logged eight roof collapses, and lost Harvey at 0.63
+            // health — the director killed its own colonist with its own demolition, in a
+            // colony that was otherwise having the best run of the night.
+            //
+            // Marking the area no-roof is what a player does before pulling a building down: it
+            // makes stripping the roof an ordinary construction job, so the supports are not
+            // load-bearing by the time they go. It reduces the risk rather than removing it —
+            // nothing here sequences the roof job ahead of the deconstruct orders — but a roof
+            // nobody has asked to be removed is guaranteed to fall, and this at least asks.
+            MarkForNoRoof(ctx, planned);
 
             int marked = 0;
             foreach (var cell in planned.Rect)
