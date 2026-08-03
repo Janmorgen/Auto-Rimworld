@@ -6,6 +6,13 @@
 > and collapsed. Food is the loudest symptom while the weather is hot; mood is the binding
 > constraint. Fix the preservation gap because a colony should not spend two thirds of its time
 > firefighting the larder, not because it will save anybody.
+>
+> Run 55 then finished the argument by dying on day 32 with `Food security 1.00`, `Health
+> 1.00`, `Infrastructure 1.00` and `Mood 0.11` — and `NeedFood at 26.0` as its worst unmet
+> complaint in the same breath. Food *security* measures what is in the larder. `NeedFood`
+> measures colonists who have not eaten. A downed pawn cannot feed itself, and the last one
+> standing was down too. The colony starved with a full store, which is a mood-and-labour
+> failure wearing a food failure's clothes.
 
 Measured on run 55 — an unprovisioned colony on a hot map, three colonists, no deaths across
 ten days, and a `Food security` score of **0.35** with **67% of the epoch spent answering an
