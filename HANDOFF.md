@@ -233,6 +233,12 @@ long enough to do the whole thing in one go.
 
 ## Not verified
 
+- **The room-quality verdict on a lived-in room.** `RoomQuality` judges a finished room against
+  the game's own score bands, and the work-room half is confirmed live — run 36's Kitchen came
+  out "average-sized, awful" and correctly raised nothing, because no mood reads a kitchen. The
+  lived-in half has not fired yet: no colony has finished a Bedroom on this build. Run 35's
+  Kitchen scored impressiveness −33.7, so a bedroom built the same way should trip the floor,
+  and if it never does the standard is set wrong rather than the colony being fine.
 - **The chain over a long run, in one colony.** Both halves are proven, but no single colony has
   been carried from nothing to a powered freezer across seasons.
 - **Whether the wood-fired generator is the right long-term choice.** It works indoors and needs
@@ -417,8 +423,8 @@ catalogue, and the assumptions were sitting in comments that read as facts. Chec
 
 ## Traps worth knowing before you touch it
 
-- **Review the loop a rule closes, not the rule.** Four times in one session, two individually
-  correct rules composed into a cycle. The bandit picks the next room from the roles the layout
+- **Review the loop a rule closes, not the rule.** Eight times now, two individually correct
+  rules composed into a cycle. The bandit picks the next room from the roles the layout
   *lacks*, and repurposing satisfies that pick by relabelling a shell — so converting the only
   workshop into a research room puts workshop straight back in the bandit's list, and one shell
   went Workshop, Research, Workshop, Dining, Hospital, Workshop in fourteen hours. Withdrawing a
@@ -428,9 +434,38 @@ catalogue, and the assumptions were sitting in comments that read as facts. Chec
   of a point flipped the focus for single passes, which damaged three separate mechanisms
   downstream before the cause was addressed.
   Each rule was reasoned about carefully in isolation and each was fine there. None of these
-  showed up in 278 offline tests; all four were found by watching one colony. When adding a
+  showed up in the offline tests; every one was found by watching one colony. When adding a
   control surface, write down what it does on the pass *after* it acts, and against every rule
   already present.
+- **A remedy that queues a blueprint does not clear the complaint that fired it.** The complaint
+  clears when the thing is *built*, which is many hours later and may be never. So a remedy with
+  no memory of what it already ordered re-fires every pass for as long as the colony is unhappy,
+  and the duplicates crowd out the work that would have fixed the actual problem. Run 35 queued
+  seven joy buildings between day 1 18h and day 3 06h — Ur, Ur, chess, chess, poker, poker,
+  horseshoes — with `Cheerless` pinned at severity 1.00 throughout because not one was ever
+  built; the Bedroom sited on day 1 was still open on day 4 with the colony sleeping on the
+  ground. `AddBeauty` had the same shape latent, walking a room's twenty-five cells and putting a
+  plant pot in whichever one was free. `CountIn`/`CountInRoom` count blueprints and frames for
+  exactly this reason — but they are per-def, so a remedy that walks a *list* of defs escapes
+  them by falling through to the next one. Guard the remedy, not just the def.
+- **Remedies handed a game `Room` had no duplicate rule at all.** `CountIn` takes a `PlannedRoom`
+  and was the only counter, so the half of the remedies that work off `defect.room` were
+  unguarded for as long as they have existed. `CountInRoom` is the `Room` counterpart; use one or
+  the other in anything that places.
+- **Score the subsystem that decided the outcome.** RimWorld rates a room on space, beauty,
+  cleanliness and impressiveness, and it is tempting to hold the builder to all four. Cleanliness
+  is not the builder's: the same room rates well or badly on different days depending on whether
+  anybody swept it, so it measures work priorities. `RoomQuality` judges space and beauty only —
+  what dimensions, material and furniture decide — and impressiveness because it is the game's
+  own combination of those two. Note that `ResearchSpeedFactor` and `FoodPoisonChance`, the two
+  hidden stats that matter most to rooms the director builds, are *both* derived from cleanliness
+  by curve, so they are work-priority telemetry and not building feedback either.
+- **Ask the game what the room became.** The planner keeps its own `RoomRole` and RimWorld keeps
+  its own classification of every enclosed room, into one of fifteen `RoomRoleDef`s. They can
+  disagree, and the disagreement is free to detect: a Research room whose bench never went in
+  reads as a plain `Room` rather than a `Laboratory`. Read via `room.Role`; the band words the
+  room-stats overlay shows on hover (`G` in game) come from `RoomStatDef.GetScoreStage(score)`,
+  so a chronicle line can be checked against the screen.
 - **A hand-built fixture silently reroutes every probe.** Adding a researcher check to
   `ResearchCapacityGoal` removed "Somewhere to research" from every ranking in the self-test
   overnight: the probes construct `ColonyState` directly, so anything the real snapshot derives
