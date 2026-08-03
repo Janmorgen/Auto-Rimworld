@@ -243,6 +243,43 @@ namespace AutoColony.Modules
             }
 
             if (assigned > 0) Note("re-prioritised " + assigned + " colonists");
+            ReportTheShape(ctx);
+        }
+
+        string lastShape = "";
+
+        /// <summary>
+        /// Says what the colony is currently leaning towards, when that changes.
+        ///
+        /// The needs table is the director's whole opinion about what matters this hour, and it
+        /// was never written down anywhere — so a run could be watched for a day without ever
+        /// learning whether it had noticed winter, or a fire, or that nobody was fetching.
+        /// Reported only when the ordering changes, which is rare enough to read.
+        /// </summary>
+        void ReportTheShape(DirectorContext ctx)
+        {
+            var top = new List<KeyValuePair<string, float>>();
+            foreach (var kv in needs)
+                if (kv.Value >= 1.5f || kv.Value <= 0.5f) top.Add(kv);
+            top.Sort((a, b) => b.Value.CompareTo(a.Value));
+
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < top.Count && i < 6; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(top[i].Key).Append(' ').Append(top[i].Value.ToString("0.0"));
+            }
+
+            string shape = sb.ToString();
+            if (shape.Length == 0 || shape == lastShape) return;
+            lastShape = shape;
+
+            var s = ctx.state;
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "work is leaning — {0}  [{1}{2}, {3:0}C]",
+                shape, s.season,
+                s.growingSeasonNow ? ", fields growing" : ", nothing grows outdoors",
+                s.outdoorTemperature));
         }
 
         /// <summary>
@@ -268,9 +305,19 @@ namespace AutoColony.Modules
             Need("PatientBedRest", 1f);
             Need("Doctor", s.colonistsDowned > 0 ? 4f : (s.avgHealth < 0.9f ? 2f : 1f));
 
-            Need("Growing", 1f + foodShortfall * 2f);
-            Need("Hunting", 1f + foodShortfall * 2f * ctx.Gene(Genes.HuntAggression));
-            Need("Cooking", 1f + foodShortfall * 1.5f);
+            // Sowing in a season nothing grows in is work that produces nothing.
+            //
+            // The colony still tends and harvests what is standing, so this is a reduction and
+            // not a shutdown — but with the fields frozen the hands are better spent hunting,
+            // hauling and building, and the food that matters now is the food already stored.
+            Need("Growing", (1f + foodShortfall * 2f) * (s.growingSeasonNow ? 1f : 0.35f));
+            // Hunting is what feeds a colony whose fields are dead, so it takes up the slack
+            // exactly when growing cannot.
+            Need("Hunting", (1f + foodShortfall * 2f * ctx.Gene(Genes.HuntAggression))
+                            * (s.growingSeasonNow ? 1f : 1.4f));
+            // Preserving the harvest matters more with the cold coming, because what is not
+            // cooked and stored before the fields die is not eaten in the months after.
+            Need("Cooking", (1f + foodShortfall * 1.5f) * (s.winterComing ? 1.3f : 1f));
 
             Need("Construction", s.pendingBlueprints + s.pendingFrames > 0 ? 2.2f : 0.8f);
 

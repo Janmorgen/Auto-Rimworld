@@ -158,6 +158,23 @@ namespace AutoColony
         /// </summary>
         public float outdoorTemperature;
 
+        /// <summary>
+        /// The season, and whether anything will grow outdoors right now.
+        ///
+        /// The director knew the temperature this instant and the day number, and nothing about
+        /// the year — so it sowed in late autumn, planned food as though the harvest were
+        /// perpetual, and was surprised by every winter. A season is the difference between "it
+        /// is cold today" and "it will be cold for the next fifteen days and nothing will grow
+        /// in any of them".
+        /// </summary>
+        public Season season = Season.Undefined;
+
+        /// <summary>Whether crops sown outdoors would actually grow at the moment.</summary>
+        public bool growingSeasonNow;
+
+        /// <summary>True in the half of the year that is heading into the cold.</summary>
+        public bool winterComing;
+
         /// <summary>Degrees below the comfortable floor, 0 when it is not cold.</summary>
         public float coldShortfall;
 
@@ -626,6 +643,13 @@ namespace AutoColony
             try
             {
                 s.outdoorTemperature = map.mapTemperature.OutdoorTemp;
+
+                // Where the year is, not just where today is.
+                s.season = GenLocalDate.Season(map);
+                s.growingSeasonNow = PlantUtility.GrowthSeasonNow(map.Center, map, null);
+                s.winterComing = s.season == Season.Fall || s.season == Season.Winter
+                                 || s.season == Season.PermanentWinter;
+
                 s.coldShortfall = ComfortableMin - s.outdoorTemperature;
                 if (s.coldShortfall < 0f) s.coldShortfall = 0f;
                 s.heatExcess = s.outdoorTemperature - ComfortableMax;
