@@ -20,6 +20,13 @@ namespace AutoColony
     ///   raid:&lt;points&gt;   an enemy raid of a chosen size — 50 is a lone tribal, 2000 a wave
     ///   downed           a downed neutral stranger, to be rescued
     ///   downedhostile    a downed raider, to be captured
+    ///   provision        food and material for a week, to reach the late plan without the wait
+    ///
+    /// The last one is the mirror of `starve` and `strip`, and exists for the same reason in
+    /// reverse. Those two take things away to see what the colony does without them; this hands
+    /// everything over to see what it does when nothing is stopping it. Four colonies in a row
+    /// died before ever finishing a research room, which is a slow way to test a placement loop
+    /// that fails in a single pass.
     ///
     /// The reporting is the point as much as the trigger: it names what every colonist is
     /// actually *doing*, which is how "two were drafted and only one ever fought" was found.
@@ -91,6 +98,7 @@ namespace AutoColony
                 else if (scenario == "manhunters") FireIncident(map, "ManhunterPack", 400f);
                 else if (scenario == "infestation") FireIncident(map, "Infestation", 500f);
                 else if (scenario == "starve") RemoveAllFood(map);
+                else if (scenario == "provision") Provision(map);
                 else if (scenario == "strip") Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO: removed " + HarnessSetup.StripMaterials(map) + " building material");
                 else Chronicle.Record(ChronicleCategory.System, "SCENARIO: unknown '" + scenario + "'");
@@ -103,6 +111,31 @@ namespace AutoColony
                 Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO failed: " + e.GetType().Name + " — " + e.Message + " @ " + where);
             }
+        }
+
+        /// <summary>
+        /// Gives the colony everything it would otherwise spend a week getting.
+        ///
+        /// Waiting for a colony to reach a research room the honest way costs three to eight
+        /// in-game days and usually ends with the colony dead first — four runs in a row never
+        /// answered the question, which is a slow way to test a placement loop that fails in one
+        /// pass. Food and material are what the plan spends those days acquiring, so handing
+        /// both over skips the wait without touching the behaviour under test: the planner still
+        /// sites, walls and furnishes the room entirely on its own.
+        /// </summary>
+        static void Provision(Map map)
+        {
+            var origin = HarnessSetup.ColonistOrigin(map);
+
+            int meals = HarnessSetup.StockpileFood(map, 12);
+            int wood = HarnessSetup.Scatter(map, origin, "WoodLog", 2000);
+            int steel = HarnessSetup.Scatter(map, origin, "Steel", 1500);
+            int components = HarnessSetup.Scatter(map, origin, "ComponentIndustrial", 40);
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SCENARIO provision: {0} meal stacks, {1} wood, {2} steel, {3} components — the " +
+                "colony now wants for nothing it would have spent a week acquiring",
+                meals, wood, steel, components));
         }
 
         static void FireRaid(Map map, float points)
