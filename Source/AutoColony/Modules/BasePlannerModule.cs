@@ -1186,8 +1186,19 @@ namespace AutoColony.Modules
             }
         }
 
-        /// <summary>How wide a pen is fenced. Bigger encloses more grazing and costs more fence.</summary>
-        const int PenSize = 13;
+        /// <summary>
+        /// How wide a pen is fenced. Bigger encloses more grazing and costs more fence.
+        ///
+        /// Scaled by the herd because the whole point of a pen is forage: a fence around too
+        /// little grass is a pen that has to be hand-fed, which is the shed it was meant to
+        /// replace. The numbers here are a starting guess and are not trusted — after the
+        /// perimeter goes down the game's own calculator is asked what the enclosure actually
+        /// yields, and that answer is what gets recorded.
+        /// </summary>
+        static int PenSizeFor(int animals)
+        {
+            return 11 + 2 * AcMath.Clamp(animals - 2, 0, 6);   // 11x11 … 23x23
+        }
 
         /// <summary>
         /// Fences an outdoor pen for the colony's animals, with a gate and a marker.
@@ -1219,42 +1230,168 @@ namespace AutoColony.Modules
             }
             catch (Exception) { return; }
 
+            // Fences, gates and markers are all made from stuff, and TryPlace refuses a
+            // stuffed def with no stuff. Passing null here placed exactly nothing, every time,
+            // for every colony — the pen feature has never once run past this point.
+            var fenceStuff = PlacementUtil.ChooseStuff(ctx.map, fence, 0f);
+            if (fenceStuff == null) return;
+
             // Grass, not gravel. The whole advantage of a pen over a shed is what grows inside
             // it, so a pen fenced across bare rock feeds nobody and costs the same.
-            CellRect rect;
-            if (!FindGrazing(ctx, PenSize, out rect)) return;
+            // Ask for the size the herd wants, then settle for what the map has. A big pen needs
+            // a big unbroken patch of open ground and most maps do not have one; refusing to
+            // fence anything because 23x23 would not fit is how a feature that works becomes a
+            // feature that never fires.
+            int wanted = PenSizeFor(ctx.state.tamedAnimals);
+            int size = 0;
+            CellRect rect = default(CellRect);
+            for (int trial = wanted; trial >= 9; trial -= 2)
+                if (FindGrazing(ctx, trial, out rect)) { size = trial; break; }
+            if (size == 0) return;
 
-            int placed = 0;
+            // The gate cell is skipped rather than fenced and then gated. A blueprint already
+            // standing on the cell makes the gate placement fail, and a pen with no gate is the
+            // sealed-room trap in fence form: nothing gets in, including the animals.
+            var gateCell = new IntVec3(rect.minX + rect.Width / 2, 0, rect.minZ);
+
+            int placed = 0, gaps = 0;
             foreach (var cell in rect.EdgeCells)
             {
+                if (cell == gateCell) continue;
                 if (!cell.InBounds(ctx.map)) continue;
                 if (cell.GetEdifice(ctx.map) != null) continue;
-                if (PlacementUtil.TryPlace(ctx.map, fence, cell, Rot4.North, null)) placed++;
+                if (PlacementUtil.TryPlace(ctx.map, fence, cell, Rot4.North, fenceStuff)) placed++;
+                else gaps++;
             }
             if (placed == 0) return;
 
-            // A gate, or nothing gets in or out — including the animals it is meant to hold.
-            var gateCell = new IntVec3(rect.minX + rect.Width / 2, 0, rect.minZ);
+            bool gated = false;
             if (AcDefs.FenceGate != null)
-                PlacementUtil.TryPlace(ctx.map, AcDefs.FenceGate, gateCell, Rot4.North, null);
+            {
+                var gateStuff = PlacementUtil.ChooseStuff(ctx.map, AcDefs.FenceGate, 0f);
+                gated = PlacementUtil.TryPlace(ctx.map, AcDefs.FenceGate, gateCell, Rot4.North, gateStuff);
+            }
 
-            bool marked = false;
+            var markerStuff = PlacementUtil.ChooseStuff(ctx.map, marker, 0f);
+            IntVec3 markerCell = IntVec3.Invalid;
             foreach (var cell in rect.ContractedBy(1))
             {
                 if (!cell.InBounds(ctx.map)) continue;
-                if (PlacementUtil.TryPlace(ctx.map, marker, cell, Rot4.North, null)) { marked = true; break; }
+                if (PlacementUtil.TryPlace(ctx.map, marker, cell, Rot4.North, markerStuff))
+                { markerCell = cell; break; }
             }
 
             Chronicle.Record(ChronicleCategory.Build, string.Format(
-                "fencing a {0}x{0} pen at {1} for {2} animals — {3} fence sections and {4}. The " +
-                "grass inside it is their food, which is the difference between a pen and a shed " +
-                "somebody has to carry fodder to every day",
-                PenSize, rect.CenterCell, ctx.state.tamedAnimals, placed,
-                marked ? "a pen marker" : "NO MARKER — the game will not treat it as a pen"));
+                "fencing a {0}x{0} pen at {1} for {2} animals — {3} fence sections, {4}, {5}{6}. " +
+                "The grass inside it is their food, which is the difference between a pen and a " +
+                "shed somebody has to carry fodder to every day",
+                size, rect.CenterCell, ctx.state.tamedAnimals, placed,
+                gated ? "a gate" : "NO GATE — nothing can get in or out",
+                markerCell.IsValid ? "a pen marker" : "NO MARKER — the game will not treat it as a pen",
+                gaps > 0 ? string.Format(", {0} perimeter cells refused", gaps) : ""));
+
+            if (markerCell.IsValid) ReportPenForage(ctx, markerCell, size);
             Note("fenced an animal pen");
         }
 
         /// <summary>Finds an open, growable patch big enough to be worth fencing.</summary>
+        /// <summary>
+        /// Asks the game what the pen just fenced will actually feed, and records it.
+        ///
+        /// This is the one question a fence cannot answer about itself. RimWorld computes forage
+        /// from the terrain caught inside the perimeter, and it computes it *per quadrum*,
+        /// because grass does not grow all year. A pen that carries the herd through Jugust and
+        /// starves it in Decembary looks identical to a good one on the day it is built, and the
+        /// difference only shows up as dead animals one season later.
+        ///
+        /// <c>PenFoodCalculator</c> reads blueprints as well as standing fence, so this can be
+        /// asked the moment the perimeter is queued rather than days later when it stands. The
+        /// size heuristic in <see cref="PenSizeFor"/> is a guess; this is the measurement, and
+        /// where they disagree it is the guess that is wrong.
+        /// </summary>
+        void ReportPenForage(DirectorContext ctx, IntVec3 markerCell, int size)
+        {
+            try
+            {
+                var calc = new PenFoodCalculator();
+                calc.ResetAndProcessPen(markerCell, ctx.map, true);
+
+                float latitude = Find.WorldGrid.LongLatOf(ctx.map.Tile).y;
+                float lean = float.MaxValue;
+                string leanSeason = "?";
+                var perSeason = new System.Text.StringBuilder();
+
+                for (int q = 0; q < 4; q++)
+                {
+                    float supply = calc.nutritionPerDayPerQuadrum.ForQuadrum((Quadrum)q);
+                    // Quadrum to season depends on which hemisphere the colony landed in, so ask
+                    // rather than assume. Mid-quadrum is (q + 0.5) / 4 of the way through a year.
+                    string season = SeasonUtility.Label(
+                        SeasonUtility.GetReportedSeason((q + 0.5f) / 4f, latitude));
+                    if (perSeason.Length > 0) perSeason.Append(", ");
+                    perSeason.AppendFormat("{0} {1:0.0}", season, supply);
+                    if (supply < lean) { lean = supply; leanSeason = season; }
+                }
+
+                float need = HerdNutritionPerDay(ctx, calc);
+                string verdict;
+                if (need <= 0f)
+                    verdict = "what the herd eats could not be read, so the margin is unknown";
+                else if (lean >= need)
+                    verdict = string.Format(
+                        "the herd eats {0:0.0} a day and the leanest season still forages {1:0.0}, " +
+                        "so this pen feeds itself all year", need, lean);
+                else
+                    verdict = string.Format(
+                        "the herd eats {0:0.0} a day and {1} forages only {2:0.0} — this pen needs " +
+                        "hay hauled to it for one season a year, or it needs to be bigger",
+                        need, leanSeason, lean);
+
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "the {0}x{0} pen encloses {1} cells, {2} of them soil, and forages by season: " +
+                    "{3} nutrition a day. {4}",
+                    size, calc.numCells, calc.numCellsSoil, perSeason, verdict));
+            }
+            catch (Exception e)
+            {
+                Chronicle.Record(ChronicleCategory.Build,
+                    "the pen is fenced but its forage could not be read: " + e.Message);
+            }
+        }
+
+        /// <summary>
+        /// What the colony's animals eat per day, asked of the game rather than estimated.
+        /// Returns 0 when the answer is unavailable, which the caller reports as unknown rather
+        /// than as zero — an unread margin and a comfortable one are not the same thing.
+        /// </summary>
+        static float HerdNutritionPerDay(DirectorContext ctx, PenFoodCalculator calc)
+        {
+            var counts = new Dictionary<ThingDef, int>();
+            var defs = new List<ThingDef>();
+            foreach (var p in ctx.map.mapPawns.AllPawnsSpawned)
+            {
+                if (p.RaceProps == null || p.RaceProps.Humanlike) continue;
+                if (p.Faction != Faction.OfPlayer) continue;
+                if (!counts.ContainsKey(p.def)) { counts[p.def] = 0; defs.Add(p.def); }
+                counts[p.def]++;
+            }
+            if (defs.Count == 0) return 0f;
+
+            var infos = calc.ComputeExampleAnimals(defs);
+            if (infos == null) return 0f;
+
+            float total = 0f;
+            for (int i = 0; i < infos.Count; i++)
+            {
+                var info = infos[i];
+                if (info == null || info.animalDef == null) continue;
+                int n;
+                if (!counts.TryGetValue(info.animalDef, out n)) continue;
+                total += info.nutritionConsumptionPerDay * n;
+            }
+            return total;
+        }
+
         static bool FindGrazing(DirectorContext ctx, int size, out CellRect rect)
         {
             rect = default(CellRect);
@@ -1267,17 +1404,33 @@ namespace AutoColony.Modules
                 var candidate = new CellRect(centre.x - size / 2, centre.z - size / 2, size, size);
                 if (!candidate.InBounds(map)) continue;
 
-                int growable = 0, cells = 0;
+                // The perimeter has to take a fence all the way round or the pen leaks, but the
+                // inside only has to be walkable grazing. A boulder in the middle of a paddock
+                // costs a few cells of grass; demanding a perfectly clear square is what stops a
+                // large pen ever fitting on a real map.
+                bool edgeBlocked = false;
+                foreach (var cell in candidate.EdgeCells)
+                {
+                    if (cell.GetEdifice(map) != null || map.roofGrid.Roofed(cell)) { edgeBlocked = true; break; }
+                }
+                if (edgeBlocked) continue;
+
+                int growable = 0, cells = 0, obstructed = 0;
                 bool blocked = false;
                 foreach (var cell in candidate)
                 {
                     cells++;
-                    if (cell.GetEdifice(map) != null || !cell.Standable(map)) { blocked = true; break; }
+                    // Roof means indoors and a zone means somebody is already using this ground;
+                    // either one anywhere in the rectangle disqualifies the site outright.
                     if (map.roofGrid.Roofed(cell)) { blocked = true; break; }
                     if (map.zoneManager.ZoneAt(cell) != null) { blocked = true; break; }
+                    if (cell.GetEdifice(map) != null || !cell.Standable(map)) { obstructed++; continue; }
                     if (map.fertilityGrid.FertilityAt(cell) >= 0.5f) growable++;
                 }
                 if (blocked || cells == 0) continue;
+
+                // A few rocks are fine; a rubble field is not.
+                if (obstructed * 10 > cells) continue;
 
                 // Mostly grazing, or it is a fence around nothing.
                 if (growable * 2 < cells) continue;

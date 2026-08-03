@@ -113,6 +113,7 @@ namespace AutoColony
                 else if (scenario == "starve") RemoveAllFood(map);
                 else if (scenario == "provision") Provision(map);
                 else if (scenario == "showcase") { Provision(map); Showcase(map); }
+                else if (scenario == "livestock") { Provision(map); SpawnLivestock(map, 4); }
                 else if (scenario == "research") ClearTheWayToResearch(map);
                 else if (scenario == "strip") Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO: removed " + HarnessSetup.StripMaterials(map) + " building material");
@@ -126,6 +127,53 @@ namespace AutoColony
                 Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO failed: " + e.GetType().Name + " — " + e.Message + " @ " + where);
             }
+        }
+
+        /// <summary>
+        /// Hands the colony a small herd of grazing animals, so the pen builder can be watched.
+        ///
+        /// The pen only runs when there are animals to hold, and a colony almost never tames one
+        /// in the days it usually survives — so the code has never executed in a real run. That
+        /// is how it kept a bug that stopped it placing a single fence section: nothing ever
+        /// reached the line.
+        ///
+        /// Roamers specifically. RimWorld only asks for a pen for animals that wander off
+        /// (<c>RaceProps.Roamer</c>) — a husky needs no fence and would prove nothing here.
+        /// </summary>
+        static void SpawnLivestock(Map map, int count)
+        {
+            string[] preferred = { "Cow", "Muffalo", "Alpaca", "Sheep", "Goat", "Bison", "Yak" };
+
+            PawnKindDef kind = null;
+            for (int i = 0; i < preferred.Length && kind == null; i++)
+            {
+                var k = DefDatabase<PawnKindDef>.GetNamedSilentFail(preferred[i]);
+                if (k != null && k.RaceProps != null && k.RaceProps.Roamer) kind = k;
+            }
+            if (kind == null)
+            {
+                Chronicle.Record(ChronicleCategory.System,
+                    "SCENARIO: no roaming livestock kind found — nothing that needs a pen");
+                return;
+            }
+
+            var origin = HarnessSetup.ColonistOrigin(map);
+            int spawned = 0;
+            for (int i = 0; i < count; i++)
+            {
+                // Faction.OfPlayer is what "tamed" means to the game — the animal is colony
+                // property from the moment it spawns, and the director counts it immediately.
+                var animal = PawnGenerator.GeneratePawn(kind, Faction.OfPlayer);
+                IntVec3 spot;
+                if (!CellFinder.TryFindRandomSpawnCellForPawnNear(origin, map, out spot, 14))
+                    spot = origin;
+                GenSpawn.Spawn(animal, spot, map);
+                spawned++;
+            }
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SCENARIO: {0} tamed {1} near {2} — animals that wander, so the colony now needs " +
+                "a pen it did not need before", spawned, kind.label, origin));
         }
 
         /// <summary>
