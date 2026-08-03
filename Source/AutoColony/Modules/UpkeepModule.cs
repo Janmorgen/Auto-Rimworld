@@ -466,6 +466,27 @@ namespace AutoColony.Modules
         /// </summary>
         static bool AddRecreation(DirectorContext ctx)
         {
+            // One that is already coming is the whole remedy.
+            //
+            // The list above was itself the fix for a previous version of this, where the only
+            // joy building asked for was a horseshoes pin that never fit — so falling through to
+            // the next def on failure is deliberate. What it could not distinguish is *why* the
+            // placement failed. "Nowhere it fits" should try the next one; "there is already one
+            // of these on the way" should stop, because the colony is not short of a chess table,
+            // it is short of a builder.
+            //
+            // Watched live in run 35: seven joy buildings queued between day 1 18h and day 3 06h,
+            // one every six hours — Ur, Ur, chess, chess, poker, poker, horseshoes — with the
+            // Cheerless complaint pinned at severity 1.00 throughout, because not one of them was
+            // ever built. Three colonists cannot build a game table every six hours on top of
+            // walls, so the construction queue filled with duplicates and the Bedroom sited on
+            // day 1 was still standing open on day 4 with the colony sleeping on the ground.
+            //
+            // Only pending ones hold the remedy back. A joy building that gains finished status
+            // stops blocking, so a colony that genuinely outgrows one table can still get a
+            // second — it just cannot order five at once while none of them have been started.
+            if (AnyJoyPending(ctx)) return false;
+
             for (int i = 0; i < JoyBuildings.Length; i++)
             {
                 var def = AcDefs.Thing(JoyBuildings[i]);
@@ -476,6 +497,50 @@ namespace AutoColony.Modules
                     "recreation: placed a " + (def.label ?? def.defName) +
                     " — the first joy building that would actually fit the space");
                 return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether any joy building is already blueprinted or part-built anywhere in the base.
+        ///
+        /// Deliberately blind to finished ones: a table that exists is capacity the colony has,
+        /// a table that is queued is capacity it is still waiting on, and only the second is a
+        /// reason to refuse to order more.
+        /// </summary>
+        static bool AnyJoyPending(DirectorContext ctx)
+        {
+            if (ctx.map == null || ctx.layout == null) return false;
+
+            for (int i = 0; i < JoyBuildings.Length; i++)
+            {
+                var def = AcDefs.Thing(JoyBuildings[i]);
+                if (def == null) continue;
+
+                for (int r = 0; r < ctx.layout.rooms.Count; r++)
+                    if (PendingIn(ctx.map, ctx.layout.rooms[r], def)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Whether this def has a blueprint or a frame standing in the room.</summary>
+        static bool PendingIn(Map map, PlannedRoom room, ThingDef def)
+        {
+            if (map == null || def == null) return false;
+
+            foreach (var cell in room.Interior)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var blueprint = things[i] as Blueprint;
+                    if (blueprint != null && blueprint.def.entityDefToBuild == def) return true;
+
+                    var frame = things[i] as Frame;
+                    if (frame != null && frame.def.entityDefToBuild == def) return true;
+                }
             }
             return false;
         }
