@@ -297,6 +297,23 @@ namespace AutoColony.Modules
             // the colony has to have started spending before the larder is actually empty.
             float foodShortfall = FoodTiming.Urgency(s.daysOfFood, foodTarget);
 
+            // An empty larder is an emergency and was not being priced as one.
+            //
+            // Every food term tops out at 2.5 — one plus a shortfall of at most one, times
+            // one and a half. Tailoring reaches 3.5, because being badly dressed adds two on
+            // its own. So a colony at zero days of food put clothes above dinner, and the
+            // arithmetic made it impossible to do otherwise: feeding itself could never be the
+            // top priority however empty the store got.
+            //
+            // Watched in run 69 at day 20, food 0.0d and mood 0.03 in a 39C summer, leaning
+            // "Tailoring 3.5, Growing 3.0, PlantCutting 2.8, Cooking 2.5".
+            //
+            // Firefighter already shows the shape this wants: an ordinary weight most of the
+            // time and a large one when the thing has actually happened. Starving is that kind
+            // of condition. Clothes matter — colonists die of heat and cold — but they die of
+            // those over weeks and of an empty larder in days.
+            bool starving = s.daysOfFood < 1f;
+
             // Emergencies first: fire and untreated casualties outrank everything.
             // Only fires that could reach the colony justify dropping everything; a distant
             // wildfire is not worth a work-hour.
@@ -310,14 +327,16 @@ namespace AutoColony.Modules
             // The colony still tends and harvests what is standing, so this is a reduction and
             // not a shutdown — but with the fields frozen the hands are better spent hunting,
             // hauling and building, and the food that matters now is the food already stored.
-            Need("Growing", (1f + foodShortfall * 2f) * (s.growingSeasonNow ? 1f : 0.35f));
+            Need("Growing", (starving ? 4f : 1f + foodShortfall * 2f)
+                            * (s.growingSeasonNow ? 1f : 0.35f));
             // Hunting is what feeds a colony whose fields are dead, so it takes up the slack
             // exactly when growing cannot.
-            Need("Hunting", (1f + foodShortfall * 2f * ctx.Gene(Genes.HuntAggression))
+            Need("Hunting", (starving ? 5f : 1f + foodShortfall * 2f * ctx.Gene(Genes.HuntAggression))
                             * (s.growingSeasonNow ? 1f : 1.4f));
             // Preserving the harvest matters more with the cold coming, because what is not
             // cooked and stored before the fields die is not eaten in the months after.
-            Need("Cooking", (1f + foodShortfall * 1.5f) * (s.winterComing ? 1.3f : 1f));
+            Need("Cooking", (starving ? 4.5f : 1f + foodShortfall * 1.5f)
+                            * (s.winterComing ? 1.3f : 1f));
 
             Need("Construction", s.pendingBlueprints + s.pendingFrames > 0 ? 2.2f : 0.8f);
 
