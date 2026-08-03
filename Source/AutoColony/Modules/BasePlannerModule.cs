@@ -1378,7 +1378,7 @@ namespace AutoColony.Modules
                                 SeasonUtility.GetReportedSeason((q + 0.5f) / 4f, latitude));
                         }
                     }
-                    forage = string.Format(" It grazes {0} cells and forages {1:0.0} a day in {2}, its leanest season.",
+                    forage = string.Format(" It grazes {0} cells and forages {1:0.00} a day in {2}, its leanest season.",
                         calc.numCells, lean, leanSeason);
                 }
             }
@@ -1485,21 +1485,31 @@ namespace AutoColony.Modules
                     string season = SeasonUtility.Label(
                         SeasonUtility.GetReportedSeason((q + 0.5f) / 4f, latitude));
                     if (perSeason.Length > 0) perSeason.Append(", ");
-                    perSeason.AppendFormat("{0} {1:0.0}", season, supply);
+                    perSeason.AppendFormat("{0} {1:0.00}", season, supply);
                     if (supply < lean) { lean = supply; leanSeason = season; }
                 }
 
                 float need = HerdNutritionPerDay(ctx, calc);
+
+                // Two decimals, because one printed "the herd eats 0.6 a day and winter forages
+                // only 0.6" and then declared a shortfall — a verdict contradicting the numbers
+                // beside it, on a margin of less than a hundredth. A report that disagrees with
+                // itself gets distrusted in the cases where it is right.
                 string verdict;
                 if (need <= 0f)
                     verdict = "what the herd eats could not be read, so the margin is unknown";
+                else if (lean >= need * 1.15f)
+                    verdict = string.Format(
+                        "the herd eats {0:0.00} a day and even {1}, its leanest season, forages " +
+                        "{2:0.00} — this pen feeds itself all year", need, leanSeason, lean);
                 else if (lean >= need)
                     verdict = string.Format(
-                        "the herd eats {0:0.0} a day and the leanest season still forages {1:0.0}, " +
-                        "so this pen feeds itself all year", need, lean);
+                        "the herd eats {0:0.00} a day against {1:0.00} foraged in {2} — it feeds " +
+                        "itself, but with nothing spare, so one more animal puts it short",
+                        need, lean, leanSeason);
                 else
                     verdict = string.Format(
-                        "the herd eats {0:0.0} a day and {1} forages only {2:0.0} — this pen needs " +
+                        "the herd eats {0:0.00} a day and {1} forages only {2:0.00} — this pen needs " +
                         "hay hauled to it for one season a year, or it needs to be bigger",
                         need, leanSeason, lean);
 
