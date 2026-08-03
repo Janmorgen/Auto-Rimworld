@@ -39,6 +39,33 @@ namespace AutoColony.Rooms
         }
 
         /// <summary>
+        /// Beds in one room above which it stops being a bedroom and becomes a barracks.
+        /// </summary>
+        public const int BarracksFrom = 2;
+
+        /// <summary>
+        /// What a role needs from its room, given how many beds ended up in it.
+        ///
+        /// Two beds is not a bedroom with a guest, it is a different room with a different and
+        /// much worse mood curve. RimWorld pays <c>SleptInBedroom</c> from −2 up to +8, and
+        /// <c>SleptInBarracks</c> from −7 up to +4 — worse at the floor and lower at the
+        /// ceiling, so a shared room is worse in every band there is. Nothing here knew that:
+        /// <c>BedsPerRoom</c> returns the gene when the colony is comfortable and *every
+        /// colonist* when it is destitute, so a shared room is the normal outcome rather than
+        /// the exception, and the difference was simply never priced.
+        ///
+        /// A barracks is therefore held to a higher floor than a private room. It cannot be
+        /// held to the same one and mean the same thing: at equal impressiveness the barracks
+        /// is costing five more mood a head every night, so "good enough" has to be further up.
+        /// </summary>
+        public static Standard StandardFor(string role, int beds)
+        {
+            var s = StandardFor(role);
+            if (role == "Bedroom" && beds >= BarracksFrom) s.impressiveness += 1;
+            return s;
+        }
+
+        /// <summary>
         /// What a role needs from its room.
         ///
         /// Two families. Rooms people *live* in — bedrooms, the dining room, the hospital, cells —
@@ -65,9 +92,16 @@ namespace AutoColony.Rooms
 
                 case "Dining":
                 case "Hospital":
+                case "Recreation":
                     s.space = 2;
                     s.impressiveness = 1;
                     s.impressivenessMatters = true;
+                    break;
+
+                // Nobody sleeps in either, and nobody minds how they look.
+                case "Tomb":
+                case "Barn":
+                    s.space = 1;
                     break;
 
                 // Worked in. Space is what the equipment needs; looks are nobody's complaint.
@@ -96,7 +130,23 @@ namespace AutoColony.Rooms
         public static string Shortfall(string role, int spaceStage, string spaceLabel,
                                        int impressivenessStage, string impressivenessLabel)
         {
-            var standard = StandardFor(role);
+            return Shortfall(role, spaceStage, spaceLabel, impressivenessStage,
+                             impressivenessLabel, 1);
+        }
+
+        /// <summary>As above, but told how many beds the room holds — see the barracks note.</summary>
+        public static string Shortfall(string role, int spaceStage, string spaceLabel,
+                                       int impressivenessStage, string impressivenessLabel,
+                                       int beds)
+        {
+            var standard = StandardFor(role, beds);
+
+            if (role == "Bedroom" && beds >= BarracksFrom &&
+                impressivenessStage < standard.impressiveness)
+            {
+                return "it is " + impressivenessLabel + " and " + beds + " are sharing it, which " +
+                       "the game scores as a barracks — worth about five mood a head a night";
+            }
 
             bool tooSmall = spaceStage < standard.space;
             bool tooGrim = standard.impressivenessMatters &&
@@ -123,7 +173,13 @@ namespace AutoColony.Rooms
         /// </summary>
         public static bool Actionable(string role, int spaceStage, int impressivenessStage)
         {
-            var standard = StandardFor(role);
+            return Actionable(role, spaceStage, impressivenessStage, 1);
+        }
+
+        /// <summary>As above, told how many beds the room holds.</summary>
+        public static bool Actionable(string role, int spaceStage, int impressivenessStage, int beds)
+        {
+            var standard = StandardFor(role, beds);
             return standard.impressivenessMatters &&
                    impressivenessStage < standard.impressiveness;
         }

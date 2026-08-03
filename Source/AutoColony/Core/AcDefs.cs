@@ -121,6 +121,19 @@ namespace AutoColony
         }
         public static ThingDef PowerConduit { get { return Thing("PowerConduit"); } }
         public static ThingDef Grave { get { return Thing("Grave"); } }
+
+        /// <summary>A bed for a tamed animal. Falls back to the free spot when none can be built.</summary>
+        public static ThingDef AnimalBed { get { return Thing("AnimalBed"); } }
+        public static ThingDef AnimalSleepingSpot { get { return Thing("AnimalSleepingSpot"); } }
+
+        /// <summary>
+        /// A feed trough. This is a Hopper in vanilla — a storage building that a nutrient
+        /// paste dispenser draws from, and the thing animals eat out of in a barn.
+        /// </summary>
+        public static ThingDef Hopper { get { return Thing("Hopper"); } }
+
+        /// <summary>A flap an animal can pass without leaving the door open to the weather.</summary>
+        public static ThingDef AnimalFlap { get { return Thing("AnimalFlap"); } }
         public static ThingDef Heater { get { return Thing("Heater"); } }
 
         /// <summary>Stuff candidates for walls/furniture, cheapest and most available first.</summary>

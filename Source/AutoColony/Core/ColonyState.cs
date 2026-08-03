@@ -210,6 +210,23 @@ namespace AutoColony
         /// </summary>
         public int downedStrangers;
 
+        /// <summary>
+        /// Colony dead still lying about unburied, counting both loose corpses and any held in
+        /// a container that is not a grave.
+        ///
+        /// An unburied colonist is the largest single mood penalty in the game, and it is the
+        /// only reason to build a tomb — so a tomb waits on this rather than being planned on
+        /// the chance of somebody dying.
+        /// </summary>
+        public int unburiedCorpses;
+
+        /// <summary>
+        /// Tamed animals belonging to the colony. Nothing here tames anything, so this counts
+        /// the ones that arrived some other way — bought, bonded, or self-tamed — and is what a
+        /// barn waits on.
+        /// </summary>
+        public int tamedAnimals;
+
         public bool Valid { get { return map != null && colonists > 0; } }
 
         // --- proximity, filled in by the director once the base location is known ---
@@ -446,6 +463,32 @@ namespace AutoColony
 
                 if (p.Downed && p.RaceProps.Humanlike && p.Faction != Faction.OfPlayer)
                     s.downedStrangers++;
+
+                if (!p.RaceProps.Humanlike && p.Faction == Faction.OfPlayer) s.tamedAnimals++;
+            }
+
+            CountUnburiedDead(s, map);
+        }
+
+        /// <summary>
+        /// Colony dead lying on the map with nowhere to be.
+        ///
+        /// A corpse inside a grave is buried and costs nothing; one inside anything else — a
+        /// casket, a freezer shelf, the floor — still reads as unburied to the thought that
+        /// charges for it. Only the colony's own dead count: a dead raider is not a funeral.
+        /// </summary>
+        static void CountUnburiedDead(ColonyState s, Map map)
+        {
+            var corpses = map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse);
+            for (int i = 0; i < corpses.Count; i++)
+            {
+                var corpse = corpses[i] as Corpse;
+                if (corpse == null || corpse.InnerPawn == null) continue;
+                if (corpse.InnerPawn.Faction != Faction.OfPlayer) continue;
+                if (!corpse.InnerPawn.RaceProps.Humanlike) continue;
+
+                var grave = corpse.StoringThing() as Building_Grave;
+                if (grave == null) s.unburiedCorpses++;
             }
         }
 

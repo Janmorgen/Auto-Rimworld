@@ -120,6 +120,89 @@ namespace AutoColony.Tests
             Assert.False(standard.impressivenessMatters);
         }
 
+        // ------------------------------------------------------------------ barracks
+
+        [Fact]
+        public void ASharedBedroomIsHeldToAHigherFloorThanAPrivateOne()
+        {
+            // SleptInBedroom pays -2 up to +8; SleptInBarracks pays -7 up to +4. A shared room
+            // is worse at the floor and lower at the ceiling, so the same impressiveness is
+            // not the same outcome and cannot be the same standard.
+            Assert.True(RoomQuality.StandardFor("Bedroom", 2).impressiveness >
+                        RoomQuality.StandardFor("Bedroom", 1).impressiveness);
+        }
+
+        [Fact]
+        public void ADullRoomPassesAlonePassesAndFailsWhenShared()
+        {
+            Assert.Null(RoomQuality.Shortfall("Bedroom", 1, "rather tight", 1, "dull", 1));
+            Assert.NotNull(RoomQuality.Shortfall("Bedroom", 1, "rather tight", 1, "dull", 2));
+        }
+
+        [Fact]
+        public void TheSharedRoomComplaintSaysWhyItCostsMore()
+        {
+            var shortfall = RoomQuality.Shortfall("Bedroom", 2, "average-sized", 0, "awful", 3);
+            Assert.Contains("barracks", shortfall);
+            Assert.Contains("3 are sharing", shortfall);
+        }
+
+        [Fact]
+        public void SharingOnlyMattersForBedrooms()
+        {
+            // Two beds in a hospital is a hospital, and two beds in a prison is what a prison
+            // is for. Neither reads as a barracks and neither should be penalised as one.
+            Assert.Equal(RoomQuality.StandardFor("Hospital", 1).impressiveness,
+                         RoomQuality.StandardFor("Hospital", 4).impressiveness);
+            Assert.Equal(RoomQuality.StandardFor("Prison", 1).impressiveness,
+                         RoomQuality.StandardFor("Prison", 4).impressiveness);
+        }
+
+        [Fact]
+        public void TheDefaultBedCountLeavesTheOldJudgementUnchanged()
+        {
+            // The one-argument overloads are still used where a bed count is not to hand, and
+            // must keep meaning exactly what they meant before.
+            Assert.Equal(RoomQuality.StandardFor("Bedroom").impressiveness,
+                         RoomQuality.StandardFor("Bedroom", 1).impressiveness);
+        }
+
+        // ------------------------------------------------------------------ the new roles
+
+        [Fact]
+        public void ARecRoomIsJudgedLikeSomewhereLivedIn()
+        {
+            // Every stage of JoyActivityInImpressiveRecRoom is positive, so the room only pays
+            // when it is nice — but an awful one wastes the whole reason it was built.
+            var standard = RoomQuality.StandardFor("Recreation");
+            Assert.True(standard.impressivenessMatters);
+            Assert.Equal(2, standard.space);
+        }
+
+        [Theory]
+        [InlineData("Tomb")]
+        [InlineData("Barn")]
+        public void NobodyMindsHowATombOrABarnLooks(string role)
+        {
+            Assert.False(RoomQuality.StandardFor(role).impressivenessMatters);
+            Assert.Null(RoomQuality.Shortfall(role, 1, "rather tight", 0, "awful"));
+        }
+
+        [Fact]
+        public void EveryRoleTheLayoutCanBuildHasAnOpinionRatherThanTheFallback()
+        {
+            // A role added to the enum and forgotten here silently gets the unknown-role
+            // fallback, which asks only for enclosure — so a new room would never be judged
+            // and nothing would say so.
+            string[] lived = { "Bedroom", "Prison", "Dining", "Hospital", "Recreation" };
+            foreach (var role in lived)
+                Assert.True(RoomQuality.StandardFor(role).impressivenessMatters, role);
+
+            string[] worked = { "Kitchen", "Research", "Workshop", "Storage" };
+            foreach (var role in worked)
+                Assert.Equal(2, RoomQuality.StandardFor(role).space);
+        }
+
         // ------------------------------------------------------------------ gating a repurpose
 
         [Fact]

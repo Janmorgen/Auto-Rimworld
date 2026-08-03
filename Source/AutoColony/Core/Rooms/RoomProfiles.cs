@@ -114,8 +114,52 @@ namespace AutoColony.Rooms
                     break;
 
                 case "Research":
+                    // Same footprint as the workshop, and for the same reason: a research bench
+                    // is three cells by two, and a 7x7 room leaves a 5x5 interior that also has
+                    // to hold a light. That was tight enough that the game refused the bench at
+                    // every cell the scorer preferred, and the room stood empty for the whole of
+                    // thirty-seven colonies. The retry cap was the fault; this is the margin.
+                    p.width = 9;
+                    p.height = 7;
                     p.partner = "Workshop";
                     p.partnerAffinity = 0.6f;
+                    break;
+
+                case "Recreation":
+                    // Large, because impressiveness is the whole point of the room and space is
+                    // one of the four things it is scored on — and because a horseshoes pin
+                    // needs a clear lane to throw down, which is what defeated the old remedy
+                    // when it tried to fit one into a bedroom.
+                    //
+                    // Beside the dining room: colonists eat and then look for something to do,
+                    // and the two rooms are used in the same trip.
+                    p.width = 9;
+                    p.height = 9;
+                    p.partner = "Dining";
+                    p.partnerAffinity = 1.4f;
+                    break;
+
+                case "Tomb":
+                    // Away from where people live and work, like the prison, for the same
+                    // reason: nothing else wants to be near it. Small — graves are 1x1 and a
+                    // colony that needs a large tomb has worse problems.
+                    p.width = 6;
+                    p.height = 6;
+                    p.compactness = 0.3f;
+                    p.partnerAffinity = 0f;
+                    break;
+
+                case "Barn":
+                    // Big, because animals need floor, and near the store the feed comes out of.
+                    // Kept off the middle of the base: a barn is filth, and filth spreads to
+                    // whatever room is next door.
+                    p.width = 9;
+                    p.height = 9;
+                    p.compactness = 0.4f;
+                    p.partner = "Storage";
+                    p.partnerAffinity = 1.0f;
+                    p.resource = "soil";
+                    p.resourceAffinity = 0.5f;
                     break;
             }
 

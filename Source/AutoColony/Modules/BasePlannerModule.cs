@@ -129,12 +129,6 @@ namespace AutoColony.Modules
         readonly HashSet<IntVec3> refusedCells = new HashSet<IntVec3>();
 
         /// <summary>
-        /// How many different cells one item may be offered before the room is left for a later
-        /// pass. Bounded because every attempt rescores the whole interior.
-        /// </summary>
-        const int MaxCellAttempts = 8;
-
-        /// <summary>
         /// How many times a room's walls may be started over before the site is given up.
         ///
         /// Generous, because the ordinary reason for restarting is that something destroyed the
@@ -1332,6 +1326,24 @@ namespace AutoColony.Modules
             if (!layout.HasRoom(RoomRole.Prison) && (s.raidsSurvived > 0 || s.downedStrangers > 0))
                 options.Add(RoomRole.Prison.ToString());
 
+            // Recreation taken in an impressive room is worth up to +8 mood and every stage of
+            // that thought is positive — there is no band where a rec room costs anything. The
+            // joy buildings were already being built; they simply had nowhere to go, so they
+            // were scattered by a remedy into whichever room had a free cell and never gathered
+            // anywhere. This is the room they were always for.
+            if (!layout.HasRoom(RoomRole.Recreation)) options.Add(RoomRole.Recreation.ToString());
+
+            // Only once there is a body. An empty tomb is walls the colony paid for and cannot
+            // eat, and the mood penalty it answers does not exist until somebody has died.
+            if (!layout.HasRoom(RoomRole.Tomb) && s.unburiedCorpses > 0)
+                options.Add(RoomRole.Tomb.ToString());
+
+            // And only once there are animals to shelter. Nothing here tames anything, so this
+            // waits on animals arriving some other way — bought, bonded, or self-tamed — rather
+            // than building a barn on the chance of it.
+            if (!layout.HasRoom(RoomRole.Barn) && s.tamedAnimals > 0)
+                options.Add(RoomRole.Barn.ToString());
+
             // Nothing outstanding: the base matches the colony's current size.
             if (options.Count == 0) return false;
 
@@ -2146,6 +2158,59 @@ namespace AutoColony.Modules
             catch (Exception) { return false; }
         }
 
+        /// <summary>How many graves a tomb is furnished with before it is considered done.</summary>
+        const int GravesPerTomb = 2;
+
+        /// <summary>
+        /// Cells in the room's interior — the most cell attempts a placement can possibly need,
+        /// since every one of them is struck off at most once.
+        /// </summary>
+        static int CountInterior(PlannedRoom room)
+        {
+            int n = 0;
+            foreach (var cell in room.Interior) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// The joy buildings a rec room is for.
+        ///
+        /// Deliberately more than one, and deliberately different ones: recreation in RimWorld
+        /// is per-*kind*, so a colonist who has had enough chess gains nothing from a second
+        /// chess table and everything from a horseshoes pin. That is also why the old remedy
+        /// walked a list — it simply had nowhere to put the results.
+        ///
+        /// Placement is allowed to fail. A horseshoes pin carries PlaceWorker_WatchArea and
+        /// wants a clear lane, which is exactly what a 9x9 room has and a bedroom does not, but
+        /// if it still does not fit the others have already gone in.
+        /// </summary>
+        void QueueJoyBuildings(DirectorContext ctx, PlannedRoom room)
+        {
+            for (int i = 0; i < JoyBuildingsForRecRoom.Length; i++)
+                PlaceOne(ctx, room, AcDefs.Thing(JoyBuildingsForRecRoom[i]));
+        }
+
+        static readonly string[] JoyBuildingsForRecRoom =
+        {
+            "GameOfUrBoard", "ChessTable", "HorseshoesPin"
+        };
+
+        /// <summary>
+        /// A built animal bed, or the free spot when the colony cannot make one.
+        ///
+        /// Same rule as the sleeping spot for colonists and the butcher spot in the kitchen: a
+        /// free thing that works today beats a better one that needs material the colony has
+        /// not got. Chosen on capability rather than by `??`, which would always pick the first
+        /// def that resolves and never the one the colony can actually build.
+        /// </summary>
+        static ThingDef AnimalBedFor(DirectorContext ctx)
+        {
+            var bed = AcDefs.AnimalBed;
+            if (bed != null && PlacementUtil.ResearchDone(bed) &&
+                PlacementUtil.ChooseStuff(ctx.map, bed, 0f) != null) return bed;
+            return AcDefs.AnimalSleepingSpot;
+        }
+
         void QueueFurniture(DirectorContext ctx, PlannedRoom room)
         {
             switch (room.role)
@@ -2212,6 +2277,20 @@ namespace AutoColony.Modules
                     // The cooler goes in a wall, not the floor: it moves heat from one side to
                     // the other, so it has to span inside and outside.
                     PlaceCoolerInWall(ctx, room);
+                    break;
+                case RoomRole.Recreation:
+                    QueueJoyBuildings(ctx, room);
+                    break;
+                case RoomRole.Tomb:
+                    // Graves, not sarcophagi. A sarcophagus is better in every way except that
+                    // it costs stone blocks, which need a stonecutter's table the colony may
+                    // not have built — and an unburied colonist is the single largest mood
+                    // penalty in the game, so the cheap hole that can be dug today wins.
+                    PlaceMany(ctx, room, AcDefs.Grave, GravesPerTomb);
+                    break;
+                case RoomRole.Barn:
+                    PlaceMany(ctx, room, AnimalBedFor(ctx), 3);
+                    PlaceOne(ctx, room, AcDefs.Hopper);
                     break;
             }
 
@@ -2295,6 +2374,15 @@ namespace AutoColony.Modules
                 case RoomRole.Workshop: return AcDefs.StonecuttersTable;
                 case RoomRole.Freezer: return AcDefs.Cooler;
                 case RoomRole.Power: return AcDefs.WoodFiredGenerator;
+                case RoomRole.Tomb: return AcDefs.Grave;
+                case RoomRole.Barn: return AcDefs.AnimalSleepingSpot;
+
+                // A rec room is not defined by any one building — the whole point is variety,
+                // since recreation is satisfied per kind and a second chess table is worth
+                // nothing to somebody who has had enough chess. Naming one of them essential
+                // would make the room read as empty whenever that particular one failed to fit.
+                case RoomRole.Recreation: return null;
+
                 default: return null;   // storage and dining have nothing essential
             }
         }
@@ -2404,8 +2492,24 @@ namespace AutoColony.Modules
                 // same refusal, for ever. Watched live as a bedroom re-queuing its bed twenty
                 // times running, reporting "Bed was refused at (137, 0, 129)" every single pass.
                 //
-                // A refused cell is therefore struck off and the next best one tried.
-                for (int attempt = 0; attempt < MaxCellAttempts && !placed; attempt++)
+                // A refused cell is therefore struck off and the next best one tried — and the
+                // loop must be allowed to run out of *cells* rather than out of turns.
+                //
+                // It used to stop after eight. A research room's interior is twenty-five cells
+                // and a research bench is three by two, so the eight best-scoring cells were
+                // tried, the game refused the footprint at every one, and seventeen cells were
+                // never looked at. Scoring is deterministic, so the same eight were chosen and
+                // refused on every pass for the life of the colony: the room stood finished and
+                // empty, read as spare, and was eventually reclaimed for its material.
+                //
+                // That is thirty-seven colonies in which no research was ever done, and the
+                // whole of it was one constant. The cap only ever binds when an item is
+                // failing, which is exactly the case that needed more looking, and the natural
+                // stop was already there — `best.IsValid` goes false once every placeable cell
+                // has been struck off, and says so in a message that names which of the two
+                // problems it is.
+                int cellsHere = CountInterior(room);
+                for (int attempt = 0; attempt < cellsHere && !placed; attempt++)
                 {
                     float bestScore = float.NegativeInfinity;
                     var best = IntVec3.Invalid;
@@ -2547,14 +2651,15 @@ namespace AutoColony.Modules
             int impressivenessStage = BandIndex(RoomStatDefOf.Impressiveness, impressiveness);
 
             string role = planned.role.ToString();
+            int beds = Upkeep.DefectSurvey.ColonistBedsIn(room);
             string shortfall = Rooms.RoomQuality.Shortfall(
-                role, spaceStage, spaceBand, impressivenessStage, impressivenessBand);
+                role, spaceStage, spaceBand, impressivenessStage, impressivenessBand, beds);
             if (shortfall == null) return;
 
             Chronicle.Record(ChronicleCategory.Build, string.Format(
                 "the {0} room came out below what that role needs — {1}{2}",
                 planned.role, shortfall,
-                Rooms.RoomQuality.Actionable(role, spaceStage, impressivenessStage)
+                Rooms.RoomQuality.Actionable(role, spaceStage, impressivenessStage, beds)
                     ? ", which furniture can still answer"
                     : ", and walls cannot be moved — the next one of these should be sited bigger"));
         }

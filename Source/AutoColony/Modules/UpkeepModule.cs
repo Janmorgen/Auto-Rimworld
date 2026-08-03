@@ -200,6 +200,18 @@ namespace AutoColony.Modules
         /// trade in the game: the single largest mood penalty, removed for free. Colonists haul
         /// their own dead into it once one exists — the director only has to provide the hole.
         /// </summary>
+        /// <summary>The tomb, if one is planned and its walls are up. Null otherwise.</summary>
+        static PlannedRoom PlannedTomb(DirectorContext ctx)
+        {
+            if (ctx.layout == null) return null;
+            for (int i = 0; i < ctx.layout.rooms.Count; i++)
+            {
+                var room = ctx.layout.rooms[i];
+                if (room.role == RoomRole.Tomb && room.wallsQueued) return room;
+            }
+            return null;
+        }
+
         static bool BuryDead(DirectorContext ctx, ColonyDefect defect)
         {
             var grave = AcDefs.Grave;
@@ -216,6 +228,26 @@ namespace AutoColony.Modules
             if (EmptyGraveExists(ctx.map))
             {
                 return ReleaseTheDeadForBurial(ctx);
+            }
+
+            // Inside the tomb if there is one. Graves used to go wherever there was room within
+            // eighteen cells of the body, which scatters them across the base and leaves them
+            // out in the weather; a tomb keeps them together and multiplies what colonists get
+            // from visiting by up to 1.4. Falls through to the old search when no tomb is
+            // standing yet, because a hole today beats a room next week when the penalty for an
+            // unburied colonist is the largest single mood hit in the game.
+            var tomb = PlannedTomb(ctx);
+            if (tomb != null)
+            {
+                foreach (var cell in tomb.Interior)
+                {
+                    if (!cell.InBounds(ctx.map)) continue;
+                    if (PlacementUtil.TryPlace(ctx.map, grave, cell, Rot4.North, null))
+                    {
+                        PlacementUtil.MarkHome(ctx.map, cell);
+                        return true;
+                    }
+                }
             }
 
             var near = defect.thing != null && defect.thing.Spawned
@@ -486,6 +518,13 @@ namespace AutoColony.Modules
             // stops blocking, so a colony that genuinely outgrows one table can still get a
             // second — it just cannot order five at once while none of them have been started.
             if (AnyJoyPending(ctx)) return false;
+
+            // A rec room is where these belong, and once one is planned the planner furnishes
+            // it. Scattering another game table through the kitchen would only take the
+            // recreation *out* of the room the mood bonus is paid for — RimWorld scores joy by
+            // where it was taken, so a chess table in a bedroom earns nothing the rec room
+            // would have earned.
+            if (ctx.layout != null && ctx.layout.HasRoom(RoomRole.Recreation)) return false;
 
             for (int i = 0; i < JoyBuildings.Length; i++)
             {

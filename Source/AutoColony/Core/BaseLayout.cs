@@ -3,6 +3,19 @@ using Verse;
 
 namespace AutoColony
 {
+    /// <summary>
+    /// The kinds of room the planner knows how to build.
+    ///
+    /// Nine of these have a counterpart in RimWorld's own fifteen <c>RoomRoleDef</c>s, which is
+    /// what decides whether the game agrees the room is what the layout calls it. Power and
+    /// Freezer deliberately do not: the game has no classification for machinery, and neither
+    /// wants one.
+    ///
+    /// Added at the end on purpose. The role is saved by name rather than by number, so the
+    /// existing values could be reordered safely — but the siting genes are registered by
+    /// walking this enum, so every addition grows the genome and makes older archives a
+    /// different shape.
+    /// </summary>
     public enum RoomRole
     {
         Storage = 0,
@@ -14,7 +27,37 @@ namespace AutoColony
         Hospital = 6,
         Prison = 7,
         Power = 8,
-        Freezer = 9
+        Freezer = 9,
+
+        /// <summary>
+        /// Somewhere to do something that is not work.
+        ///
+        /// The joy buildings existed already and had nowhere to live: they were placed by an
+        /// upkeep *remedy* into the first planned room with a free cell, so they scattered
+        /// through kitchens and bedrooms and no room ever gathered enough of them to read as a
+        /// rec room. RimWorld pays up to +8 mood for recreation taken in an impressive one —
+        /// every stage of that thought is positive, there is no downside band — and none of it
+        /// was reachable.
+        /// </summary>
+        Recreation = 10,
+
+        /// <summary>
+        /// Somewhere to put the dead.
+        ///
+        /// Graves were dropped on open ground by a radial search around wherever the body fell.
+        /// A tomb keeps them together and out of the weather, and multiplies what colonists get
+        /// from visiting by up to 1.4.
+        /// </summary>
+        Tomb = 11,
+
+        /// <summary>
+        /// Somewhere for tamed animals to sleep and eat.
+        ///
+        /// The one role here with no existing subsystem behind it — nothing tames, trains or
+        /// breeds anything, so this builds the shelter and the feeding, and animals acquired
+        /// any other way have somewhere to be.
+        /// </summary>
+        Barn = 12
     }
 
     /// <summary>A room the planner has reserved, and how far construction has got.</summary>

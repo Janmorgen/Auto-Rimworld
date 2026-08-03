@@ -45,7 +45,8 @@ namespace AutoColony.Rooms
                                                room.GetStat(RoomStatDefOf.Impressiveness));
 
                     judged++;
-                    if (RoomQuality.Shortfall(planned.role.ToString(), space, "", impressiveness, "")
+                    if (RoomQuality.Shortfall(planned.role.ToString(), space, "", impressiveness,
+                                              "", Upkeep.DefectSurvey.ColonistBedsIn(room))
                         == null) upToStandard++;
                 }
                 catch (Exception) { }
