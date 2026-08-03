@@ -35,12 +35,67 @@ namespace AutoColony.Modules
 
         readonly Dictionary<string, float> needs = new Dictionary<string, float>();
 
+        /// <summary>The best Construction level anybody in the colony has.</summary>
+        int bestConstruction;
+
+        /// <summary>
+        /// Construction below this botches often enough to be a net loss.
+        ///
+        /// A failed build consumes the materials and produces nothing, so a poor builder is not
+        /// merely slow — they are spending the colony's wood to make rubble. RimWorld scales
+        /// ConstructionSuccessChance with the skill, and it is unforgiving at the bottom.
+        /// </summary>
+        const int ShakyBuilder = 4;
+
+        void NoteTheBestBuilder(DirectorContext ctx)
+        {
+            bestConstruction = 0;
+            var all = ctx.state.allColonists;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var pawn = all[i];
+                if (pawn == null || pawn.skills == null) continue;
+                var skill = pawn.skills.GetSkill(SkillDefOf.Construction);
+                if (skill != null && !skill.TotallyDisabled && skill.Level > bestConstruction)
+                    bestConstruction = skill.Level;
+            }
+        }
+
+        /// <summary>
+        /// How much to hold this colonist back from building, given who else could do it.
+        ///
+        /// Everything here scores a colonist against their *own* other options and never against
+        /// the rest of the colony, so when blueprints are pending the need pushes Construction up
+        /// everybody's list at once — including the person who cannot lay a wall without
+        /// wasting it. Watched on two colonies in a row as "Construction botched" floating over
+        /// a half-built room, on a map where the shelter was urgent and the wood was finite.
+        ///
+        /// A demotion rather than a ban. RimWorld works down the priority list, so a shaky
+        /// builder still builds when the good one is asleep, hurt, or busy — which is exactly
+        /// the fallback a three-person colony needs and a ban would remove.
+        /// </summary>
+        float BuilderPenalty(Pawn pawn, WorkTypeDef wt)
+        {
+            if (wt.defName != "Construction" || pawn.skills == null) return 1f;
+
+            var skill = pawn.skills.GetSkill(SkillDefOf.Construction);
+            if (skill == null || skill.TotallyDisabled) return 1f;
+
+            // Somebody has to build. If the best in the colony is shaky too, this changes
+            // nothing and the work still gets done by whoever is least bad at it.
+            if (bestConstruction <= ShakyBuilder) return 1f;
+            if (skill.Level >= ShakyBuilder) return 1f;
+
+            return 0.45f;
+        }
+
         protected override void Act(DirectorContext ctx)
         {
             if (Current.Game != null && Current.Game.playSettings != null)
                 Current.Game.playSettings.useWorkPriorities = true;
 
             ComputeNeeds(ctx);
+            NoteTheBestBuilder(ctx);
 
             var workTypes = DefDatabase<WorkTypeDef>.AllDefsListForReading;
             int assigned = 0;
@@ -182,7 +237,8 @@ namespace AutoColony.Modules
                 float score = geneWeight * (0.4f
                                             + skillW * skill
                                             + passionW * passion
-                                            + needW * (need - 1f));
+                                            + needW * (need - 1f))
+                              * BuilderPenalty(pawn, wt);
 
                 scored.Add(new KeyValuePair<WorkTypeDef, float>(wt, score));
             }
