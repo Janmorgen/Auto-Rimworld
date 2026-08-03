@@ -58,6 +58,10 @@ namespace AutoColony.Modules
             // People before property, and before the fire arrives rather than after.
             if (ctx.state.fires > 0 && ctx.state.colonistsDowned > 0) EvacuateCasualties(ctx);
 
+            // And whether or not anything is burning.
+            if (ctx.state.colonistsDowned > 0) CarryTheFallenToBed(ctx);
+            else ForgetTheFallen();
+
             if (ThreatActive(ctx))
             {
                 HandleThreat(ctx);
@@ -316,6 +320,98 @@ namespace AutoColony.Modules
         }
 
         readonly HashSet<int> evacuating = new HashSet<int>();
+
+        /// <summary>When each colonist was first seen on the floor, by thing ID.</summary>
+        readonly Dictionary<int, int> downSince = new Dictionary<int, int>();
+
+        /// <summary>
+        /// How long somebody may lie there before the colony is told to go and get them.
+        ///
+        /// Deliberately not immediate. Rescuing is part of the Doctor work type and colonists do
+        /// it unprompted, so forcing a job the moment anyone falls would fight the game's own
+        /// scheduler for no gain and take a doctor off a patient to fetch another. An hour is
+        /// long enough that if nobody has come, nobody is coming.
+        /// </summary>
+        const int RescueGraceTicks = 2500;
+
+        /// <summary>Nobody is down; drop everything remembered about who was.</summary>
+        void ForgetTheFallen()
+        {
+            if (downSince.Count > 0) downSince.Clear();
+            if (evacuating.Count > 0) evacuating.Clear();
+        }
+
+        /// <summary>
+        /// Carries a colonist who has been lying on the floor to a bed, fire or no fire.
+        ///
+        /// Evacuation only ever ran when something was burning — the call site required it and
+        /// the method required it again — so a colonist downed by a raid, an animal or a fall
+        /// was left where they landed and the colony went back to work around them. Run 38 died
+        /// that way: four deaths, every one of them a pawn who was downed and then died rather
+        /// than killed outright, at health 0.71, 0.52, 0.44 and 0.34, with the complaint
+        /// NeedFood at -44 and five days of food in the larder the whole time. A pawn on the
+        /// floor cannot walk to a stockpile, and nothing was carrying them to where food gets
+        /// brought.
+        ///
+        /// This does not pre-empt the game. Colonists rescue each other unprompted as part of
+        /// Doctor work, and that is usually enough; this waits an hour and acts only when it
+        /// was not, which makes it a backstop rather than a second scheduler.
+        /// </summary>
+        void CarryTheFallenToBed(DirectorContext ctx)
+        {
+            int now = Find.TickManager.TicksGame;
+            var colonists = ctx.map.mapPawns.FreeColonistsSpawned;
+
+            // Anyone back on their feet or already in a bed is no longer a casualty, and has to
+            // be forgotten or they can never be rescued a second time. `evacuating` was only
+            // ever added to, so one rescue per colonist per colony was the standing limit.
+            for (int i = 0; i < colonists.Count; i++)
+            {
+                var pawn = colonists[i];
+                if (pawn == null) continue;
+                if (pawn.Downed && !pawn.InBed()) continue;
+
+                downSince.Remove(pawn.thingIDNumber);
+                evacuating.Remove(pawn.thingIDNumber);
+            }
+
+            for (int i = 0; i < colonists.Count; i++)
+            {
+                var victim = colonists[i];
+                if (victim == null || victim.Dead || !victim.Downed) continue;
+                if (victim.InBed()) continue;
+                if (evacuating.Contains(victim.thingIDNumber)) continue;
+
+                int since;
+                if (!downSince.TryGetValue(victim.thingIDNumber, out since))
+                {
+                    downSince[victim.thingIDNumber] = now;
+                    continue;
+                }
+                if (now - since < RescueGraceTicks) continue;
+
+                var carrier = NearestCarrier(ctx, victim);
+                if (carrier == null) continue;
+
+                Building_Bed bed = null;
+                try { bed = RestUtility.FindBedFor(victim, carrier, false, false, null); }
+                catch (Exception) { }
+                if (bed == null) { NoteNowhereSafe(ctx, victim); continue; }
+
+                var job = JobMaker.MakeJob(JobDefOf.Rescue, victim, bed);
+                job.count = 1;
+                if (!carrier.jobs.TryTakeOrderedJob(job, JobTag.Misc)) continue;
+
+                evacuating.Add(victim.thingIDNumber);
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "{0} has been on the floor for an hour and nobody has come — {1} is carrying " +
+                    "them to a bed. Lying there they cannot eat, and being tended is what a bed " +
+                    "is for",
+                    victim.LabelShortCap, carrier.LabelShortCap));
+                Note("carried " + victim.LabelShortCap + " to a bed");
+                return;
+            }
+        }
 
         /// <summary>
         /// Carries a colonist who cannot walk out of a fire's way before it reaches them.
