@@ -346,16 +346,26 @@ namespace AutoColony.Modules
         ///
         /// Evacuation only ever ran when something was burning — the call site required it and
         /// the method required it again — so a colonist downed by a raid, an animal or a fall
-        /// was left where they landed and the colony went back to work around them. Run 38 died
-        /// that way: four deaths, every one of them a pawn who was downed and then died rather
-        /// than killed outright, at health 0.71, 0.52, 0.44 and 0.34, with the complaint
-        /// NeedFood at -44 and five days of food in the larder the whole time. A pawn on the
-        /// floor cannot walk to a stockpile, and nothing was carrying them to where food gets
-        /// brought.
+        /// was never carried anywhere by the director.
         ///
-        /// This does not pre-empt the game. Colonists rescue each other unprompted as part of
-        /// Doctor work, and that is usually enough; this waits an hour and acts only when it
-        /// was not, which makes it a backstop rather than a second scheduler.
+        /// It is a genuine backstop and nothing more, which is worth stating because the first
+        /// version of this comment claimed otherwise. Run 38 lost four colonists who were downed
+        /// and then died rather than killed outright, with five days of food they could not walk
+        /// to, and the missing evacuation looked like the cause. It was not. The `casualty`
+        /// scenario put a colonist on the floor with nothing burning and the colony handled it
+        /// unprompted and quickly: one colonist tended the casualty where they lay within
+        /// minutes, another carried them to a bed, and this code did not fire once because it
+        /// was never needed. Rescuing and tending are Doctor work and the game schedules both.
+        ///
+        /// What killed run 38 was the cascade rather than the rescue: three colonists, a raid,
+        /// people going down faster than they could be recovered, ending at one alive and that
+        /// one down. Once the last able colonist falls there is nobody to tend anybody, and no
+        /// amount of rescue logic reaches that state.
+        ///
+        /// So this earns its place only where the game's own scheduler does not act — everybody
+        /// drafted through a long fight, or a doctor who cannot path — and it waits an hour
+        /// before deciding that has happened. Acting sooner would take a doctor off a patient to
+        /// fetch another and fight the scheduler for no gain.
         /// </summary>
         void CarryTheFallenToBed(DirectorContext ctx)
         {
