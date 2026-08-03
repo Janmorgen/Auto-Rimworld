@@ -107,6 +107,17 @@ namespace AutoColony.Modules
             try
             {
                 if (chosen.action != null) chosen.action();
+
+                // Put the screen back the way it was found.
+                //
+                // Some options do more than decide something — a quest letter's only real
+                // option is "view quest", whose action switches to the Quests tab and leaves it
+                // there. Nothing was closing it, so the director opened a full-screen panel over
+                // the colony on day one and every screenshot after that was a picture of a
+                // quest description. It changes nothing about how the colony is played and
+                // everything about whether anybody can watch it being played.
+                CloseAnythingTheOptionOpened();
+
                 Find.LetterStack.RemoveLetter(letter);
                 AcLog.Verbose("Answered '" + letter.Label + "' with '" + OptionText(chosen) + "'");
                 Chronicle.Record(ChronicleCategory.Incident,
@@ -120,6 +131,22 @@ namespace AutoColony.Modules
                 try { Find.LetterStack.RemoveLetter(letter); } catch (Exception) { }
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Shuts whatever tab or dialog a letter option put on screen.
+        ///
+        /// Deliberately blunt and deliberately guarded: there is no window the director needs
+        /// open, and failing to close one must never stall the letter handling that called it.
+        /// </summary>
+        static void CloseAnythingTheOptionOpened()
+        {
+            try
+            {
+                if (Find.MainTabsRoot != null && Find.MainTabsRoot.OpenTab != null)
+                    Find.MainTabsRoot.EscapeCurrentTab(false);
+            }
+            catch (Exception) { }
         }
 
         // DiaOption.text is not public, but classifying an option as accept or decline needs it.
