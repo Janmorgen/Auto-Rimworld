@@ -448,6 +448,20 @@ namespace AutoColony.Modules
         /// </summary>
         static bool AddTable(DirectorContext ctx)
         {
+            // A dining room is where a table belongs, and the planner furnishes one.
+            //
+            // Without this, the remedy drops a table into the first planned room with a free
+            // cell and does it again on the next pass, because the complaint is about the
+            // colony and not about that room. Run 53 fired it thirteen times: the Storage room
+            // came out classified as a DiningRoom, and so did the Power room, because a table
+            // and chairs is all it takes. The room the colony actually eats in is decided by
+            // where the table is, so scattering them makes every room a worse version of the
+            // one that was supposed to hold it.
+            //
+            // Same shape as the joy buildings, and the same answer: once the room exists, the
+            // remedy stands down and lets the planner do it properly.
+            if (ctx.layout != null && ctx.layout.HasRoom(RoomRole.Dining)) return false;
+
             if (PlaceInBase(ctx, AcDefs.Thing("Table2x2c"), 1)) return true;
             return PlaceInBase(ctx, AcDefs.SmallTable, 1);
         }

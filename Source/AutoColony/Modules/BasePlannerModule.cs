@@ -2381,7 +2381,12 @@ namespace AutoColony.Modules
                 case RoomRole.Freezer: return AcDefs.Cooler;
                 case RoomRole.Power: return AcDefs.WoodFiredGenerator;
                 case RoomRole.Tomb: return AcDefs.Grave;
-                case RoomRole.Barn: return AcDefs.AnimalSleepingSpot;
+
+                // Whatever the barn was actually furnished with, which is a built animal bed
+                // when the colony can make one and the free spot when it cannot. Naming the
+                // spot outright meant a barn furnished with beds read as empty for ever, and
+                // said so: "its animal sleeping spot did not go in".
+                case RoomRole.Barn: return AnimalBedFor(ctx);
 
                 // A rec room is not defined by any one building — the whole point is variety,
                 // since recreation is satisfied per kind and a second chess table is worth
