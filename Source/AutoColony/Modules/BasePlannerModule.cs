@@ -99,7 +99,28 @@ namespace AutoColony.Modules
         /// Why the last furniture placement put nothing down, or null if the last one worked.
         /// Carried so the loop report can name its own cause instead of only its symptom.
         /// </summary>
-        string lastPlacementFailure;
+        /// <summary>
+        /// Why each def failed to be placed, this pass, keyed on the def that failed.
+        ///
+        /// This was one shared string, and a single string cannot answer "why did the *bench*
+        /// not go in" because something is always placed after the bench. Every room gets a
+        /// torch at the end of <see cref="QueueFurniture"/>, and a successful placement clears
+        /// the field — so the bench recorded its reason and the torch erased it a moment later,
+        /// leaving "nothing was reported, which means the placement was never attempted".
+        ///
+        /// That message was wrong in the most expensive way available: it named a cause, it was
+        /// believed, and it sent four colonies' worth of investigation looking at whether the
+        /// furnish path ran at all when the real answer was being overwritten one line further
+        /// on. Keyed per def, the bench's reason survives whatever is placed after it.
+        /// </summary>
+        readonly Dictionary<ThingDef, string> placementFailures = new Dictionary<ThingDef, string>();
+
+        /// <summary>The reason recorded for this def this pass, or null if it did not fail.</summary>
+        string FailureFor(ThingDef def)
+        {
+            string reason;
+            return def != null && placementFailures.TryGetValue(def, out reason) ? reason : null;
+        }
 
         /// <summary>
         /// Cells the game refused this item in, so the next-best is tried instead of the same one
@@ -396,6 +417,7 @@ namespace AutoColony.Modules
             if (s.pendingBlueprints + s.pendingFrames > MaxPendingConstruction) return;
 
             placedThisPass = 0;
+            placementFailures.Clear();
 
             // Finish what is already reserved before opening a new room.
             for (int i = 0; i < layout.rooms.Count; i++)
@@ -480,8 +502,8 @@ namespace AutoColony.Modules
                         "still has not appeared — the planner is looping on it instead of getting " +
                         "on with the base; last placement said: {2}",
                         room.role, requeueRun,
-                        lastPlacementFailure ?? "nothing, which means it placed something and it " +
-                        "went away again"));
+                        FailureFor(KeyFurnitureFor(ctx, room.role)) ??
+                        "nothing, which means it placed something and it went away again"));
                 }
                 return;
             }
@@ -1751,8 +1773,8 @@ namespace AutoColony.Modules
             Chronicle.Record(ChronicleCategory.Build, string.Format(
                 "the {0} room is finished and its {1} did not go in — {2}",
                 room.role, key.label,
-                lastPlacementFailure ?? "nothing was reported, which means the placement was " +
-                "never attempted on this pass"));
+                FailureFor(key) ?? "nothing was reported, and since a torch is placed after it " +
+                "in every room this now means it genuinely was not attempted"));
         }
 
         bool TopUpFurniture(DirectorContext ctx)
@@ -2292,12 +2314,12 @@ namespace AutoColony.Modules
             // in another cell only wastes the pass. Tested once, up front, and said plainly.
             if (!def.IsResearchFinished)
             {
-                lastPlacementFailure = def.defName + " is not researched yet";
+                placementFailures[def] = def.defName + " is not researched yet";
                 return;
             }
             if (def.MadeFromStuff && stuff == null)
             {
-                lastPlacementFailure = def.defName + " has no material the colony can spare";
+                placementFailures[def] = def.defName + " has no material the colony can spare";
                 return;
             }
 
@@ -2305,7 +2327,15 @@ namespace AutoColony.Modules
 
             for (int n = 0; n < count; n++)
             {
-                if (placedThisPass >= MaxPlacementsPerPass) return;
+                // Said out loud rather than returned in silence. A pass that runs out of budget
+                // before reaching an item looks exactly like one that never tried, and "never
+                // tried" is a very different bug from "ran out of room to try".
+                if (placedThisPass >= MaxPlacementsPerPass)
+                {
+                    placementFailures[def] = def.defName + " was not reached — the pass had " +
+                        "already used its budget of " + MaxPlacementsPerPass + " placements";
+                    return;
+                }
 
                 bool placed = false;
 
@@ -2344,7 +2374,7 @@ namespace AutoColony.Modules
                         // nothing placeable in it at all is a siting problem, whereas one whose
                         // every candidate the game refused is a fit problem — a 2x2 table in a
                         // room that has the cells but not four of them together.
-                        lastPlacementFailure = refusedCells.Count == 0
+                        placementFailures[def] = refusedCells.Count == 0
                             ? def.defName + " found no placeable cell in the interior at all " +
                               "(every cell holds rock, a building or pending construction)"
                             : def.defName + " was refused at all " + refusedCells.Count +
@@ -2359,13 +2389,13 @@ namespace AutoColony.Modules
                         PlacementUtil.TryPlace(map, def, best, Rot4.East, stuff))
                     {
                         placed = true;
-                        lastPlacementFailure = null;
+                        placementFailures.Remove(def);
                         placedThisPass++;
                     }
                     else
                     {
                         refusedCells.Add(best);
-                        lastPlacementFailure = def.defName + " was refused at " + best +
+                        placementFailures[def] = def.defName + " was refused at " + best +
                             " in both orientations (the game's own placement rules)";
                     }
                 }
