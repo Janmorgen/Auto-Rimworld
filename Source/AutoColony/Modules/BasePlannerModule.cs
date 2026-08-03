@@ -1224,9 +1224,13 @@ namespace AutoColony.Modules
             var marker = AcDefs.PenMarker;
             if (fence == null || marker == null) return;
 
+            // A marker on order counts as a pen already. Asking only for *built* markers meant
+            // the blueprint queued last pass was invisible to this one, so the planner fenced a
+            // second pen on top of the first — 11x11 at day 0, 13x13 an hour later, the second
+            // reporting twelve perimeter cells it could not place because the first was there.
             try
             {
-                if (ctx.map.listerBuildings.AllBuildingsColonistOfDef(marker).Any()) return;
+                if (AnyBuiltOrPlanned(ctx.map, marker)) return;
             }
             catch (Exception) { return; }
 
@@ -1242,11 +1246,14 @@ namespace AutoColony.Modules
             // a big unbroken patch of open ground and most maps do not have one; refusing to
             // fence anything because 23x23 would not fit is how a feature that works becomes a
             // feature that never fires.
+            var pasture = new MapPastureNutritionCalculator();
+            pasture.Reset(ctx.map);
+
             int wanted = PenSizeFor(ctx.state.tamedAnimals);
             int size = 0;
             CellRect rect = default(CellRect);
             for (int trial = wanted; trial >= 9; trial -= 2)
-                if (FindGrazing(ctx, trial, out rect)) { size = trial; break; }
+                if (FindGrazing(ctx, trial, pasture, out rect)) { size = trial; break; }
             if (size == 0) return;
 
             // The gate cell is skipped rather than fenced and then gated. A blueprint already
@@ -1290,11 +1297,63 @@ namespace AutoColony.Modules
                 markerCell.IsValid ? "a pen marker" : "NO MARKER — the game will not treat it as a pen",
                 gaps > 0 ? string.Format(", {0} perimeter cells refused", gaps) : ""));
 
-            if (markerCell.IsValid) ReportPenForage(ctx, markerCell, size);
+            if (markerCell.IsValid) ReportPenForage(ctx, markerCell, size, rect);
             Note("fenced an animal pen");
         }
 
         /// <summary>Finds an open, growable patch big enough to be worth fencing.</summary>
+        /// <summary>
+        /// Whether this def already stands on the map or is on its way to standing there.
+        /// "Is it built yet" is the wrong question for anything the planner orders once: the
+        /// blueprint exists for days before the building does, and a guard that cannot see it
+        /// orders the same thing again on every pass in between.
+        /// </summary>
+        static bool AnyBuiltOrPlanned(Map map, ThingDef def)
+        {
+            if (map.listerBuildings.AllBuildingsColonistOfDef(def).Any()) return true;
+
+            var groups = new[] { ThingRequestGroup.Blueprint, ThingRequestGroup.BuildingFrame };
+            for (int g = 0; g < groups.Length; g++)
+            {
+                var things = map.listerThings.ThingsInGroup(groups[g]);
+                for (int i = 0; i < things.Count; i++)
+                    if (PlacementUtil.BuildTargetOf(things[i]) == def) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// What a rectangle of ground would forage per day, per season, if it were fenced.
+        ///
+        /// Asked of <c>MapPastureNutritionCalculator</c>, which is the model the game itself
+        /// uses: nutrition per day is a property of the terrain and the quadrum, so it can be
+        /// summed over cells before a single fence post exists. That is the difference between
+        /// choosing a pen site and explaining one afterwards.
+        ///
+        /// The first attempt asked <c>PenFoodCalculator</c> about the blueprint perimeter
+        /// instead and got 0.0 in all four seasons on a spring map with the fields visibly
+        /// growing — an answer that was wrong rather than bad, and would have been believed if
+        /// the map had been arid.
+        /// </summary>
+        static float[] ForagePerQuadrum(Map map, CellRect interior, MapPastureNutritionCalculator pasture)
+        {
+            var perQuadrum = new float[4];
+            foreach (var cell in interior)
+            {
+                if (!cell.InBounds(map)) continue;
+                // Ground under a building grows nothing.
+                if (cell.GetEdifice(map) != null) continue;
+
+                var terrain = cell.GetTerrain(map);
+                if (terrain == null) continue;
+
+                var yield = pasture.CalculateAverageNutritionPerDay(terrain);
+                for (int q = 0; q < 4; q++)
+                    perQuadrum[q] += yield.ForQuadrum((Quadrum)q);
+            }
+            return perQuadrum;
+        }
+
         /// <summary>
         /// Asks the game what the pen just fenced will actually feed, and records it.
         ///
@@ -1309,12 +1368,16 @@ namespace AutoColony.Modules
         /// size heuristic in <see cref="PenSizeFor"/> is a guess; this is the measurement, and
         /// where they disagree it is the guess that is wrong.
         /// </summary>
-        void ReportPenForage(DirectorContext ctx, IntVec3 markerCell, int size)
+        void ReportPenForage(DirectorContext ctx, IntVec3 markerCell, int size, CellRect rect)
         {
             try
             {
                 var calc = new PenFoodCalculator();
                 calc.ResetAndProcessPen(markerCell, ctx.map, true);
+
+                var pasture = new MapPastureNutritionCalculator();
+                pasture.Reset(ctx.map);
+                var perQuadrum = ForagePerQuadrum(ctx.map, rect.ContractedBy(1), pasture);
 
                 float latitude = Find.WorldGrid.LongLatOf(ctx.map.Tile).y;
                 float lean = float.MaxValue;
@@ -1323,7 +1386,7 @@ namespace AutoColony.Modules
 
                 for (int q = 0; q < 4; q++)
                 {
-                    float supply = calc.nutritionPerDayPerQuadrum.ForQuadrum((Quadrum)q);
+                    float supply = perQuadrum[q];
                     // Quadrum to season depends on which hemisphere the colony landed in, so ask
                     // rather than assume. Mid-quadrum is (q + 0.5) / 4 of the way through a year.
                     string season = SeasonUtility.Label(
@@ -1392,10 +1455,14 @@ namespace AutoColony.Modules
             return total;
         }
 
-        static bool FindGrazing(DirectorContext ctx, int size, out CellRect rect)
+        static bool FindGrazing(DirectorContext ctx, int size, MapPastureNutritionCalculator pasture,
+                                out CellRect rect)
         {
             rect = default(CellRect);
             var map = ctx.map;
+            float bestLean = -1f;
+            int scored = 0;
+            bool found = false;
 
             foreach (var centre in GenRadial.RadialCellsAround(ctx.Origin, 45, true))
             {
@@ -1435,10 +1502,28 @@ namespace AutoColony.Modules
                 // Mostly grazing, or it is a fence around nothing.
                 if (growable * 2 < cells) continue;
 
-                rect = candidate;
-                return true;
+                // Cheap filters passed. Now ask the game what this patch actually forages in its
+                // worst season, and keep the best answer rather than the first acceptable one —
+                // fertility says whether something *can* grow, the pasture model says how much
+                // and when, and those are different questions. Bounded to a handful of
+                // candidates because this is the expensive half.
+                float lean = LeanForage(map, candidate, pasture);
+                if (lean > bestLean) { bestLean = lean; rect = candidate; found = true; }
+                if (++scored >= 10) break;
             }
-            return false;
+            return found;
+        }
+
+        /// <summary>
+        /// What a candidate forages per day in its worst season — the number that decides whether
+        /// a pen carries its herd through the year or needs hay hauled to it for a quarter of it.
+        /// </summary>
+        static float LeanForage(Map map, CellRect candidate, MapPastureNutritionCalculator pasture)
+        {
+            var perQuadrum = ForagePerQuadrum(map, candidate.ContractedBy(1), pasture);
+            float lean = float.MaxValue;
+            for (int q = 0; q < 4; q++) if (perQuadrum[q] < lean) lean = perQuadrum[q];
+            return lean;
         }
 
         void MarkPrisonBeds(DirectorContext ctx)
