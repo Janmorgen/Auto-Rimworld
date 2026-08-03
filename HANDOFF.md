@@ -469,6 +469,28 @@ catalogue, and the assumptions were sitting in comments that read as facts. Chec
   own combination of those two. Note that `ResearchSpeedFactor` and `FoodPoisonChance`, the two
   hidden stats that matter most to rooms the director builds, are *both* derived from cleanliness
   by curve, so they are work-priority telemetry and not building feedback either.
+- **A retry cap on something essential is a permanent failure, not a delay.** `PlaceMany`
+  stopped offering an item cells after eight tries. A research room's interior is twenty-five
+  cells and the bench is three by two, so the eight best-scoring cells were tried, the game
+  refused the footprint at each, and seventeen were never looked at — and because scoring is
+  deterministic, the same eight were chosen and refused on every pass for the life of every
+  colony. Research scored 0.00 in all thirty-seven runs on that one constant. Caps like this
+  only bind in the failing case, which is the case that needed more looking; the loop now runs
+  out of cells, and `best.IsValid` going false already distinguished "nothing placeable here"
+  from "refused everywhere".
+- **The full set of RoomRoleDefs is fifteen, and the planner covers twelve.** Storeroom,
+  Kitchen, DiningRoom, Bedroom, Workshop, Laboratory, Hospital, PrisonCell, RecRoom, Tomb and
+  Barn map onto planner roles; `Power` and `Freezer` are machinery the game does not classify
+  and neither wants to be. `Barracks` and `PrisonBarracks` are not targets — they are what the
+  game calls a bedroom or a cell with more than one bed in it, which is a thing the planner
+  *produces* rather than aims at. See the barracks note below. With no DLC active that is the
+  whole set; Royalty, Ideology and Biotech each add more.
+- **A shared bedroom is a different room, not a fuller one.** `SleptInBedroom` pays −2 up to
+  +8; `SleptInBarracks` pays −7 up to +4 — worse at the floor and lower at the ceiling, so
+  sharing is worse in every band. `BuildingMeans.BedsPerRoom` returns the gene when the colony
+  is comfortable and *every colonist* when it is destitute, so a barracks is the normal
+  outcome rather than the exception. `RoomQuality.StandardFor(role, beds)` holds a shared room
+  to a higher impressiveness floor for this reason.
 - **Ask the game what the room became.** The planner keeps its own `RoomRole` and RimWorld keeps
   its own classification of every enclosed room, into one of fifteen `RoomRoleDef`s. They can
   disagree, and the disagreement is free to detect: a Research room whose bench never went in
