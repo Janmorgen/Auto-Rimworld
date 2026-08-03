@@ -148,6 +148,11 @@ plank floor.
 A barracks is worse at the floor *and* lower at the ceiling — worse in every band. A rec room
 has no downside band at all: it either pays or it does not exist.
 
+The threshold is one bed. A second bed in the room changes which thought the sleeper gets, so
+"a bedroom for two" is not a thing — it is a barracks, and costs about five mood a head a night
+against the private room it could have been. Confirmed live: the director's own bedroom was
+called a `Bedroom` with one bed built and a `Barracks` the moment the second went in.
+
 ---
 
 ## API traps, all found the hard way

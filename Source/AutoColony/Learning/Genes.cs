@@ -176,7 +176,20 @@ namespace AutoColony.Learning
             Add(BaseSpareBeds, 0f, 5f, 1f, "Base", "Spare beds kept ready");
             Add(BaseStonePreference, 0f, 1f, 0.4f, "Base", "Stone vs wood for walls");
             // Private rooms lift mood but cost far more to build: a real strategic trade-off.
-            Add(BaseBedsPerRoom, 1f, 4f, 2f, "Base", "Beds per bedroom");
+            // One, not two.
+            //
+            // Two beds in a room is not a bedroom with a guest, it is a Barracks to the game —
+            // watched live in run 53, on the director's own bedroom, the moment its second bed
+            // was built. The curves are not close: SleptInBedroom pays -2 up to +8 and
+            // SleptInBarracks -7 up to +4, so sharing is worse at the floor and lower at the
+            // ceiling, in every band there is.
+            //
+            // This is only what a *comfortable* colony prefers. BuildingMeans.BedsPerRoom
+            // already puts everyone in one room when the colony is destitute and scales between
+            // the two, so the poverty case was always handled elsewhere and this value was
+            // quietly costing five mood a head a night to save walls the colony could afford.
+            // Still a gene: evolution may raise it if it finds a reason.
+            Add(BaseBedsPerRoom, 1f, 4f, 1f, "Base", "Beds per bedroom");
 
             Add(GrowingCellsPerColonist, 10f, 200f, 60f, "Zones", "Growing cells per colonist");
             Add(StockpileCellsPerColonist, 10f, 120f, 40f, "Zones", "Stockpile cells per colonist");
