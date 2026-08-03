@@ -243,6 +243,9 @@ namespace AutoColony
         /// furniture — both were worth stating separately, because either alone leaves the room
         /// at outdoor temperature and the meals rotting on schedule.
         /// </summary>
+        /// <summary>Cold enough that nothing in the room spoils. A cooler defaults to 21C.</summary>
+        public const float FreezerTargetC = -10f;
+
         static string InstallCooling(Map map, CellRect rect)
         {
             var cooler = AcDefs.Cooler;
@@ -281,12 +284,33 @@ namespace AutoColony
             var refuelable = spawned.TryGetComp<CompRefuelable>();
             if (refuelable != null) refuelable.Refuel(refuelable.Props.fuelCapacity);
 
+            // A cooler ships set to 21C, which is room temperature — so a correctly built,
+            // correctly wired, correctly facing cooler holds the room at exactly the
+            // temperature it would have been at anyway, and the meals rot on schedule. The
+            // target is the whole point of the machine and it is not the default.
+            var control = c.TryGetComp<CompTempControl>();
+            if (control != null) control.targetTemperature = FreezerTargetC;
+
             return refuelable != null
-                ? "cooler powered by a full generator"
-                : "cooler powered, generator takes no fuel";
+                ? "cooler set to " + FreezerTargetC + "C, powered by a full generator"
+                : "cooler set to " + FreezerTargetC + "C, generator takes no fuel";
         }
 
         /// <summary>A rectangle with nothing standing in it, searched outward from a point.</summary>
+        /// <summary>
+        /// Rectangles already handed out, so the next room is not built inside the last one.
+        ///
+        /// "No edifice and everything standable" describes an empty field and it equally well
+        /// describes the *inside* of a finished room — so a 7x7 was happily sited within the 7x7
+        /// interior of a 9x9, nesting one room inside another and leaving both reading as a
+        /// handful of cells. Every candidate is now checked against what has already been built
+        /// as well as against the terrain.
+        /// </summary>
+        static readonly List<CellRect> takenRects = new List<CellRect>();
+
+        /// <summary>Forgets the rooms built so far. Called once at the start of a showcase.</summary>
+        public static void ForgetRects() { takenRects.Clear(); }
+
         static bool FindClearRect(Map map, IntVec3 origin, int width, int height,
                                   int minDist, int maxDist, out CellRect rect)
         {
@@ -298,6 +322,14 @@ namespace AutoColony
                 var candidate = CellRect.CenteredOn(centre, width / 2, height / 2);
                 if (!candidate.InBounds(map)) continue;
 
+                // One cell of clearance all round, so neighbours do not share a wall and a
+                // ClearCell for one room cannot take a hole out of the one next to it.
+                var footprint = candidate.ExpandedBy(1);
+                bool overlaps = false;
+                for (int i = 0; i < takenRects.Count; i++)
+                    if (takenRects[i].Overlaps(footprint)) { overlaps = true; break; }
+                if (overlaps) continue;
+
                 bool clear = true;
                 foreach (var cell in candidate)
                 {
@@ -306,6 +338,7 @@ namespace AutoColony
                 }
                 if (!clear) continue;
 
+                takenRects.Add(footprint);
                 rect = candidate;
                 return true;
             }
@@ -345,6 +378,16 @@ namespace AutoColony
             public string[] contents;
             public bool markMedical;
             public bool markPrison;
+
+            /// <summary>
+            /// Whether the interior is zoned for storage.
+            ///
+            /// A storeroom is not shelves in a room, it is a room things are *stored* in — the
+            /// game counts what is held there, and nothing is held anywhere without a zone or a
+            /// shelf accepting it. Built without one, a room of three shelves reads as a plain
+            /// Room, which is exactly what happened.
+            /// </summary>
+            public bool stockpile;
         }
 
         /// <summary>
@@ -397,7 +440,7 @@ namespace AutoColony
             // Shelves, not a stockpile zone. A storeroom is defined by what is stored in it, and
             // shelves are what the game counts.
             plans.Add(Plan("Storage", "Storeroom", 9, 9,
-                           new[] { "Shelf", "Shelf", "Shelf", "TorchLamp" }));
+                           new[] { "Shelf", "Shelf", "Shelf", "TorchLamp" }, stockpile: true));
 
             // A prisoner bed, marked and its room told. The flag alone leaves the game refusing
             // captures with "no enclosed prisoner-marked bed" while every clause looks satisfied.
@@ -413,7 +456,7 @@ namespace AutoColony
         }
 
         static RoomPlan Plan(string label, string expected, int w, int h, string[] contents,
-                             bool medical = false, bool prison = false)
+                             bool medical = false, bool prison = false, bool stockpile = false)
         {
             var p = new RoomPlan();
             p.label = label;
@@ -423,6 +466,7 @@ namespace AutoColony
             p.contents = contents;
             p.markMedical = medical;
             p.markPrison = prison;
+            p.stockpile = stockpile;
             return p;
         }
 
@@ -435,14 +479,16 @@ namespace AutoColony
         /// be there too — a sealed box is unreachable, and every job into it fails in a way that
         /// looks like a director bug rather than a scenario one.
         /// </summary>
-        public static string BuildRoom(Map map, IntVec3 near, RoomPlan plan, int minDist, int maxDist)
+        public static IntVec3 BuildRoom(Map map, IntVec3 near, RoomPlan plan,
+                                        int minDist, int maxDist, out string report)
         {
+            report = plan.label + ": ";
             var wall = AcDefs.Wall;
-            if (wall == null) return plan.label + ": no wall def";
+            if (wall == null) { report += "no wall def"; return IntVec3.Invalid; }
 
             CellRect rect;
             if (!FindClearRect(map, near, plan.width, plan.height, minDist, maxDist, out rect))
-                return plan.label + ": nowhere clear";
+            { report += "nowhere clear"; return IntVec3.Invalid; }
 
             var stuff = GenStuff.DefaultStuffFor(wall);
             foreach (var cell in rect.EdgeCells)
@@ -488,6 +534,8 @@ namespace AutoColony
                 else if (plan.markMedical) bed.Medical = true;
             }
 
+            if (plan.stockpile) ZoneAndStock(map, interior);
+
             var room = rect.CenterCell.GetRoom(map);
             if (room != null)
             {
@@ -495,8 +543,47 @@ namespace AutoColony
                 foreach (var thing in placed) room.Notify_ContainedThingSpawnedOrDespawned(thing);
             }
 
-            return string.Format("{0} at {1}: placed {2} of {3}",
-                                 plan.label, rect.CenterCell, placed.Count, plan.contents.Length);
+            report += string.Format("built at {0}, placed {1} of {2}",
+                                    rect.CenterCell, placed.Count, plan.contents.Length);
+
+            // The centre cell can hold an impassable building — a 3x2 research bench, a
+            // stonecutter's table — and a cell inside a building belongs to no region and
+            // therefore to no room. The first interior cell that is actually standable is what
+            // the verdict has to be read from.
+            foreach (var cell in rect.ContractedBy(1))
+                if (cell.InBounds(map) && cell.GetEdifice(map) == null) return cell;
+
+            return rect.CenterCell;
+        }
+
+        /// <summary>
+        /// Zones a room's interior for storage and puts something in it.
+        ///
+        /// Both halves are needed. The zone is what lets anything be stored there at all, and
+        /// the game decides a storeroom by what is actually *held* — an empty zoned room is a
+        /// room with a plan, not a storeroom.
+        /// </summary>
+        static void ZoneAndStock(Map map, CellRect interior)
+        {
+            if (map.zoneManager == null) return;
+
+            var zone = new Zone_Stockpile(StorageSettingsPreset.DefaultStockpile, map.zoneManager);
+            map.zoneManager.RegisterZone(zone);
+
+            var goods = AcDefs.Thing("Steel");
+            int stacks = 0;
+            foreach (var cell in interior)
+            {
+                if (!cell.InBounds(map) || !GenGrid.Standable(cell, map)) continue;
+                if (map.zoneManager.ZoneAt(cell) != null) continue;
+
+                zone.AddCell(cell);
+                if (goods != null && cell.GetFirstItem(map) == null && stacks < 8)
+                {
+                    Drop(map, cell, goods, goods.stackLimit);
+                    stacks++;
+                }
+            }
         }
 
         /// <summary>Puts one thing anywhere inside the room that the game will accept it.</summary>
@@ -526,9 +613,12 @@ namespace AutoColony
             string actual = room.Role != null ? room.Role.defName : "none";
             string mark = actual == expected ? "as expected" : "EXPECTED " + expected;
 
-            return string.Format("{0} ({1}) — space {2:0.0}, beauty {3:0.0}, cleanliness {4:0.00}, " +
-                                 "impressiveness {5:0.0}",
+            return string.Format("{0} ({1}) — {2} cells, outdoors {3}, openRoof {4}, edge {5} — " +
+                                 "space {6:0.0}, beauty {7:0.0}, cleanliness {8:0.00}, " +
+                                 "impressiveness {9:0.0}",
                                  actual, mark,
+                                 room.CellCount, room.PsychologicallyOutdoors,
+                                 room.OpenRoofCount, room.TouchesMapEdge,
                                  room.GetStat(RoomStatDefOf.Space),
                                  room.GetStat(RoomStatDefOf.Beauty),
                                  room.GetStat(RoomStatDefOf.Cleanliness),

@@ -167,20 +167,26 @@ namespace AutoColony
 
             var origin = HarnessSetup.ColonistOrigin(map);
             var plans = HarnessSetup.Showcase();
-            var centres = new List<IntVec3>();
+            showcaseCentres.Clear();
+            HarnessSetup.ForgetRects();
 
-            // Marched outward so the rooms do not sit on one another, and started well clear of
-            // the colonists so the planner still has somewhere of its own to build.
-            int distance = 30;
+            // Packed in around the colonists rather than flung across the map.
+            //
+            // The first version marched outward from thirty cells and added four a room, which
+            // put the far ones sixty and seventy cells out — across a river, up a mountain, and
+            // nowhere anybody would walk to. A colony builds its rooms next to each other, so a
+            // scenario pretending to be one should too. The search still runs outward from here
+            // and the overlap check keeps them apart, so this is a floor rather than a ring.
+            const int NearestRoom = 12;
             for (int i = 0; i < plans.Count; i++)
             {
-                string built = HarnessSetup.BuildRoom(map, origin, plans[i], distance, distance + 22);
-                Chronicle.Record(ChronicleCategory.System, "SCENARIO room: " + built);
-                distance += 4;
+                string report;
+                var centre = HarnessSetup.BuildRoom(map, origin, plans[i], NearestRoom, 45, out report);
+                showcaseCentres.Add(centre);
+                Chronicle.Record(ChronicleCategory.System, "SCENARIO room: " + report);
             }
 
-            showcaseAt = Find.TickManager.TicksGame + 600;
-            showcaseOrigin = origin;
+            showcaseAt = Find.TickManager.TicksGame + 900;
         }
 
         /// <summary>
@@ -193,14 +199,13 @@ namespace AutoColony
         static void ReportShowcase(Map map)
         {
             var plans = HarnessSetup.Showcase();
-            var origin = showcaseOrigin;
 
             Chronicle.Record(ChronicleCategory.System,
                 "SCENARIO showcase — what the game calls each room it was handed:");
 
             for (int i = 0; i < plans.Count; i++)
             {
-                var found = FindRoomCentre(map, origin, plans[i]);
+                var found = i < showcaseCentres.Count ? showcaseCentres[i] : IntVec3.Invalid;
                 if (!found.IsValid)
                 {
                     Chronicle.Record(ChronicleCategory.System,
@@ -212,33 +217,8 @@ namespace AutoColony
             }
         }
 
-        /// <summary>
-        /// Finds a built showcase room by looking for an enclosed space of about the right size.
-        ///
-        /// The build returns its centre, but keeping those across a tick boundary means holding
-        /// map state the scenario has no business owning — so they are found again instead.
-        /// </summary>
-        static IntVec3 FindRoomCentre(Map map, IntVec3 origin, HarnessSetup.RoomPlan plan)
-        {
-            int wantCells = (plan.width - 2) * (plan.height - 2);
-
-            foreach (var cell in GenRadial.RadialCellsAround(origin, 60, true))
-            {
-                if (!cell.InBounds(map)) continue;
-                var room = cell.GetRoom(map);
-                if (room == null || room.TouchesMapEdge || room.PsychologicallyOutdoors) continue;
-                if (room.CellCount != wantCells) continue;
-                if (seenShowcaseRooms.Contains(room.ID)) continue;
-
-                seenShowcaseRooms.Add(room.ID);
-                return cell;
-            }
-            return IntVec3.Invalid;
-        }
-
         static int showcaseAt = -1;
-        static IntVec3 showcaseOrigin;
-        static readonly HashSet<int> seenShowcaseRooms = new HashSet<int>();
+        static readonly List<IntVec3> showcaseCentres = new List<IntVec3>();
 
         static void FireRaid(Map map, float points)
         {
