@@ -334,6 +334,20 @@ namespace AutoColony.Modules
         /// </summary>
         const int RescueGraceTicks = 2500;
 
+        /// <summary>
+        /// Whether this casualty is losing blood, which is the difference between a colonist
+        /// who can wait for the colony to notice and one who cannot.
+        /// </summary>
+        static bool Bleeding(Pawn pawn)
+        {
+            try
+            {
+                return pawn.health != null && pawn.health.hediffSet != null &&
+                       pawn.health.hediffSet.BleedRateTotal > 0.01f;
+            }
+            catch (Exception) { return false; }
+        }
+
         /// <summary>Nobody is down; drop everything remembered about who was.</summary>
         void ForgetTheFallen()
         {
@@ -396,9 +410,19 @@ namespace AutoColony.Modules
                 if (!downSince.TryGetValue(victim.thingIDNumber, out since))
                 {
                     downSince[victim.thingIDNumber] = now;
-                    continue;
+                    if (!Bleeding(victim)) continue;      // bleeding cannot afford even one pass
                 }
-                if (now - since < RescueGraceTicks) continue;
+
+                // An hour is the wrong wait for somebody bleeding out.
+                //
+                // The grace exists so this does not fight the game's own scheduler in the
+                // ordinary case, and an hour is a fair reading of "if nobody has come, nobody is
+                // coming". It is the wrong reading when the casualty has a clock: run 72 lost
+                // Aly to "Blood loss (extreme)" on day one, downed and dead inside the hour this
+                // was still waiting out, with the backstop never firing once.
+                //
+                // So bleeding skips the wait entirely. Everything else keeps it.
+                if (!Bleeding(victim) && now - since < RescueGraceTicks) continue;
 
                 var carrier = NearestCarrier(ctx, victim);
                 if (carrier == null) continue;
@@ -414,10 +438,11 @@ namespace AutoColony.Modules
 
                 evacuating.Add(victim.thingIDNumber);
                 Chronicle.Record(ChronicleCategory.Health, string.Format(
-                    "{0} has been on the floor for an hour and nobody has come — {1} is carrying " +
-                    "them to a bed. Lying there they cannot eat, and being tended is what a bed " +
-                    "is for",
-                    victim.LabelShortCap, carrier.LabelShortCap));
+                    "{0} is {1} and nobody has come — {2} is carrying them to a bed. Lying there " +
+                    "they cannot eat, and being tended is what a bed is for",
+                    victim.LabelShortCap,
+                    Bleeding(victim) ? "on the floor and bleeding" : "has been on the floor for an hour",
+                    carrier.LabelShortCap));
                 Note("carried " + victim.LabelShortCap + " to a bed");
                 return;
             }
