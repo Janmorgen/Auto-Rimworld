@@ -21,6 +21,8 @@ namespace AutoColony
     ///   downed           a downed neutral stranger, to be rescued
     ///   downedhostile    a downed raider, to be captured
     ///   provision        food and material for a week, to reach the late plan without the wait
+    ///   showcase         provision, plus one built example of every room the director knows,
+    ///                    each reported against what it was expected to classify as
     ///
     /// The last one is the mirror of `starve` and `strip`, and exists for the same reason in
     /// reverse. Those two take things away to see what the colony does without them; this hands
@@ -70,6 +72,12 @@ namespace AutoColony
 
             if (pendingPrisonBed != null && tick >= markAtTick) MarkPendingPrisonBed();
 
+            if (showcaseAt > 0 && tick >= showcaseAt)
+            {
+                showcaseAt = -1;
+                ReportShowcase(map);
+            }
+
             if (!fired || tick - lastReport < 300) return;
             lastReport = tick;
             Report(map);
@@ -99,6 +107,7 @@ namespace AutoColony
                 else if (scenario == "infestation") FireIncident(map, "Infestation", 500f);
                 else if (scenario == "starve") RemoveAllFood(map);
                 else if (scenario == "provision") Provision(map);
+                else if (scenario == "showcase") { Provision(map); Showcase(map); }
                 else if (scenario == "strip") Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO: removed " + HarnessSetup.StripMaterials(map) + " building material");
                 else Chronicle.Record(ChronicleCategory.System, "SCENARIO: unknown '" + scenario + "'");
@@ -137,6 +146,99 @@ namespace AutoColony
                 "colony now wants for nothing it would have spent a week acquiring",
                 meals, wood, steel, components));
         }
+
+        /// <summary>
+        /// Builds one of every room the director knows about and asks the game what each one is.
+        ///
+        /// Two things at once. It settles the food question properly — a walled, roofed, powered
+        /// freezer stocked with meals, rather than loose stacks that read as 22.5 days at dawn
+        /// and 4.6 by day three — so the plan can reach its long-term horizon in an hour instead
+        /// of a week. And it states, in advance and out loud, what each room is expected to
+        /// classify as, so the game can disagree.
+        ///
+        /// The expectations are the test. RimWorld decides a room's role inside fifteen
+        /// `RoomRoleWorker` classes that cannot be read from here, so an understanding of them is
+        /// only worth anything if it is written down before the answer arrives.
+        /// </summary>
+        static void Showcase(Map map)
+        {
+            string freezer = HarnessSetup.BuildStockedFreezer(map);
+            Chronicle.Record(ChronicleCategory.System, "SCENARIO freezer: " + freezer);
+
+            var origin = HarnessSetup.ColonistOrigin(map);
+            var plans = HarnessSetup.Showcase();
+            var centres = new List<IntVec3>();
+
+            // Marched outward so the rooms do not sit on one another, and started well clear of
+            // the colonists so the planner still has somewhere of its own to build.
+            int distance = 30;
+            for (int i = 0; i < plans.Count; i++)
+            {
+                string built = HarnessSetup.BuildRoom(map, origin, plans[i], distance, distance + 22);
+                Chronicle.Record(ChronicleCategory.System, "SCENARIO room: " + built);
+                distance += 4;
+            }
+
+            showcaseAt = Find.TickManager.TicksGame + 600;
+            showcaseOrigin = origin;
+        }
+
+        /// <summary>
+        /// Reads the verdicts back once the game has had time to recalculate the rooms.
+        ///
+        /// Room stats are cached and updated on a priority queue rather than on demand, so
+        /// asking the instant the last wall goes up returns the roomless defaults for most of
+        /// them — which reads as every room having failed.
+        /// </summary>
+        static void ReportShowcase(Map map)
+        {
+            var plans = HarnessSetup.Showcase();
+            var origin = showcaseOrigin;
+
+            Chronicle.Record(ChronicleCategory.System,
+                "SCENARIO showcase — what the game calls each room it was handed:");
+
+            for (int i = 0; i < plans.Count; i++)
+            {
+                var found = FindRoomCentre(map, origin, plans[i]);
+                if (!found.IsValid)
+                {
+                    Chronicle.Record(ChronicleCategory.System,
+                        "SCENARIO   " + plans[i].label + " — never got built");
+                    continue;
+                }
+                Chronicle.Record(ChronicleCategory.System, "SCENARIO   " + plans[i].label + " -> " +
+                    HarnessSetup.Verdict(map, found, plans[i].expectedRole));
+            }
+        }
+
+        /// <summary>
+        /// Finds a built showcase room by looking for an enclosed space of about the right size.
+        ///
+        /// The build returns its centre, but keeping those across a tick boundary means holding
+        /// map state the scenario has no business owning — so they are found again instead.
+        /// </summary>
+        static IntVec3 FindRoomCentre(Map map, IntVec3 origin, HarnessSetup.RoomPlan plan)
+        {
+            int wantCells = (plan.width - 2) * (plan.height - 2);
+
+            foreach (var cell in GenRadial.RadialCellsAround(origin, 60, true))
+            {
+                if (!cell.InBounds(map)) continue;
+                var room = cell.GetRoom(map);
+                if (room == null || room.TouchesMapEdge || room.PsychologicallyOutdoors) continue;
+                if (room.CellCount != wantCells) continue;
+                if (seenShowcaseRooms.Contains(room.ID)) continue;
+
+                seenShowcaseRooms.Add(room.ID);
+                return cell;
+            }
+            return IntVec3.Invalid;
+        }
+
+        static int showcaseAt = -1;
+        static IntVec3 showcaseOrigin;
+        static readonly HashSet<int> seenShowcaseRooms = new HashSet<int>();
 
         static void FireRaid(Map map, float points)
         {
