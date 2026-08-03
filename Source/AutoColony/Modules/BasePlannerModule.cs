@@ -1949,11 +1949,19 @@ namespace AutoColony.Modules
                     // Natural rock only. Anything the colony built is its own business, and
                     // tearing down a neighbouring room's shared wall is how a base gets opened
                     // to the sky.
+                    // Mine is indexed by cell, not by the thing standing in it.
+                    //
+                    // This asked DesignationOn(edifice) and added Designation(edifice), which
+                    // the game answers with "Designations of type Mine are indexed by location
+                    // only" — ten times in one colony, in the warning log rather than as an
+                    // exception, which is why nothing watching this session ever counted it.
+                    // ResourceModule does the same job by cell a hundred lines away, and the
+                    // two have disagreed for as long as both have existed.
                     if (edifice.def.mineable && edifice.Faction == null &&
-                        map.designationManager.DesignationOn(edifice, DesignationDefOf.Mine) == null)
+                        map.designationManager.DesignationAt(cell, DesignationDefOf.Mine) == null)
                     {
                         map.designationManager.AddDesignation(
-                            new Designation(edifice, DesignationDefOf.Mine));
+                            new Designation(cell, DesignationDefOf.Mine));
                         ordered++;
                     }
                     continue;
