@@ -649,6 +649,7 @@ namespace AutoColony.Modules
             MarkPrisonBeds(ctx);
             MarkMedicalBeds(ctx);
             EnsureAnimalPen(ctx);
+            VerifyPen(ctx);
 
             // Opening a building project is not how a fire or a raid is answered, and the labour
             // it claims is the labour the emergency needs. Everything already reserved carries on
@@ -1302,6 +1303,98 @@ namespace AutoColony.Modules
         }
 
         /// <summary>Finds an open, growable patch big enough to be worth fencing.</summary>
+        bool penVerdictGiven;
+        bool penFailureNoted;
+        int penMarkerStandingSince = -1;
+
+        /// <summary>How long a standing marker gets to become an enclosed pen before it is called a failure.</summary>
+        const int PenGraceTicks = 60000;   // one in-game day
+
+        /// <summary>
+        /// Says whether the finished pen actually holds, once it is finished.
+        ///
+        /// The same deferred-verdict shape as <c>ReportSettledRoom</c>, and for the same reason:
+        /// the report worth trusting is the one taken after the thing is built, not when it is
+        /// ordered. A pen is ordered as blueprints, and blueprints hold no animals — reading the
+        /// enclosure at siting time would call every pen a failure.
+        ///
+        /// <c>CompAnimalPenMarker.PenState.Enclosed</c> is the game's own answer, the one behind
+        /// its "Pen needed" alert, so this agrees with what the player sees rather than with a
+        /// second implementation of the same idea. The forage figures are re-read here too, from
+        /// the marker's own calculator: at siting time they were a projection over terrain, and
+        /// this is the pen that actually got built.
+        /// </summary>
+        void VerifyPen(DirectorContext ctx)
+        {
+            if (penVerdictGiven) return;
+
+            var markerDef = AcDefs.PenMarker;
+            if (markerDef == null) return;
+
+            Building standing = null;
+            try
+            {
+                foreach (var b in ctx.map.listerBuildings.AllBuildingsColonistOfDef(markerDef))
+                { standing = b; break; }
+            }
+            catch (Exception) { return; }
+            if (standing == null) return;
+
+            if (penMarkerStandingSince < 0) penMarkerStandingSince = Find.TickManager.TicksGame;
+
+            var marker = standing.TryGetComp<CompAnimalPenMarker>();
+            if (marker == null) return;
+
+            bool enclosed;
+            try { enclosed = marker.PenState.Enclosed; }
+            catch (Exception) { return; }
+
+            // Still going up. Say nothing until it is enclosed or it has had long enough that
+            // not being enclosed is the answer rather than the wait.
+            if (!enclosed && Find.TickManager.TicksGame - penMarkerStandingSince < PenGraceTicks)
+                return;
+
+            // The complaint is worth making once. Carry on checking after it, though — a fence
+            // finished late still closes the pen, and a verdict that stopped looking would call
+            // it broken for ever on the strength of one early reading.
+            if (!enclosed && penFailureNoted) return;
+
+            string forage = "";
+            try
+            {
+                var calc = marker.PenFoodCalculator;
+                if (calc != null)
+                {
+                    float latitude = Find.WorldGrid.LongLatOf(ctx.map.Tile).y;
+                    float lean = float.MaxValue;
+                    string leanSeason = "?";
+                    for (int q = 0; q < 4; q++)
+                    {
+                        float supply = calc.nutritionPerDayPerQuadrum.ForQuadrum((Quadrum)q);
+                        if (supply < lean)
+                        {
+                            lean = supply;
+                            leanSeason = SeasonUtility.Label(
+                                SeasonUtility.GetReportedSeason((q + 0.5f) / 4f, latitude));
+                        }
+                    }
+                    forage = string.Format(" It grazes {0} cells and forages {1:0.0} a day in {2}, its leanest season.",
+                        calc.numCells, lean, leanSeason);
+                }
+            }
+            catch (Exception) { }
+
+            Chronicle.Record(ChronicleCategory.Build, enclosed
+                ? "the pen is closed — the game agrees the fence holds, so the animals stay in it and " +
+                  "graze rather than wander off." + forage
+                : "the pen has a marker standing but the game does not call it enclosed, so it holds " +
+                  "nothing — a gap in the fence, or a gate the colony has not built yet." + forage);
+
+            // A closed pen is settled and never asked about again. An open one is noted once
+            // and kept under watch, because the fence may yet be finished.
+            if (enclosed) penVerdictGiven = true; else penFailureNoted = true;
+        }
+
         /// <summary>
         /// Whether this def already stands on the map or is on its way to standing there.
         /// "Is it built yet" is the wrong question for anything the planner orders once: the

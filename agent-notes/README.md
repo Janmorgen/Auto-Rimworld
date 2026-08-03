@@ -12,6 +12,7 @@ director is playing, and would still be true if the mod were rewritten from scra
 |---|---|
 | [rimworld-rooms.md](rimworld-rooms.md) | What makes a room, how RimWorld classifies the fifteen room roles, room stats and their bands, mood curves, and the placement API traps found the hard way |
 | [food-preservation.md](food-preservation.md) | Why a colony that hunts perfectly can starve indefinitely on a hot map, measured; rot rates, pemmican, and the deadlock the director has no answer to |
+| [rimworld-pens.md](rimworld-pens.md) | What makes a pen rather than a room, the forage API and why it must pick the site rather than describe it, and why the lean season is the only number that matters |
 | [mood-and-labour.md](mood-and-labour.md) | Two colonies that died with food and infrastructure at 1.00; why the mood they lose is mostly fixable rather than grief, and why the response added for it cannot fire |
 
 ## How these were established
