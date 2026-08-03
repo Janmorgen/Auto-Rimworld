@@ -12,6 +12,16 @@ Two colonies now have ended the same way, and the score says it plainly on both:
 Every material subsystem at its ceiling. Mood at 0.24 both times, which is close enough to be
 worth taking seriously rather than as coincidence.
 
+## The clearest single statement of it
+
+Run 56 ended on day 35 with `Room quality 0.86` — the best base the director has built — and
+`Food security 1.00`, `Health 0.99`, `Infrastructure 0.99`, `Mood 0.03`, and a colony of one
+lying on the floor beside 8.8 days of food with `NeedFood at 44.0`. Full health, downed by
+hunger, nobody left to bring a meal. Somebody had been on the floor for **100% of that epoch**.
+
+The director built its best base ever and the colony starved inside it. Every material term is
+a ceiling and the score is 0.000.
+
 ## It is not mostly grief
 
 That was the first reading and it was too tidy. Run 56 at mood 0.15, day 21, listed these as
