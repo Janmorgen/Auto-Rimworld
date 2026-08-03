@@ -448,7 +448,7 @@ namespace AutoColony
                            new[] { "SimpleResearchBench", "TorchLamp" }));
 
             plans.Add(Plan("Workshop", "Workshop", 9, 7,
-                           new[] { "TableStonecutter", "ElectricTailoringBench", "TorchLamp" }));
+                           new[] { "TableStonecutter", "HandTailoringBench", "TorchLamp" }));
 
             plans.Add(Plan("Kitchen", "Kitchen", 9, 7,
                            new[] { "FueledStove", "TableButcher", "TorchLamp" }));
@@ -471,7 +471,7 @@ namespace AutoColony
             return plans;
         }
 
-        static RoomPlan Plan(string label, string expected, int w, int h, string[] contents,
+        public static RoomPlan Plan(string label, string expected, int w, int h, string[] contents,
                              bool medical = false, bool prison = false, bool stockpile = false,
                              bool assign = false)
         {
@@ -497,16 +497,18 @@ namespace AutoColony
         /// be there too — a sealed box is unreachable, and every job into it fails in a way that
         /// looks like a director bug rather than a scenario one.
         /// </summary>
-        public static IntVec3 BuildRoom(Map map, IntVec3 near, RoomPlan plan,
-                                        int minDist, int maxDist, out string report)
+        public static bool BuildRoom(Map map, IntVec3 near, RoomPlan plan,
+                                     int minDist, int maxDist, out CellRect interiorOut,
+                                     out string report)
         {
+            interiorOut = default(CellRect);
             report = plan.label + ": ";
             var wall = AcDefs.Wall;
-            if (wall == null) { report += "no wall def"; return IntVec3.Invalid; }
+            if (wall == null) { report += "no wall def"; return false; }
 
             CellRect rect;
             if (!FindClearRect(map, near, plan.width, plan.height, minDist, maxDist, out rect))
-            { report += "nowhere clear"; return IntVec3.Invalid; }
+            { report += "nowhere clear"; return false; }
 
             var stuff = GenStuff.DefaultStuffFor(wall);
             foreach (var cell in rect.EdgeCells)
@@ -535,13 +537,16 @@ namespace AutoColony
             }
 
             var placed = new List<Thing>();
+            var failures = new List<string>();
             for (int i = 0; i < plan.contents.Length; i++)
             {
                 var def = AcDefs.Thing(plan.contents[i]);
-                if (def == null) continue;
+                if (def == null) { failures.Add(plan.contents[i] + ":no such def"); continue; }
 
-                var thing = PlaceInside(map, interior, def);
+                string why;
+                var thing = PlaceInside(map, interior, def, out why);
                 if (thing != null) placed.Add(thing);
+                else failures.Add(plan.contents[i] + ":" + why);
             }
 
             int nextOwner = 0;
@@ -563,17 +568,32 @@ namespace AutoColony
                 foreach (var thing in placed) room.Notify_ContainedThingSpawnedOrDespawned(thing);
             }
 
-            report += string.Format("built at {0}, placed {1} of {2}",
-                                    rect.CenterCell, placed.Count, plan.contents.Length);
+            report += string.Format("built at {0} ({1}x{2}), placed {3} of {4}{5}",
+                                    rect.CenterCell, rect.Width, rect.Height,
+                                    placed.Count, plan.contents.Length,
+                                    failures.Count > 0
+                                        ? " — MISSED " + string.Join("; ", failures.ToArray())
+                                        : "");
 
-            // The centre cell can hold an impassable building — a 3x2 research bench, a
-            // stonecutter's table — and a cell inside a building belongs to no region and
-            // therefore to no room. The first interior cell that is actually standable is what
-            // the verdict has to be read from.
-            foreach (var cell in rect.ContractedBy(1))
-                if (cell.InBounds(map) && cell.GetEdifice(map) == null) return cell;
+            // What is actually standing the instant after placing, so "placed" and "present"
+            // can be compared without a tick passing between them.
+            var now = new List<string>();
+            foreach (var scanCell in interior)
+            {
+                if (!scanCell.InBounds(map)) continue;
+                var things = scanCell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    if (things[i] == null || things[i].def.category != ThingCategory.Building) continue;
+                    if (things[i].Position != scanCell) continue;
+                    now.Add(things[i].def.defName);
+                }
+            }
+            report += " | immediately holds [" +
+                      (now.Count > 0 ? string.Join(", ", now.ToArray()) : "nothing") + "]";
 
-            return rect.CenterCell;
+            interiorOut = interior;
+            return true;
         }
 
         /// <summary>
@@ -626,8 +646,10 @@ namespace AutoColony
         }
 
         /// <summary>Puts one thing anywhere inside the room that the game will accept it.</summary>
-        static Thing PlaceInside(Map map, CellRect interior, ThingDef def)
+        static Thing PlaceInside(Map map, CellRect interior, ThingDef def, out string why)
         {
+            why = "no cell tried";
+            int tooBig = 0, refused = 0;
             var rotations = new[] { Rot4.North, Rot4.East };
             foreach (var cell in interior)
             {
@@ -642,52 +664,90 @@ namespace AutoColony
                     // contents are bigger than one cell.
                     var footprint = GenAdj.OccupiedRect(cell, rotations[r], def.size);
                     if (!interior.Contains(new IntVec3(footprint.minX, 0, footprint.minZ)) ||
-                        !interior.Contains(new IntVec3(footprint.maxX, 0, footprint.maxZ))) continue;
+                        !interior.Contains(new IntVec3(footprint.maxX, 0, footprint.maxZ)))
+                    { tooBig++; continue; }
 
-                    if (!GenSpawn.CanSpawnAt(def, cell, map, rotations[r])) continue;
+                    if (!GenSpawn.CanSpawnAt(def, cell, map, rotations[r])) { refused++; continue; }
+
+                    // Every cell of the footprint has to be empty of buildings already.
+                    //
+                    // GenSpawn.Spawn defaults to WipeMode.Vanish, which destroys whatever it
+                    // lands on — and CanSpawnAt says yes to that, because "can spawn" includes
+                    // "can spawn over". Since this restarts its scan at the first interior cell
+                    // for every item, each one wiped the last and only whatever was placed
+                    // *last* survived. Every room ended up holding exactly one torch, which is
+                    // the final entry in every contents list. The rooms that kept two things
+                    // were the ones whose big edifice stopped the torch taking its cell.
+                    bool occupied = false;
+                    foreach (var footCell in footprint)
+                    {
+                        var here = footCell.GetThingList(map);
+                        for (int t = 0; t < here.Count; t++)
+                            if (here[t] != null && here[t].def.category == ThingCategory.Building)
+                            { occupied = true; break; }
+                        if (occupied) break;
+                    }
+                    if (occupied) { refused++; continue; }
 
                     var thing = ThingMaker.MakeThing(def, GenStuff.DefaultStuffFor(def));
                     thing.SetFactionDirect(Faction.OfPlayer);
+                    why = "";
                     return GenSpawn.Spawn(thing, cell, map, rotations[r]);
                 }
             }
+            why = "size " + def.size + ", " + tooBig + " would overhang, " + refused + " refused";
             return null;
         }
 
         /// <summary>What the game calls a room, against what it was built to be.</summary>
-        public static string Verdict(Map map, IntVec3 cell, string expected)
+        public static string Verdict(Map map, CellRect interior, string expected)
         {
-            var room = cell.GetRoom(map);
+            // The room is found from a cell that is in one. A cell under an impassable building
+            // belongs to no region, so picking the centre and hoping is how this went wrong.
+            Room room = null;
+            foreach (var cell in interior)
+            {
+                if (!cell.InBounds(map)) continue;
+                var candidate = cell.GetRoom(map);
+                if (candidate != null && !candidate.TouchesMapEdge) { room = candidate; break; }
+            }
             if (room == null) return "no room at all";
 
             string actual = room.Role != null ? room.Role.defName : "none";
             string mark = actual == expected ? "as expected" : "EXPECTED " + expected;
 
-            // What is standing in there now, rather than what was placed. The two disagreed —
-            // rooms reported four items placed and held a torch — and until that is measured at
-            // the same moment as the verdict there is no telling which half is wrong.
-            int buildings = 0, ownedBeds = 0;
-            foreach (var roomCell in room.Cells)
+            // Counted over the rectangle, not over room.Cells.
+            //
+            // A cell underneath an impassable building belongs to no region and therefore to no
+            // room, so walking room.Cells silently skips every research bench, stove and table —
+            // the exact things whose presence decides the role. Counting that way reported a
+            // room holding one torch when it held a bed and a torch, and an explanation was
+            // then invented for the wrong number.
+            var contents = new List<string>();
+            var counted = new HashSet<Thing>();
+            foreach (var scanCell in interior)
             {
-                var things = roomCell.GetThingList(map);
+                if (!scanCell.InBounds(map)) continue;
+
+                var things = scanCell.GetThingList(map);
                 for (int i = 0; i < things.Count; i++)
                 {
-                    if (things[i] == null || things[i].Position != roomCell) continue;
-                    if (things[i].def.category != ThingCategory.Building) continue;
-                    buildings++;
-                    var bed = things[i] as Building_Bed;
-                    if (bed != null && bed.OwnersForReading != null &&
-                        bed.OwnersForReading.Count > 0) ownedBeds++;
+                    var thing = things[i];
+                    if (thing == null || thing.def.category != ThingCategory.Building) continue;
+                    if (thing.def == AcDefs.Wall || thing.def == AcDefs.Door) continue;
+                    if (!counted.Add(thing)) continue;
+                    contents.Add(thing.def.defName);
                 }
             }
 
-            return string.Format("{0} ({1}) — {2} cells, standing {6} buildings ({7} owned beds), " +
+            return string.Format("{0} ({1}) — {2} cells, holds [{6}], " +
                                  "outdoors {3}, openRoof {4}, edge {5} — " +
-                                 "space {8:0.0}, beauty {9:0.0}, cleanliness {10:0.00}, " +
-                                 "impressiveness {11:0.0}",
+                                 "space {7:0.0}, beauty {8:0.0}, cleanliness {9:0.00}, " +
+                                 "impressiveness {10:0.0}",
                                  actual, mark,
                                  room.CellCount, room.PsychologicallyOutdoors,
-                                 room.OpenRoofCount, room.TouchesMapEdge, buildings, ownedBeds,
+                                 room.OpenRoofCount, room.TouchesMapEdge,
+                                 contents.Count > 0 ? string.Join(", ", contents.ToArray()) : "nothing",
                                  room.GetStat(RoomStatDefOf.Space),
                                  room.GetStat(RoomStatDefOf.Beauty),
                                  room.GetStat(RoomStatDefOf.Cleanliness),

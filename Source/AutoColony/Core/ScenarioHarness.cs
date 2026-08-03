@@ -23,6 +23,8 @@ namespace AutoColony
     ///   provision        food and material for a week, to reach the late plan without the wait
     ///   showcase         provision, plus one built example of every room the director knows,
     ///                    each reported against what it was expected to classify as
+    ///   research         fed, housed and supplied, so the only thing left to watch is whether
+    ///                    the planner gets a bench into a research room
     ///
     /// The last one is the mirror of `starve` and `strip`, and exists for the same reason in
     /// reverse. Those two take things away to see what the colony does without them; this hands
@@ -108,6 +110,7 @@ namespace AutoColony
                 else if (scenario == "starve") RemoveAllFood(map);
                 else if (scenario == "provision") Provision(map);
                 else if (scenario == "showcase") { Provision(map); Showcase(map); }
+                else if (scenario == "research") ClearTheWayToResearch(map);
                 else if (scenario == "strip") Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO: removed " + HarnessSetup.StripMaterials(map) + " building material");
                 else Chronicle.Record(ChronicleCategory.System, "SCENARIO: unknown '" + scenario + "'");
@@ -148,6 +151,44 @@ namespace AutoColony
         }
 
         /// <summary>
+        /// Removes every reason the colony has to be doing something other than research.
+        ///
+        /// The planner's order is fixed and deliberately so — Storage, then bedrooms, then a
+        /// kitchen, and only then is Research one of the discretionary rooms the bandit may
+        /// pick. None of that is shortcut here, because the thing under test is exactly that
+        /// path: the planner siting a research room, walling it, and getting a three-by-two
+        /// bench into it. What is removed is the *scarcity* that made those first three rooms
+        /// take a week and killed four colonies before they finished.
+        ///
+        /// So: a stocked freezer that keeps eight days of food indefinitely, beds so nobody is
+        /// sleeping on the ground and the shelter goal is not pre-empting everything, and more
+        /// material than the colony can spend. Every decision after that is the director's.
+        /// </summary>
+        static void ClearTheWayToResearch(Map map)
+        {
+            HarnessSetup.ForgetRects();
+            Provision(map);
+
+            string freezer = HarnessSetup.BuildStockedFreezer(map);
+            Chronicle.Record(ChronicleCategory.System, "SCENARIO freezer: " + freezer);
+
+            // Beds standing, in a proper room. Sleeping on the ground is a standing mood
+            // complaint and an unmet shelter goal, and both pre-empt the long-term plan — which
+            // is the horizon research lives on.
+            var plan = HarnessSetup.Plan("Quarters", "Barracks", 11, 9,
+                                         new[] { "Bed", "Bed", "Bed", "Bed", "TorchLamp" });
+            string report;
+            CellRect interior;
+            HarnessSetup.BuildRoom(map, HarnessSetup.ColonistOrigin(map), plan, 10, 40,
+                                   out interior, out report);
+            Chronicle.Record(ChronicleCategory.System, "SCENARIO quarters: " + report);
+
+            Chronicle.Record(ChronicleCategory.System,
+                "SCENARIO research: the colony is fed, housed and supplied — siting a research " +
+                "room, walling it and getting the bench in is entirely the director's from here");
+        }
+
+        /// <summary>
         /// Builds one of every room the director knows about and asks the game what each one is.
         ///
         /// Two things at once. It settles the food question properly — a walled, roofed, powered
@@ -185,8 +226,10 @@ namespace AutoColony
             for (int i = 0; i < plans.Count; i++)
             {
                 string report;
-                var centre = HarnessSetup.BuildRoom(map, origin, plans[i], NearestRoom, 70, out report);
-                showcaseCentres.Add(centre);
+                CellRect interior;
+                HarnessSetup.BuildRoom(map, origin, plans[i], NearestRoom, 70,
+                                       out interior, out report);
+                showcaseCentres.Add(interior);
                 Chronicle.Record(ChronicleCategory.System, "SCENARIO room: " + report);
             }
 
@@ -209,8 +252,8 @@ namespace AutoColony
 
             for (int i = 0; i < plans.Count; i++)
             {
-                var found = i < showcaseCentres.Count ? showcaseCentres[i] : IntVec3.Invalid;
-                if (!found.IsValid)
+                var found = i < showcaseCentres.Count ? showcaseCentres[i] : default(CellRect);
+                if (found.Area <= 0)
                 {
                     Chronicle.Record(ChronicleCategory.System,
                         "SCENARIO   " + plans[i].label + " — never got built");
@@ -222,7 +265,7 @@ namespace AutoColony
         }
 
         static int showcaseAt = -1;
-        static readonly List<IntVec3> showcaseCentres = new List<IntVec3>();
+        static readonly List<CellRect> showcaseCentres = new List<CellRect>();
 
         static void FireRaid(Map map, float points)
         {
