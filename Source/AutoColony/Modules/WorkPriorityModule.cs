@@ -39,6 +39,18 @@ namespace AutoColony.Modules
         /// <summary>The best level anybody in the colony has, per skill that matters here.</summary>
         int bestConstruction;
         int bestMedicine;
+        int bestCooking;
+
+        /// <summary>
+        /// The colony's only competent medic, when there is exactly one and others are standing.
+        ///
+        /// Losing them costs every future casualty, not just this fire — so they are held back
+        /// from the work most likely to kill them while somebody else can do it instead.
+        /// </summary>
+        Pawn irreplaceableMedic;
+
+        /// <summary>How many colonists are on their feet and able to work at all.</summary>
+        int ableHands;
 
         /// <summary>
         /// Whether the colony is past the point of preferring the right person for the job.
@@ -59,10 +71,20 @@ namespace AutoColony.Modules
         /// </summary>
         const int ShakyBuilder = 4;
 
+        /// <summary>
+        /// The worst band fetching work may be given.
+        ///
+        /// Three rather than four: still below anything urgent, still above the floor where a
+        /// colonist only gets to it once every other job on the map is done.
+        /// </summary>
+        const int FetchFloor = 3;
+
         void NoteTheBestBuilder(DirectorContext ctx)
         {
             bestConstruction = 0;
             bestMedicine = 0;
+            bestCooking = 0;
+            ableHands = 0;
 
             var all = ctx.state.allColonists;
             for (int i = 0; i < all.Count; i++)
@@ -71,8 +93,27 @@ namespace AutoColony.Modules
                 if (pawn == null || pawn.skills == null) continue;
                 if (pawn.Downed || pawn.Dead) continue;      // not available to do anything
 
+                ableHands++;
                 bestConstruction = Best(bestConstruction, pawn, SkillDefOf.Construction);
                 bestMedicine = Best(bestMedicine, pawn, SkillDefOf.Medicine);
+                bestCooking = Best(bestCooking, pawn, SkillDefOf.Cooking);
+            }
+
+            irreplaceableMedic = null;
+            if (bestMedicine >= ShakyBuilder && ableHands > 1)
+            {
+                Pawn only = null;
+                int competent = 0;
+                for (int i = 0; i < all.Count; i++)
+                {
+                    var pawn = all[i];
+                    if (pawn == null || pawn.skills == null || pawn.Downed || pawn.Dead) continue;
+                    var med = pawn.skills.GetSkill(SkillDefOf.Medicine);
+                    if (med == null || med.TotallyDisabled || med.Level < ShakyBuilder) continue;
+                    competent++;
+                    only = pawn;
+                }
+                if (competent == 1) irreplaceableMedic = only;
             }
 
             var s = ctx.state;
@@ -117,6 +158,26 @@ namespace AutoColony.Modules
                 case "PatientBedRest": return PatientUrgency(pawn, 4f);
                 case "Construction": return Demote(pawn, SkillDefOf.Construction, bestConstruction, false);
                 case "Doctor": return Demote(pawn, SkillDefOf.Medicine, bestMedicine, true);
+
+                // A bad cook is not slow, they are poisoning people. FoodPoisonChance runs from
+                // 5% a meal at Cooking 0 down to 0.5% at 6, and a poisoned colonist in a colony
+                // of three is a third of the workforce vomiting for a day — self-inflicted, and
+                // at exactly the moment the food mattered enough to cook it.
+                //
+                // Lifts when desperate for the same reason the doctor's does: a 5% risk of
+                // illness beats a certainty of no meal.
+                case "Cooking": return Demote(pawn, SkillDefOf.Cooking, bestCooking, true);
+
+                // The only medic does not go into the fire.
+                //
+                // Firefighting is where colonists get burned, and burns are what the medic is
+                // for. Losing the one person who can tend well costs every casualty after this
+                // one, not just this fire. Held back only while somebody else is standing — if
+                // they are the last one up, the fire is still theirs to fight.
+                case "Firefighter":
+                case "Hunting":
+                    return pawn == irreplaceableMedic && ableHands > 1 ? 0.5f : 1f;
+
                 default: return 1f;
             }
         }
@@ -347,6 +408,24 @@ namespace AutoColony.Modules
                 // Emergency work is never switched off, whatever the genome says.
                 if (wt.alwaysStartActive && priority == 0) priority = 4;
                 if (NeedFor(wt.defName) >= 4f && priority == 0) priority = 2;
+
+                // Fetching is what makes the rest of the work possible.
+                //
+                // Hauling and Cleaning are alwaysStartActive, so they can never be switched off
+                // — but that guard drops them to priority 4, the bottom band, and every
+                // production need outranks them. A colony where everyone builds, harvests,
+                // crafts and cooks and nobody fetches is a colony where the harvest rots in the
+                // field, the stove has nothing beside it and the crafting bench has no steel:
+                // the production work does not fail loudly, it simply never starts.
+                //
+                // Cleaning belongs here for a quieter reason. Filth drives the room cleanliness
+                // that decides food poisoning and research speed, and it is the one input to
+                // those the builder cannot supply.
+                //
+                // A floor, not a promotion. Anyone whose own scores already put fetching higher
+                // keeps it there; this only stops it being ranked last by everybody at once.
+                if ((wt.defName == "Hauling" || wt.defName == "Cleaning") && priority > FetchFloor)
+                    priority = FetchFloor;
 
                 if (pawn.workSettings.GetPriority(wt) != priority)
                     pawn.workSettings.SetPriority(wt, priority);
