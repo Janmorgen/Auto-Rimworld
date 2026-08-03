@@ -452,6 +452,15 @@ catalogue, and the assumptions were sitting in comments that read as facts. Chec
   and was the only counter, so the half of the remedies that work off `defect.room` were
   unguarded for as long as they have existed. `CountInRoom` is the `Room` counterpart; use one or
   the other in anything that places.
+- **A gene with no gradient does not evolve, it drifts.** Building was scored only on whether
+  rooms *exist* — beds per colonist, a powered turret count — and every room satisfies that
+  equally, so the per-role width and height genes in `RoomProfiles`/`Genes` had nothing pushing
+  them either way for the whole life of the project. Six cramped huts scored exactly like six
+  good rooms. The `Room quality` term in `ColonyEvaluator` is what gives them a slope: space
+  comes from the siting dimensions, impressiveness from wall material and furniture, and both
+  are things the strategy chose. If you add a term meant to select on some behaviour, check
+  first that the behaviour actually varies the number — otherwise you have added cost, not
+  pressure.
 - **Score the subsystem that decided the outcome.** RimWorld rates a room on space, beauty,
   cleanliness and impressiveness, and it is tempting to hold the builder to all four. Cleanliness
   is not the builder's: the same room rates well or badly on different days depending on whether

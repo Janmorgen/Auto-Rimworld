@@ -289,5 +289,110 @@ namespace AutoColony.Tests
 
             Assert.Equal(poorGrowth, richGrowth, 3);
         }
+
+        // ------------------------------------------------------- room quality
+
+        /// <summary>Scores an epoch in which every sample saw this fraction of the base up to standard.</summary>
+        static float ScoreWithRooms(int judged, int upToStandard, int samples = 40)
+        {
+            var end = Baseline();
+            end.roomsJudged = judged;
+            end.roomsUpToStandard = upToStandard;
+
+            var start = StartFrom(Baseline());
+            var acc = new EpochAccumulator();
+            acc.ResetFor(end);
+            for (int i = 0; i < samples; i++) acc.Observe(end);
+
+            List<ScoreTerm> breakdown;
+            return ColonyEvaluator.Evaluate(start, end, acc, out breakdown);
+        }
+
+        [Fact]
+        public void ABaseUpToStandardOutscoresOneThatIsNot()
+        {
+            // The whole point of the term: two colonies identical in every outcome figure —
+            // same deaths, food, mood, wealth, beds — differing only in whether the rooms they
+            // built were worth building. Before this the search could not tell them apart, so
+            // the room width and height genes had no gradient and simply drifted.
+            Assert.True(ScoreWithRooms(6, 6) > ScoreWithRooms(6, 0));
+        }
+
+        [Fact]
+        public void MoreOfTheBaseUpToStandardNeverLowersTheScore()
+        {
+            float worse = ScoreWithRooms(4, 1);
+            float better = ScoreWithRooms(4, 3);
+            Assert.True(better >= worse);
+        }
+
+        [Fact]
+        public void AColonyWithNothingRateableScoresNeutralRatherThanZero()
+        {
+            // No enclosed rooms is no evidence either way. Such a colony is already losing
+            // Infrastructure and Growth for it, and a third penalty would let one fact decide
+            // three terms.
+            var acc = new EpochAccumulator();
+            Assert.Equal(0.5f, acc.RoomQuality, 4);
+
+            // And it must beat a colony whose rooms were rated and found wanting.
+            Assert.True(ScoreWithRooms(0, 0) > ScoreWithRooms(6, 0));
+        }
+
+        [Fact]
+        public void RoomQualityIsTheTimeAveragedFractionUpToStandard()
+        {
+            var acc = new EpochAccumulator();
+            var m = Baseline();
+
+            m.roomsJudged = 4; m.roomsUpToStandard = 4;
+            acc.Observe(m);
+            m.roomsUpToStandard = 0;
+            acc.Observe(m);
+
+            // Half the epoch fully up to standard, half of it not at all.
+            Assert.Equal(0.5f, acc.RoomQuality, 4);
+        }
+
+        [Fact]
+        public void SamplesWithNothingBuiltYetAreNotCountedAgainstTheColony()
+        {
+            // Every colony's opening hours have no enclosed rooms. Counting those as a base
+            // failing its standards would score the first day against everyone equally.
+            var acc = new EpochAccumulator();
+            var m = Baseline();
+
+            m.roomsJudged = 0; m.roomsUpToStandard = 0;
+            for (int i = 0; i < 20; i++) acc.Observe(m);
+            Assert.Equal(0, acc.roomQualitySamples);
+
+            m.roomsJudged = 2; m.roomsUpToStandard = 2;
+            acc.Observe(m);
+            Assert.Equal(1, acc.roomQualitySamples);
+            Assert.Equal(1f, acc.RoomQuality, 4);
+        }
+
+        [Fact]
+        public void TheWeightsStillSumToOne()
+        {
+            // Room quality was taken proportionally out of the others rather than added on
+            // top. If a future term is added by increasing the total instead, the score leaves
+            // [0,1] and every archived score becomes incomparable in a way nothing announces.
+            List<ScoreTerm> breakdown;
+            ColonyEvaluator.Evaluate(StartFrom(Baseline()), Baseline(), FullAcc(), out breakdown);
+
+            float total = 0f;
+            for (int i = 0; i < breakdown.Count; i++) total += breakdown[i].weight;
+            Assert.Equal(1f, total, 4);
+        }
+
+        static EpochAccumulator FullAcc()
+        {
+            var acc = new EpochAccumulator();
+            var m = Baseline();
+            acc.ResetFor(m);
+            for (int i = 0; i < 40; i++) acc.Observe(m);
+            return acc;
+        }
     }
 }

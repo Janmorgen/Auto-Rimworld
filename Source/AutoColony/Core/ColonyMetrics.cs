@@ -65,6 +65,16 @@ namespace AutoColony
         /// </summary>
         public bool inEmergency;
 
+        /// <summary>
+        /// How many standing rooms the game could rate at this moment, and how many of those
+        /// met the floor their role asks for.
+        ///
+        /// Set alongside <see cref="inEmergency"/> from the director loop rather than derived in
+        /// <c>ToMetrics</c>, because it needs the layout and the state does not carry one.
+        /// </summary>
+        public int roomsJudged;
+        public int roomsUpToStandard;
+
         // cumulative counters, differenced across an epoch
         public int researchFinished;
         public int cumulativeDeaths;

@@ -120,6 +120,31 @@ namespace AutoColony
         public int downedSamples;
         public int emergencySamples;
 
+        /// <summary>
+        /// Samples in which the game could rate at least one standing room, and the sum of the
+        /// fraction of those rooms that met their role's floor.
+        /// </summary>
+        public int roomQualitySamples;
+        public float roomQualitySum;
+
+        /// <summary>
+        /// How much of the base met the standard its roles ask for, averaged over the epoch.
+        ///
+        /// Built on space and impressiveness, which are what the *building* decided — room
+        /// dimensions, wall material, what furniture went in. Cleanliness is deliberately not
+        /// part of it: the same room rates well or badly depending on whether anybody swept it
+        /// that day, so scoring it here would grade the work priorities and call it building.
+        ///
+        /// A colony with nothing the game can rate scores neutral rather than zero. No enclosed
+        /// rooms is no evidence either way, and the colonies that have none are already losing
+        /// Infrastructure and Growth for it — taking a third bite would let one fact dominate
+        /// three terms.
+        /// </summary>
+        public float RoomQuality
+        {
+            get { return roomQualitySamples > 0 ? roomQualitySum / roomQualitySamples : 0.5f; }
+        }
+
         // --- what the chronicle knows and the outcome figures do not ---
 
         /// <summary>
@@ -166,6 +191,8 @@ namespace AutoColony
             fireSamples = 0;
             downedSamples = 0;
             emergencySamples = 0;
+            roomQualitySamples = 0;
+            roomQualitySum = 0f;
             unmetComplaintSum = 0f;
             complaintSamples = 0;
             worstComplaint = "";
@@ -214,6 +241,15 @@ namespace AutoColony
             if (m.firesNearBase > 0) fireSamples++;
             if (m.colonistsDowned > 0) downedSamples++;
             if (m.inEmergency) emergencySamples++;
+
+            // Only samples where there was something to rate. A colony three hours old has no
+            // enclosed rooms, and counting that as a base failing its standards would score
+            // every colony's opening day against it.
+            if (m.roomsJudged > 0)
+            {
+                roomQualitySamples++;
+                roomQualitySum += m.roomsUpToStandard / (float)m.roomsJudged;
+            }
 
             latestDeaths = m.cumulativeDeaths;
             latestRaids = m.cumulativeRaids;
@@ -275,6 +311,8 @@ namespace AutoColony
             Scribe_Values.Look(ref fireSamples, "fireSamples", 0);
             Scribe_Values.Look(ref downedSamples, "downedSamples", 0);
             Scribe_Values.Look(ref emergencySamples, "emergencySamples", 0);
+            Scribe_Values.Look(ref roomQualitySamples, "roomQualitySamples", 0);
+            Scribe_Values.Look(ref roomQualitySum, "roomQualitySum", 0f);
             Scribe_Values.Look(ref unmetComplaintSum, "unmetComplaintSum", 0f);
             Scribe_Values.Look(ref complaintSamples, "complaintSamples", 0);
             Scribe_Values.Look(ref worstComplaint, "worstComplaint", "");
@@ -300,14 +338,35 @@ namespace AutoColony
     /// </summary>
     public static class ColonyEvaluator
     {
-        const float WSurvival = 0.28f;
-        const float WGrowth = 0.18f;
-        const float WFood = 0.14f;
+        const float WSurvival = 0.26f;
+        const float WGrowth = 0.17f;
+        const float WFood = 0.13f;
         const float WMood = 0.11f;
         const float WHealth = 0.07f;
         const float WResearch = 0.06f;
         const float WInfrastructure = 0.04f;
         const float WDefense = 0.02f;
+
+        /// <summary>
+        /// Whether the base the colony built is any good, as the game itself rates it.
+        ///
+        /// The planner has always been scored on whether rooms *exist* — beds per colonist, a
+        /// powered turret count — and never on whether they were worth building. So a colony
+        /// that put up six cramped huts scored exactly like one that put up six good rooms, and
+        /// the room dimensions in the genome had nothing pushing on them in either direction:
+        /// every width and height was equally fit, so the search had no reason to prefer any of
+        /// them and drifted.
+        ///
+        /// This is the term that gives those genes a gradient. Space is chosen by the siting
+        /// width and height; impressiveness follows from wall material and what furniture went
+        /// in; both are decisions the strategy makes and can be selected on. Cleanliness is
+        /// excluded because it is a work-priority outcome wearing a building's clothes.
+        ///
+        /// Taken proportionally out of the other weights rather than added on top, so the score
+        /// stays in [0,1] — the same treatment Conduct had. Scores from before this term are not
+        /// directly comparable with scores after it.
+        /// </summary>
+        const float WRoomQuality = 0.05f;
 
         /// <summary>
         /// How the epoch was *run*, as opposed to how it came out.
@@ -321,7 +380,7 @@ namespace AutoColony
         /// stays in [0,1]. Scores from before this term are not directly comparable with scores
         /// after it.
         /// </summary>
-        const float WConduct = 0.10f;
+        const float WConduct = 0.09f;
 
         /// <summary>Unmet mood this bad per survey counts as thoroughly mismanaged.</summary>
         const float MiseryCeiling = 40f;
@@ -405,6 +464,13 @@ namespace AutoColony
             float contentment = AcMath.Clamp01(1f - acc.AvgUnmetComplaints / MiseryCeiling);
             float conduct = calm * 0.5f + contentment * 0.5f;
             breakdown.Add(new ScoreTerm("Conduct", conduct, WConduct));
+
+            // --- room quality: how much of the base met the standard its roles ask for ---
+            //
+            // The one term that reaches the siting genes. Everything else about building is
+            // scored on whether a room exists, which every room satisfies equally, so the
+            // width and height in the genome had no gradient to follow.
+            breakdown.Add(new ScoreTerm("Room quality", acc.RoomQuality, WRoomQuality));
 
             float score = 0f;
             for (int i = 0; i < breakdown.Count; i++) score += breakdown[i].Contribution;

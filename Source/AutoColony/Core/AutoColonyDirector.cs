@@ -273,6 +273,12 @@ namespace AutoColony
                 // it firefighting, and they are not equally well run.
                 lastMetrics.inEmergency = ctx.plan != null && ctx.plan.EmergencyActive;
 
+                // How the base the colony lives in is actually turning out. Needs the layout,
+                // which the state does not carry, so it is set here for the same reason the
+                // emergency flag is.
+                Rooms.RoomCensus.Take(ctx.map, ctx.layout,
+                                      out lastMetrics.roomsJudged, out lastMetrics.roomsUpToStandard);
+
                 if (settings.masterEnabled) accumulator.Observe(lastMetrics);
 
                 TrackColonists(lastState);
