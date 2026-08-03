@@ -46,6 +46,26 @@ prerequisites is among the cheapest projects in the game.
 Refrigeration is the late answer and needs a chain the colony cannot afford while it is
 firefighting.
 
+### The passive cooler, and why it is not simply the answer
+
+`PassiveCooler` — 400 points, Neolithic, no prerequisites, fifty wood, no power grid — is
+cheaper than Pemmican and the director already builds them. `UpkeepModule` places one against
+the `HotRoom` complaint, describing it exactly right: "the answer a colony without electricity
+actually has to heat".
+
+It is never used for food. `RoomRole.Freezer` places an electric `Cooler` and nothing else, so
+a colony with no electricity can never have any cold store at all, even though it knows how to
+build the thing that would give it one. That is the `defA ?? defB` trap this project has
+already recorded once, in a different costume: the choice should be made on capability — what
+the colony can power and build — and instead there is only one answer wired in.
+
+The caveat matters though. A passive cooler pulls a room roughly 10-15°C below ambient and does
+not reach freezing. On the 37°C map measured here that is around 22°C, where food still rots,
+only slower. So it is the temperate answer and pemmican is the hot-map one, and a colony that
+picked between them by climate would be right more often than one that always picked either.
+
+Neither is researched by the director today.
+
 ## What the director does instead
 
 Nothing addresses keeping food. The food goals measure days-of-food and answer it by hunting
