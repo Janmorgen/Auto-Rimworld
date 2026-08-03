@@ -111,6 +111,33 @@ Cheap to close: `NeedFood` already appears in the upkeep survey's complaint list
 evaluator has access to the fact that colonists are hungry. A Food security term built on
 "days in store *and* nobody starving" would separate a stocked colony from a fed one.
 
+## A near-term goal blocked behind a far-term room
+
+Run 72 lost Tamii to `Hypothermia (extreme)` at -12C, with the colony dutifully making
+tribalwear and a veil the whole time. Nothing in that chain is a mistake on its own:
+
+- `WeatherClothingGoal` is ShortTerm, and correctly declares `RequiresResearch =
+  ComplexClothing` with a comment explaining that parkas sit behind it.
+- Parkas need a tailoring bench. **Both** benches need `ComplexClothing` — the hand bench too,
+  which needs no power but does need the research.
+- `ComplexClothing` needs a research bench.
+- The research bench lives in the Research room, and `ResearchCapacityGoal` is **LongTerm**.
+
+So a goal the colony needs this week is gated behind a room the plan treats as a luxury, and
+the colony freezes while building correctly toward something else. The Workshop *was* finished
+on day 8 and the game called it a plain `Room`, because everything it was meant to hold needed
+research the colony did not have. An empty workshop is what this looks like from the outside.
+
+The shape of a fix is a promotion rule rather than a new goal: when a nearer-horizon goal is
+blocked on research and there is nowhere to research, the research room stops being long-term.
+That is one rule in goal arbitration, which is also the most loop-prone code in the project —
+four of the twelve composition loops have come from it — so it wants doing deliberately rather
+than at the end of a session.
+
+Worth noting the whole chain was invisible until two things landed on the same day: the cause
+of death naming hypothermia rather than "lost from roster", and the work-leaning line showing
+tribalwear being made at -12C.
+
 ## Where a fix would actually go
 
 Not another builder. The colonies dying here need *labour*, and the levers that do not need it
