@@ -64,6 +64,10 @@ namespace AutoColony
         public static ThingDef Wall { get { return Thing("Wall"); } }
         public static ThingDef Door { get { return Thing("Door"); } }
         public static ThingDef Bed { get { return Thing("Bed"); } }
+        /// <summary>Sleeps two, needs no research, and costs 85 stuff against 90 for the two
+        /// singles it replaces — so a couple in one is cheaper, and the room stays a Bedroom
+        /// rather than becoming a Barracks, because it is one bed and not two.</summary>
+        public static ThingDef DoubleBed { get { return Thing("DoubleBed"); } }
 
         /// <summary>
         /// A patch of floor designated for sleeping. Free, instant, and a real bed as far as the

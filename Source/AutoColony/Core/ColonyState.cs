@@ -30,6 +30,48 @@ namespace AutoColony
         public float avgHealth = 1f;
         public float minMood = 1f;
 
+        /// <summary>
+        /// Couples among the colonists, counted once per pair.
+        ///
+        /// Two people who share a bed and are not given one carry
+        /// <c>WantToSleepWithSpouseOrLover</c> at −4 each, every night, for ever — seen on two
+        /// colonists at once in run 57. It is one of the few mood costs the planner can remove
+        /// outright rather than offset, and it costs no labour to remove: a double bed is 85
+        /// stuff against 90 for the two singles it replaces.
+        /// </summary>
+        public int couples;
+
+        /// <summary>
+        /// Couples where both partners are colonists here, counted once per pair.
+        ///
+        /// Both halves have to be on this map and in this colony — a colonist whose spouse is a
+        /// prisoner, a visitor or dead does not want a double bed, they want something the
+        /// planner cannot build.
+        /// </summary>
+        static int CountCouples(Map map)
+        {
+            var paired = new HashSet<Pawn>();
+            int couples = 0;
+            try
+            {
+                foreach (var p in map.mapPawns.FreeColonists)
+                {
+                    if (p == null || p.relations == null || paired.Contains(p)) continue;
+
+                    var partner = LovePartnerRelationUtility.ExistingLovePartner(p, false);
+                    if (partner == null || partner.Dead || paired.Contains(partner)) continue;
+                    if (partner.Faction != Faction.OfPlayer) continue;
+                    if (partner.Map != map || partner.IsPrisoner) continue;
+
+                    paired.Add(p);
+                    paired.Add(partner);
+                    couples++;
+                }
+            }
+            catch (Exception) { return 0; }
+            return couples;
+        }
+
         // --- food and medicine ---
         public float foodNutrition;
         public float daysOfFood;
@@ -463,6 +505,7 @@ namespace AutoColony
                     healthSum += 1f;
             }
 
+            s.couples = CountCouples(map);
             s.avgMood = moodCount > 0f ? moodSum / moodCount : 0.5f;
             s.avgHealth = s.colonists > 0 ? healthSum / s.colonists : 1f;
             if (moodCount == 0f) s.minMood = 0.5f;
@@ -553,7 +596,11 @@ namespace AutoColony
             {
                 foreach (var bed in lister.AllBuildingsColonistOfClass<Building_Bed>())
                 {
-                    if (bed != null && bed.ForColonists && !bed.Medical) s.colonistBeds++;
+                    // Sleeping slots, not beds. A double bed is one building and sleeps two, so
+                    // counting buildings would have the colony believe it is a bed short for
+                    // every couple it houses — and go on building beds nobody needs.
+                    if (bed != null && bed.ForColonists && !bed.Medical)
+                        s.colonistBeds += bed.TotalSleepingSlots;
                 }
                 foreach (var t in lister.AllBuildingsColonistOfClass<Building_Turret>())
                 {
@@ -798,6 +845,7 @@ namespace AutoColony
             m.colonistsDowned = colonistsDowned;
             m.colonistsInMentalState = colonistsInMentalState;
             m.avgMood = avgMood;
+            m.minMood = minMood;
             m.avgHealth = avgHealth;
             m.daysOfFood = daysOfFood;
             m.outdoorTemperature = outdoorTemperature;

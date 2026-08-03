@@ -168,10 +168,11 @@ namespace AutoColony
         {
             Record(ChronicleCategory.Vitals, string.Format(
                 CultureInfo.InvariantCulture,
-                "colonists {0} (down {1}, breaking {2})  mood {3:0.00}  health {4:0.00}  " +
+                "colonists {0} (down {1}, breaking {2})  mood {3:0.00} (worst {10:0.00})  health {4:0.00}  " +
                 "food {5:0.0}d  wealth {6:N0}  beds {7}  fires {8}  {9:0}C",
                 m.colonists, m.colonistsDowned, m.colonistsInMentalState, m.avgMood, m.avgHealth,
-                m.daysOfFood, m.wealthTotal, m.colonistBeds, m.fires, m.outdoorTemperature));
+                m.daysOfFood, m.wealthTotal, m.colonistBeds, m.fires, m.outdoorTemperature,
+                m.minMood));
         }
 
         /// <summary>Real seconds between heartbeats.</summary>

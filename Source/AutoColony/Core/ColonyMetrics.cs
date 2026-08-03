@@ -20,6 +20,11 @@ namespace AutoColony
         public int colonistsDowned;
         public int colonistsInMentalState;
         public float avgMood;
+
+        /// <summary>The unhappiest colonist. Breaks are an individual event, and in a colony of
+        /// three a contented pair hides someone at 0.05 completely — run 58 sat at avgMood 0.48
+        /// with a colonist carrying MySonDied at -20 who went berserk.</summary>
+        public float minMood;
         public float avgHealth;
 
         // sustenance and economy

@@ -2737,12 +2737,54 @@ namespace AutoColony.Modules
             return AcDefs.AnimalSleepingSpot;
         }
 
+        /// <summary>
+        /// Whether a couple still has no double bed to share.
+        ///
+        /// Counts doubles already standing *and* already ordered, because a bedroom is furnished
+        /// in one pass and the next room is sited before the first bed is built — the
+        /// blueprint-blind guard is the bug that fenced two animal pens, and it would put a
+        /// double bed in every bedroom here for exactly the same reason.
+        /// </summary>
+        static bool WantsDoubleBed(DirectorContext ctx)
+        {
+            if (ctx.state.couples <= 0) return false;
+
+            var doubleBed = AcDefs.DoubleBed;
+            if (doubleBed == null) return false;
+            if (!PlacementUtil.ResearchDone(doubleBed)) return false;
+            if (PlacementUtil.ChooseStuff(ctx.map, doubleBed, 0f) == null) return false;
+
+            int have = 0;
+            try
+            {
+                foreach (var b in ctx.map.listerBuildings.AllBuildingsColonistOfDef(doubleBed)) { have++; }
+
+                var groups = new[] { ThingRequestGroup.Blueprint, ThingRequestGroup.BuildingFrame };
+                for (int g = 0; g < groups.Length; g++)
+                {
+                    var things = ctx.map.listerThings.ThingsInGroup(groups[g]);
+                    for (int i = 0; i < things.Count; i++)
+                        if (PlacementUtil.BuildTargetOf(things[i]) == doubleBed) have++;
+                }
+            }
+            catch (Exception) { return false; }
+
+            return have < ctx.state.couples;
+        }
+
         void QueueFurniture(DirectorContext ctx, PlannedRoom room)
         {
             switch (room.role)
             {
                 case RoomRole.Bedroom:
-                    PlaceMany(ctx, room, AcDefs.Bed, BedsPerRoom(ctx));
+                    // A couple with nowhere to sleep together gets the double bed, and the
+                    // colony stops paying WantToSleepWithSpouseOrLover at -4 a head a night for
+                    // the rest of the run. It is one of the very few mood costs here that is
+                    // removed rather than offset, and the only one that costs no labour at all:
+                    // a double is 85 stuff against 90 for the two singles it replaces, one build
+                    // job instead of two, and the room stays a Bedroom because it is one bed.
+                    if (WantsDoubleBed(ctx)) PlaceOne(ctx, room, AcDefs.DoubleBed);
+                    else PlaceMany(ctx, room, AcDefs.Bed, BedsPerRoom(ctx));
                     break;
                 case RoomRole.Kitchen:
                     PlaceOne(ctx, room, StoveFor(ctx));
