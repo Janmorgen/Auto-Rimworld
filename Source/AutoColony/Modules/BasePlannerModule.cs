@@ -2294,18 +2294,75 @@ namespace AutoColony.Modules
                 var room = planned.Center.GetRoom(ctx.map);
                 if (room == null || room.TouchesMapEdge || room.PsychologicallyOutdoors) return;
 
+                float space = room.GetStat(RoomStatDefOf.Space);
+                float impressiveness = room.GetStat(RoomStatDefOf.Impressiveness);
+
+                string spaceBand = Band(RoomStatDefOf.Space, space);
+                string impressivenessBand = Band(RoomStatDefOf.Impressiveness, impressiveness);
+
                 Chronicle.Record(ChronicleCategory.Build, string.Format(
-                    "{0} room finished — the game calls it a {1} — space {2:0.0}, beauty {3:0.0}, " +
-                    "cleanliness {4:0.00}, impressiveness {5:0.0}{6}",
+                    "{0} room finished — the game calls it a {1}, {2}, {3} — space {4:0.0}, " +
+                    "beauty {5:0.0}, cleanliness {6:0.00}, impressiveness {7:0.0}{8}",
                     planned.role,
                     room.Role != null ? room.Role.defName : "nothing at all",
-                    room.GetStat(RoomStatDefOf.Space),
+                    spaceBand, impressivenessBand,
+                    space,
                     room.GetStat(RoomStatDefOf.Beauty),
                     room.GetStat(RoomStatDefOf.Cleanliness),
-                    room.GetStat(RoomStatDefOf.Impressiveness),
+                    impressiveness,
                     WhatCleanlinessBought(room, planned.role)));
+
+                JudgeTheRoom(planned, room, space, spaceBand, impressiveness, impressivenessBand);
             }
             catch (Exception) { }
+        }
+
+        /// <summary>The game's own word for where a score falls, or the number if it has no bands.</summary>
+        static string Band(RoomStatDef stat, float score)
+        {
+            if (stat == null) return "";
+            var stage = stat.GetScoreStage(score);
+            return stage != null && !stage.label.NullOrEmpty() ? stage.label : score.ToString("0.0");
+        }
+
+        static int BandIndex(RoomStatDef stat, float score)
+        {
+            if (stat == null) return 0;
+            return stat.GetScoreStageIndex(score);
+        }
+
+        /// <summary>
+        /// Says out loud when a finished room fell short of what its role needed.
+        ///
+        /// Judged at finish rather than continuously, which is what makes this safe to read
+        /// where the defect survey deliberately will not. The survey's objection to scoring a
+        /// room on impressiveness is about timing — a room scores badly before anybody has
+        /// furnished or slept in it — and finish time is exactly the moment that objection
+        /// stops applying: the construction is done, so what it scores is what the building
+        /// decisions bought, and no complaint has had to be felt first to find it out.
+        ///
+        /// Only reported here. Whether anything is done about it is the upkeep module's call,
+        /// through the ordinary defect survey, and only for the half of this that furniture can
+        /// still answer — a room that came out cramped is a lesson for the next siting, not a
+        /// job for a plant pot.
+        /// </summary>
+        static void JudgeTheRoom(PlannedRoom planned, Room room, float space, string spaceBand,
+                                 float impressiveness, string impressivenessBand)
+        {
+            int spaceStage = BandIndex(RoomStatDefOf.Space, space);
+            int impressivenessStage = BandIndex(RoomStatDefOf.Impressiveness, impressiveness);
+
+            string role = planned.role.ToString();
+            string shortfall = Rooms.RoomQuality.Shortfall(
+                role, spaceStage, spaceBand, impressivenessStage, impressivenessBand);
+            if (shortfall == null) return;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "the {0} room came out below what that role needs — {1}{2}",
+                planned.role, shortfall,
+                Rooms.RoomQuality.Actionable(role, spaceStage, impressivenessStage)
+                    ? ", which furniture can still answer"
+                    : ", and walls cannot be moved — the next one of these should be sited bigger"));
         }
 
         /// <summary>

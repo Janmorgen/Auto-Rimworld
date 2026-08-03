@@ -982,6 +982,9 @@ namespace AutoColony.Modules
         /// is both beauty and light; otherwise a plant pot, which is the cheapest beauty in the
         /// game that does not need a skilled crafter.
         /// </summary>
+        /// <summary>How many plant pots one room is allowed to answer a beauty complaint with.</summary>
+        const int PotsPerRoom = 2;
+
         static bool AddBeauty(DirectorContext ctx, ColonyDefect defect)
         {
             if (defect.room == null) return false;
@@ -991,12 +994,60 @@ namespace AutoColony.Modules
             var pot = AcDefs.Thing("PlantPot");
             if (pot == null) return false;
 
+            // A room has twenty-five cells and this walks them looking for a free one.
+            //
+            // TryPlace refuses a cell that already holds a pot, so the search simply moved to the
+            // next cell and put another one down — one every six hours for as long as anybody was
+            // unhappy about beauty, until the room was a nursery. The same shape as the joy
+            // buildings above and the campfires before them: the remedy fires on a complaint, the
+            // complaint clears only once the thing is *built*, and nothing was counting what was
+            // already on its way.
+            //
+            // Two is the cap. Beauty from pots has sharply diminishing returns and the complaint
+            // that drives this is usually really about floors and walls, which cost far more than
+            // a remedy should spend without being asked.
+            if (CountInRoom(ctx.map, defect.room, pot) >= PotsPerRoom) return false;
+
             var stuff = PlacementUtil.ChooseStuff(ctx.map, pot, 0.5f);
             foreach (var cell in defect.room.Cells)
             {
                 if (PlacementUtil.TryPlace(ctx.map, pot, cell, Rot4.North, stuff)) return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// How many of this thing stand in a game room, counting anything on its way.
+        ///
+        /// The <see cref="CountIn"/> above does this for a <see cref="PlannedRoom"/>; remedies
+        /// that were handed a defect work from the game's own <see cref="Room"/> instead, and
+        /// had no equivalent — which is how the duplicate rule ended up applying to one half of
+        /// the remedies and not the other.
+        /// </summary>
+        static int CountInRoom(Map map, Room room, ThingDef def)
+        {
+            if (map == null || room == null || def == null) return 0;
+
+            int found = 0;
+            foreach (var cell in room.Cells)
+            {
+                if (!cell.InBounds(map)) continue;
+
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var thing = things[i];
+                    if (thing == null) continue;
+                    if (thing.def == def) { found++; continue; }
+
+                    var blueprint = thing as Blueprint;
+                    if (blueprint != null && blueprint.def.entityDefToBuild == def) { found++; continue; }
+
+                    var frame = thing as Frame;
+                    if (frame != null && frame.def.entityDefToBuild == def) found++;
+                }
+            }
+            return found;
         }
     }
 }
