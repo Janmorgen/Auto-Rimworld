@@ -437,6 +437,24 @@ catalogue, and the assumptions were sitting in comments that read as facts. Chec
   showed up in the offline tests; every one was found by watching one colony. When adding a
   control surface, write down what it does on the pass *after* it acts, and against every rule
   already present.
+- **The instruments fail more often than the mechanisms.** Across one long session, twelve
+  separate faults were in the measurement rather than in the thing measured — and each time an
+  explanation for the wrong number arrived before the check did. `beds` counted sleeping spots
+  as beds. `room.Cells` skipped every cell under a workbench, so a room's inventory missed
+  exactly the furniture that decides its role. `growingCells` counted marked ground rather than
+  ground that grows. `Food security` counts the larder and reads 1.00 while a colonist starves
+  beside it. `lost from roster` merged deaths with kidnappings. A hunt line printed a threshold
+  the decision had not used. When a result is surprising, check the instrument before theorising
+  about the subject; when it is *un*surprising, check it anyway, because that is when a broken
+  instrument agrees with you.
+- **Improving a message breaks whatever reads it.** Twice in one night: `lost from roster`
+  became `died of X` and the watcher counting deaths silently read zero through three deaths;
+  the chronicle's wording changed and a monitor kept grepping the old string. Anything that
+  parses a log line is coupled to it — change the line, change the reader, in the same commit.
+- **Count what works, not what exists.** Beds that are sleeping spots, fields under a roof,
+  food in a store nobody can reach, a Research room with no bench: every one of these was
+  counted as the thing it resembled. The question is never "how many of these are there" but
+  "how many of these are doing their job".
 - **A remedy that queues a blueprint does not clear the complaint that fired it.** The complaint
   clears when the thing is *built*, which is many hours later and may be never. So a remedy with
   no memory of what it already ordered re-fires every pass for as long as the colony is unhappy,
