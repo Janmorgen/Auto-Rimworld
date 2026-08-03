@@ -122,6 +122,36 @@ without moving `mapTemperature.OutdoorTemp`, so the rot term is never exercised 
 temperatures. It reads the same source `RefrigerationGoal` uses, which is consistency and not
 evidence.
 
+### Watched in a live colony — run 82
+
+```
+day 3 01h  sited the Research room 9x7 at (113, 0, 134)
+day 6 06h  working towards — Somewhere to research (towards Food that keeps)
+day 8 03h  Research room finished — space 45.4, research speed 93%
+```
+
+The chain resolves as designed. But note what happened twice on the way:
+
+```
+'Food that keeps' has held the plan for half a day and is no better for it
+(0.41 then, 0.80 now) — standing it down for a day to let something else run
+```
+
+**A goal whose urgency rises as the colony gets healthier will always look stalled.** This one
+scales with how much there is in the larder to lose, so its urgency climbs from 0.41 to 0.80
+precisely *because* the colony is doing well — and the focus-not-working detector reads "urgency
+did not fall" as "no better for it". It will therefore be stood down after half a day, every
+time, for as long as it is unsatisfied.
+
+That did no harm here: the room was already sited and the concurrency system carried on building
+it, so the stand-down only let other work run alongside. But the promotion this goal was meant to
+provide is partly defeated by it, and the message reads as a complaint about a goal that is in
+fact working.
+
+Worth knowing before adding any other goal whose urgency is a function of colony health rather
+than of colony distress. Most existing goals get *less* urgent as they are satisfied, which is
+the assumption the detector was written against.
+
 The passive cooler is still not used for food — `RoomRole.Freezer` places an electric `Cooler`
 and nothing else, so a colony with no electricity still has no cold store. Pemmican now covers
 the hot-map case that made it urgent, so this is a smaller gap than it was, but it is the same
