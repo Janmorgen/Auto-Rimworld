@@ -107,7 +107,33 @@ four. Score the minimum across all four.
 - **A pen is sized once.** It is fenced for the herd standing there at the time; animals bought
   or born later do not widen it, so a winter shortfall can only get worse. The report names the
   shortfall but nothing acts on it.
-- **Enclosure is never verified after building.** `CompAnimalPenMarker.PenState.Enclosed` is
-  public and would say plainly whether the finished fence actually holds, which is the
-  `ReportSettledRoom` pattern applied to pens — a verdict when it stands, not when it is
-  ordered. See [[rimworld-rooms]] for why the deferred verdict is the one worth trusting.
+## Verified end to end
+
+Run 77, a normal drive with one starting animal — not a scenario:
+
+```
+day 0 00h  fencing a 11x11 pen — 39 fence sections, a gate, a pen marker
+day 0 00h  encloses 81 cells, 81 of them soil, forages 0.6 a day
+day 1 10h  the pen is closed — the game agrees the fence holds
+```
+
+`CompAnimalPenMarker.PenState.Enclosed` is the game's own answer, the one behind its "Pen
+needed" alert, so the verdict agrees with what is on the player's screen rather than being a
+second opinion that can drift from it. Read *after* the fence stands, never at siting time —
+a pen is ordered as blueprints and blueprints hold nothing, so an early read calls every pen a
+failure. Same reason `ReportSettledRoom` waits; see [[rimworld-rooms]].
+
+The finished pen grazed **79** cells against the 81 projected over bare terrain. That gap is
+the point of taking both readings: the projection chooses the ground, the marker reports the
+pen that actually got built on it.
+
+## Open
+
+- **A pen is sized once.** It is fenced for the herd standing there at the time; animals bought
+  or born later do not widen it, so a winter shortfall can only get worse. The report names the
+  shortfall but nothing acts on it.
+- **Print the margin, not a rounded number.** The first verdict read "the herd eats 0.6 a day
+  and winter forages only 0.6 — this pen needs hay hauled to it": a shortfall declared between
+  two identical numbers, on a margin under a hundredth. The comparison was right and one
+  decimal place hid it. A report that visibly disagrees with itself gets distrusted in the
+  cases where it is right.
