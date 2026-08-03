@@ -652,6 +652,7 @@ namespace AutoColony.Modules
             if (TopUpFurniture(ctx)) return;
 
             MarkPrisonBeds(ctx);
+            MarkMedicalBeds(ctx);
 
             // Opening a building project is not how a fire or a raid is answered, and the labour
             // it claims is the labour the emergency needs. Everything already reserved carries on
@@ -1135,6 +1136,60 @@ namespace AutoColony.Modules
         /// rather than at placement time because the flag lives on the finished building, which
         /// does not exist when the blueprint goes down.
         /// </summary>
+        /// <summary>
+        /// Turns the beds in a Hospital room into medical beds.
+        ///
+        /// Exactly the prison bug in a second place. The codebase reads <c>bed.Medical</c> in
+        /// eight places — every bed count excludes medical beds so a hospital does not read as
+        /// spare bedrooms — and set it in none, so a Hospital room was an ordinary bedroom the
+        /// layout happened to call a hospital. Watched in run 36 at day 4 07h: the room finished
+        /// and the game called it a Bedroom.
+        ///
+        /// Two costs, both quiet. Treatment is worse, because tending in a medical bed is what
+        /// gives the surgery and immunity bonuses the room exists for. And the beds counted as
+        /// colonist beds, so building a hospital made the shelter goal believe the colony had
+        /// somewhere to sleep and stop asking for bedrooms.
+        ///
+        /// Marked once built, like the prisoner beds, and for the same reason: a bed is an
+        /// ordinary bed until something says otherwise.
+        /// </summary>
+        void MarkMedicalBeds(DirectorContext ctx)
+        {
+            var layout = ctx.layout;
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var room = layout.rooms[i];
+                if (room.role != RoomRole.Hospital) continue;
+
+                foreach (var cell in room.Rect)
+                {
+                    if (!cell.InBounds(ctx.map)) continue;
+                    var things = cell.GetThingList(ctx.map);
+                    for (int t = 0; t < things.Count; t++)
+                    {
+                        var bed = things[t] as Building_Bed;
+                        if (bed == null || !bed.Spawned) continue;
+                        if (bed.Medical || bed.ForPrisoners) continue;
+
+                        bed.Medical = true;
+
+                        // The room caches what kind of beds it holds, the same way it caches
+                        // whether it is a prison cell, so it has to be told rather than left to
+                        // work it out.
+                        var bedRoom = bed.GetRoom();
+                        if (bedRoom != null)
+                        {
+                            bedRoom.Notify_BedTypeChanged();
+                            bedRoom.Notify_ContainedThingSpawnedOrDespawned(bed);
+                        }
+                        Chronicle.Record(ChronicleCategory.Build,
+                            "marked a bed as medical — tending in one is what the hospital was for");
+                        Note("marked a medical bed");
+                    }
+                }
+            }
+        }
+
         void MarkPrisonBeds(DirectorContext ctx)
         {
             var layout = ctx.layout;
