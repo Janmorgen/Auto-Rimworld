@@ -552,6 +552,34 @@ namespace AutoColony
             return sb.ToString();
         }
 
+        /// <summary>
+        /// What became of a colonist who has left the roster.
+        ///
+        /// The corpse is the evidence: RimWorld leaves one where a pawn died and the map still
+        /// holds it, whereas a kidnapped or departed colonist walks off the edge intact. Not
+        /// perfect — a body hauled away or destroyed reads as "gone" — but wrong in the safe
+        /// direction, since it under-claims deaths rather than inventing them.
+        /// </summary>
+        static string FateOf(string thingId)
+        {
+            try
+            {
+                var maps = Find.Maps;
+                for (int m = 0; m < maps.Count; m++)
+                {
+                    var corpses = maps[m].listerThings.ThingsInGroup(ThingRequestGroup.Corpse);
+                    for (int i = 0; i < corpses.Count; i++)
+                    {
+                        var corpse = corpses[i] as Corpse;
+                        if (corpse != null && corpse.InnerPawn != null &&
+                            corpse.InnerPawn.ThingID == thingId) return "died";
+                    }
+                }
+            }
+            catch (Exception) { }
+            return "gone from the colony — taken, lost or walked out";
+        }
+
         /// <summary>Colony vitals are written to the chronicle every two in-game hours.</summary>
         const int VitalsInterval = GenDate.TicksPerHour * 2;
 
@@ -600,8 +628,18 @@ namespace AutoColony
 
             for (int i = 0; i < gone.Count; i++)
             {
-                Chronicle.Record(ChronicleCategory.Death,
-                    "lost from roster — last seen as " + colonistVitals[gone[i]]);
+                // Died, or taken, or walked off — and which one matters more than the fact.
+                //
+                // This said "lost from roster" for all three, which is honest and unreadable:
+                // a whole session of chronicles was read as a run of deaths when several were
+                // kidnappings. A colonist carried off at full health after a raid the director
+                // correctly withdrew from is a combat outcome with combat answers; one who dies
+                // in a bed at 0.6 health with nobody tending them is not, and the two want
+                // opposite responses. The evaluator was never confused — it counts
+                // StoryWatcher's colonistsKilled, which excludes both — but the log that gets
+                // read by a person was.
+                Chronicle.Record(ChronicleCategory.Death, string.Format(
+                    "{0} — last seen as {1}", FateOf(gone[i]), colonistVitals[gone[i]]));
                 colonistVitals.Remove(gone[i]);
             }
         }
