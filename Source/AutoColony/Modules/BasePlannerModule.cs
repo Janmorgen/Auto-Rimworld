@@ -631,6 +631,7 @@ namespace AutoColony.Modules
                 NoteIfTheRoomGotNothing(ctx, room);
                 Note("furnished " + room.role + " room");
                 return;
+                
             }
 
             // Everything a room needs, not just the one item it is named for.
@@ -1852,6 +1853,11 @@ namespace AutoColony.Modules
             var room = rooms[topUpCursor % rooms.Count];
             topUpCursor++;
 
+            // The sweep already visits every room in rotation, which is exactly what a second
+            // look at a finished room needs and is the reason it lives here rather than in a
+            // pass of its own.
+            ReportSettledRoom(ctx, room);
+
             // Only somewhere settled enough that a gap means a failure rather than work in
             // progress — the same three tests the missing-furniture check uses.
             if (!room.furnitureQueued) return false;
@@ -2613,6 +2619,68 @@ namespace AutoColony.Modules
                 JudgeTheRoom(planned, room, space, spaceBand, impressiveness, impressivenessBand);
             }
             catch (Exception) { }
+        }
+
+        /// <summary>Rooms whose verdict has been re-read once their furniture actually stood.</summary>
+        readonly HashSet<string> settledRoomNoted = new HashSet<string>();
+
+        /// <summary>
+        /// Reads a finished room's verdict again, once its furniture is built rather than queued.
+        ///
+        /// The verdict at shell completion is honest about the shell and premature about
+        /// everything else. RimWorld decides a room's role from what is *built* in it, and at
+        /// the moment the walls close the furniture is still blueprints — so a research room
+        /// that goes on to work perfectly is reported as a plain Room, and a bedroom as a Room
+        /// rather than a Bedroom. Read as a claim about the room that is exactly wrong.
+        ///
+        /// The stats have the same problem in the other direction: impressiveness before any
+        /// furniture is in is a measure of an empty box.
+        ///
+        /// So the room is looked at once more when the thing it exists for is standing. Once
+        /// only — this is a record of how the room turned out, not a running commentary.
+        /// </summary>
+        void ReportSettledRoom(DirectorContext ctx, PlannedRoom room)
+        {
+            if (!room.furnitureQueued) return;
+
+            var key = KeyFurnitureFor(ctx, room.role);
+            if (key == null) return;                       // storage and dining need nothing
+
+            // Built, not merely on its way. BuildTargetOf counts blueprints and frames, which
+            // is the right question for "is it coming" and the wrong one for "is it there".
+            if (!AnyBuilt(ctx.map, room, key)) return;
+
+            if (!settledRoomNoted.Add(room.role.ToString() + room.Center)) return;
+
+            try
+            {
+                var gameRoom = room.Center.GetRoom(ctx.map);
+                if (gameRoom == null || gameRoom.TouchesMapEdge ||
+                    gameRoom.PsychologicallyOutdoors) return;
+
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "the {0} room is working — its {1} is built and the game now calls it a {2}, " +
+                    "{3}, {4}",
+                    room.role, key.label,
+                    gameRoom.Role != null ? gameRoom.Role.defName : "nothing at all",
+                    Band(RoomStatDefOf.Space, gameRoom.GetStat(RoomStatDefOf.Space)),
+                    Band(RoomStatDefOf.Impressiveness,
+                         gameRoom.GetStat(RoomStatDefOf.Impressiveness))));
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>Whether a finished one of this def stands in the room — not a blueprint.</summary>
+        static bool AnyBuilt(Map map, PlannedRoom room, ThingDef def)
+        {
+            foreach (var cell in room.Rect)
+            {
+                if (!cell.InBounds(map)) continue;
+                var things = cell.GetThingList(map);
+                for (int i = 0; i < things.Count; i++)
+                    if (things[i] != null && things[i].def == def) return true;
+            }
+            return false;
         }
 
         /// <summary>The game's own word for where a score falls, or the number if it has no bands.</summary>

@@ -162,7 +162,9 @@ has no downside band at all: it either pays or it does not exist.
 
 - `room.Role` is a free functional check on whether a planned room actually became what the
   layout calls it — a Research room with no bench reads as `Room`, not `Laboratory`. Read it
-  *after* the furniture is built, not at shell completion.
+  *after* the furniture is built, not at shell completion. The planner now does both: a verdict
+  when the walls close (honest about the shell) and a second one when the key furniture is
+  actually standing (`ReportSettledRoom`), which is the one that says whether the room works.
 - Room-quality judging (`Core/Rooms/RoomQuality.cs`) uses space and impressiveness only, for the
   reason above, and holds shared bedrooms to a higher floor because of the barracks curve.
 - A rec room is pure upside and was unreachable before this session — joy buildings were placed
