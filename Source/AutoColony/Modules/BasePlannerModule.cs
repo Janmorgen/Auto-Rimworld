@@ -1243,6 +1243,23 @@ namespace AutoColony.Modules
         static int BedsPerRoom(DirectorContext ctx)
         {
             int preferred = AcMath.Clamp(ctx.GeneInt(Genes.BaseBedsPerRoom), 1, 4);
+
+            // Somebody without a bed at all outranks everybody having a nice one.
+            //
+            // One bed per room is the better room — a barracks pays -7 at the floor against a
+            // bedroom's -2 — and it is the wrong trade while anyone is still on the ground,
+            // because it needs a whole room per person and rooms are what this colony is short
+            // of. Run 60 sited five bedrooms by day 15 and finished none: the concurrency gate
+            // allows two at a time, so the beds simply never arrived, and all three colonists
+            // carried SleptOutside and SleptOnGround together. That is -8 each, against the -5
+            // that separates a barracks from a bedroom. The better room lost to no room.
+            //
+            // So while the colony is short of beds it packs them in, and goes back to one
+            // apiece once everyone has somewhere to sleep. The mood curve was right and the
+            // arithmetic was against it.
+            if (ctx.state.colonistBeds < ctx.state.colonists)
+                preferred = AcMath.Clamp(ctx.state.colonists, 1, 4);
+
             return BuildingMeans.BedsPerRoom(Means(ctx), preferred, ctx.state.colonists);
         }
 
