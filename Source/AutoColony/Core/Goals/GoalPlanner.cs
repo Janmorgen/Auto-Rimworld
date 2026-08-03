@@ -436,6 +436,36 @@ namespace AutoColony.Goals
         /// fire, no raid and two days of food in hand, which is the guarantee that this can never
         /// take the colony's attention off something that would kill it.
         /// </summary>
+        /// <summary>
+        /// Whether this goal is the thing a nearer-horizon goal is stuck behind.
+        ///
+        /// Only research today, because that is the only prerequisite in the goal set that is
+        /// itself a goal: a goal can declare RequiresResearch, the research needs a bench, and
+        /// the bench arrives with a room nothing was hurrying. Any other blocked prerequisite is
+        /// a material the colony can go and fetch.
+        /// </summary>
+        bool BlocksNearerWork(ColonyGoal goal, DirectorContext ctx)
+        {
+            if (goal.WantsRoom != RoomRole.Research) return false;
+            if (ctx.state.hasResearchBench) return false;      // the block is already lifted
+            if (!ctx.state.canResearch) return false;          // nobody could use it anyway
+
+            for (int i = 0; i < goals.Count; i++)
+            {
+                var other = goals[i];
+                if (other == goal) continue;
+                if (other.Horizon >= goal.Horizon) continue;   // not nearer
+                if (other.Satisfied(ctx)) continue;
+
+                var needs = other.RequiresResearch;
+                if (needs == null) continue;
+
+                for (int r = 0; r < needs.Length; r++)
+                    if (!IsFinished(needs[r])) return true;
+            }
+            return false;
+        }
+
         float ScoreOf(ColonyGoal goal, DirectorContext ctx, int now, bool emergency)
         {
             float urgency = Urgency(goal, ctx);
@@ -443,6 +473,21 @@ namespace AutoColony.Goals
             float score_bonus = 0f;
 
             int band = (int)goal.Horizon;
+
+            // A room that nearer work is waiting on is not a long-term room.
+            //
+            // Run 72 froze to death building correctly toward something else. Clothing is a
+            // ShortTerm goal and already declares that parkas need ComplexClothing; the
+            // research needs a bench; the bench lives in the Research room; and wanting
+            // somewhere to research is LongTerm. So the colony wanted the right thing, weighted
+            // it correctly, and could never act on it — two colonists lost to Hypothermia, one
+            // of them at mood 0.65 with the larder full and four score terms at their ceiling.
+            //
+            // Lifted to ShortTerm and no further. It has to be able to outrank a dining room; it
+            // must never outrank food or shelter, which are Immediate and stay above it.
+            if (BlocksNearerWork(goal, ctx) && band > (int)GoalHorizon.ShortTerm)
+                band = (int)GoalHorizon.ShortTerm;
+
             if (urgency < PressingUrgency) band++;
 
             // A goal that held the plan and did not move drops another band for a while.
