@@ -1,5 +1,12 @@
 # Food that rots, and the deadlock it creates
 
+> **Read this first.** The deadlock below is real and measured, and it is *not* what kills
+> colonies. Run 55 went on to score `Food security 1.00` in epoch 2 — perfect, all epoch — and
+> `Survival 0.00` in the same breath. With food completely solved the colony still lost people
+> and collapsed. Food is the loudest symptom while the weather is hot; mood is the binding
+> constraint. Fix the preservation gap because a colony should not spend two thirds of its time
+> firefighting the larder, not because it will save anybody.
+
 Measured on run 55 — an unprovisioned colony on a hot map, three colonists, no deaths across
 ten days, and a `Food security` score of **0.35** with **67% of the epoch spent answering an
 emergency**.
