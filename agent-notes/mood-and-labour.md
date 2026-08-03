@@ -79,6 +79,21 @@ external has to arrive for the colony to hurt itself.
 Worth knowing before designing a response, because it changes what "in time" means. A rec room
 answers boredom over days. A berserk colonist happens in an afternoon.
 
+## The average is the wrong quantity
+
+`MoodIsCollapsing` in `BasePlannerModule` reads `ColonyState.avgMood`, and `Postmortem` scores
+`avgMood` too. Run 58 showed why that is the wrong measure: average mood 0.48 to 0.57 — nowhere
+near the 0.30 threshold — with `MySonDied (-20.0)` on a single colonist, who went berserk.
+
+Breaks are an individual event. A colonist at 0.05 is one break away from attacking the colony
+whatever the other two are feeling, and in a colony of three a contented pair hides them
+completely. Nothing in `ColonyState` currently carries the worst mood in the colony, only the
+mean, so no rule can key off the person actually in trouble.
+
+Cheap to fix — a `worstMood` beside `avgMood` in the same loop that already sums them — and it
+would not change behaviour today, because the response it gates cannot fire anyway (above). It
+is recorded here so the next attempt keys off the right number from the start.
+
 ## Where a fix would actually go
 
 Not another builder. The colonies dying here need *labour*, and the levers that do not need it
