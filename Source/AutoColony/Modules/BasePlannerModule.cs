@@ -1241,6 +1241,10 @@ namespace AutoColony.Modules
             var fenceStuff = PlacementUtil.ChooseStuff(ctx.map, fence, 0f);
             if (fenceStuff == null) return;
 
+            var gate = AcDefs.FenceGate;
+            var gateStuff = gate != null ? PlacementUtil.ChooseStuff(ctx.map, gate, 0f) : null;
+            if (gate != null && gateStuff == null) gate = null;
+
             // Grass, not gravel. The whole advantage of a pen over a shed is what grows inside
             // it, so a pen fenced across bare rock feeds nobody and costs the same.
             // Ask for the size the herd wants, then settle for what the map has. A big pen needs
@@ -1254,13 +1258,14 @@ namespace AutoColony.Modules
             int size = 0;
             CellRect rect = default(CellRect);
             for (int trial = wanted; trial >= 9; trial -= 2)
-                if (FindGrazing(ctx, trial, pasture, out rect)) { size = trial; break; }
+                if (FindGrazing(ctx, trial, pasture, fence, fenceStuff, gate, gateStuff, out rect))
+                { size = trial; break; }
             if (size == 0) return;
 
             // The gate cell is skipped rather than fenced and then gated. A blueprint already
             // standing on the cell makes the gate placement fail, and a pen with no gate is the
             // sealed-room trap in fence form: nothing gets in, including the animals.
-            var gateCell = new IntVec3(rect.minX + rect.Width / 2, 0, rect.minZ);
+            var gateCell = GateCellOf(rect);
 
             int placed = 0, gaps = 0;
             foreach (var cell in rect.EdgeCells)
@@ -1273,12 +1278,8 @@ namespace AutoColony.Modules
             }
             if (placed == 0) return;
 
-            bool gated = false;
-            if (AcDefs.FenceGate != null)
-            {
-                var gateStuff = PlacementUtil.ChooseStuff(ctx.map, AcDefs.FenceGate, 0f);
-                gated = PlacementUtil.TryPlace(ctx.map, AcDefs.FenceGate, gateCell, Rot4.North, gateStuff);
-            }
+            bool gated = gate != null &&
+                         PlacementUtil.TryPlace(ctx.map, gate, gateCell, Rot4.North, gateStuff);
 
             var markerStuff = PlacementUtil.ChooseStuff(ctx.map, marker, 0f);
             IntVec3 markerCell = IntVec3.Invalid;
@@ -1558,7 +1559,32 @@ namespace AutoColony.Modules
             return total;
         }
 
+        /// <summary>
+        /// Whether a fence section or gate could actually be built on this cell.
+        ///
+        /// The game's own placement check, not a guess at it — marsh, water and unsuitable
+        /// terrain all refuse a fence while holding nothing that <c>GetEdifice</c> would report.
+        /// </summary>
+        static bool CanFence(Map map, ThingDef def, ThingDef stuff, IntVec3 cell)
+        {
+            if (!cell.InBounds(map)) return false;
+            if (cell.GetEdifice(map) != null) return false;
+            try
+            {
+                return GenConstruct.CanPlaceBlueprintAt(def, cell, Rot4.North, map, false, null, null, stuff)
+                                   .Accepted;
+            }
+            catch (Exception) { return false; }
+        }
+
+        /// <summary>Where the gate goes in a candidate — the middle of its southern edge.</summary>
+        static IntVec3 GateCellOf(CellRect rect)
+        {
+            return new IntVec3(rect.minX + rect.Width / 2, 0, rect.minZ);
+        }
+
         static bool FindGrazing(DirectorContext ctx, int size, MapPastureNutritionCalculator pasture,
+                                ThingDef fence, ThingDef fenceStuff, ThingDef gate, ThingDef gateStuff,
                                 out CellRect rect)
         {
             rect = default(CellRect);
@@ -1574,16 +1600,29 @@ namespace AutoColony.Modules
                 var candidate = new CellRect(centre.x - size / 2, centre.z - size / 2, size, size);
                 if (!candidate.InBounds(map)) continue;
 
+                var gateCell = GateCellOf(candidate);
+
                 // The perimeter has to take a fence all the way round or the pen leaks, but the
                 // inside only has to be walkable grazing. A boulder in the middle of a paddock
                 // costs a few cells of grass; demanding a perfectly clear square is what stops a
                 // large pen ever fitting on a real map.
+                //
+                // Asked as "can a fence be built here", not "is anything standing here". The
+                // weaker test passed a perimeter crossing marsh, the colony refused 7 of its 40
+                // cells, and the pen could never close — the game's own "Pen not enclosed" alert
+                // stayed up for the rest of the run. An unclosable perimeter is not a pen that
+                // needs finishing, it is a site that should never have been chosen.
                 bool edgeBlocked = false;
                 foreach (var cell in candidate.EdgeCells)
                 {
-                    if (cell.GetEdifice(map) != null || map.roofGrid.Roofed(cell)) { edgeBlocked = true; break; }
+                    if (cell == gateCell) continue;
+                    if (map.roofGrid.Roofed(cell)) { edgeBlocked = true; break; }
+                    if (!CanFence(map, fence, fenceStuff, cell)) { edgeBlocked = true; break; }
                 }
                 if (edgeBlocked) continue;
+
+                // And the gate cell has to take a gate, or there is no way in.
+                if (gate != null && !CanFence(map, gate, gateStuff, gateCell)) continue;
 
                 int growable = 0, cells = 0, obstructed = 0;
                 bool blocked = false;
