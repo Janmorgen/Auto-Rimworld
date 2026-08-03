@@ -75,6 +75,13 @@ are the ones worth looking at:
   director chose to hunt.
 - **Cheap consumables.** `PsychiteTea` is already resolved in `AcDefs` and used nowhere. Beer
   and tea buy mood for material rather than for hands.
+- **Double beds for couples.** `AcDefs.Bed` is the single bed and the only one the planner ever
+  places, so every couple carries `WantToSleepWithSpouseOrLover (-4.0)` each, for ever — seen
+  twice at once in run 57. A `DoubleBed` costs about what two singles cost and removes the
+  complaint outright. It also needs no research and no extra labour beyond the build that was
+  happening anyway, which is what makes it the right shape: the colonies dying here have
+  material problems and labour problems, and this one is answered by choosing a different def
+  rather than by doing more work.
 - **Triage the work rather than adding to it.** With one colonist upright, what they do first
   decides the outcome, and nothing currently reorders that under collapse.
 
