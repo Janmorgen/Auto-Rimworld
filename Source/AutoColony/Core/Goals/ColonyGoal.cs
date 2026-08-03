@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using RimWorld;
+using Verse;
 
 namespace AutoColony.Goals
 {
@@ -82,6 +84,20 @@ namespace AutoColony.Goals
         public virtual string[] RequiresResearch { get { return NoPrerequisites; } }
 
         protected static readonly string[] NoPrerequisites = new string[0];
+
+        /// <summary>
+        /// Whether a research project is done, for goals whose satisfaction *is* the research
+        /// rather than something built with it.
+        ///
+        /// A project the database has never heard of counts as finished, matching the planner's
+        /// own rule: a goal naming research from a DLC or mod that is not installed degrades to
+        /// "nothing to research" rather than becoming a prerequisite that can never be met.
+        /// </summary>
+        protected static bool IsResearchFinished(string defName)
+        {
+            var project = DefDatabase<ResearchProjectDef>.GetNamedSilentFail(defName);
+            return project == null || project.IsFinished;
+        }
 
         /// <summary>Whether the colony already has this.</summary>
         public abstract bool Satisfied(DirectorContext ctx);

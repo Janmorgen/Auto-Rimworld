@@ -449,6 +449,93 @@ namespace AutoColony.Goals
     /// needs a cooler, which needs power, which needs components and steel, which needs mining
     /// — and none of that can happen while the colony is on fire.
     /// </summary>
+    /// <summary>
+    /// Food that keeps — the answer a colony without electricity actually has.
+    ///
+    /// Measured on run 55: an unprovisioned colony on a hot map lost 3.6 days of food in two
+    /// in-game hours, hunted successfully all week, and finished with Food security 0.35 having
+    /// spent 67% of the epoch answering a food emergency it could never get ahead of. Nothing in
+    /// that circle breaks on its own — food rots, so days-of-food never rises, so the colony
+    /// firefights, so it builds no rooms, so it gets no research bench, so it never researches
+    /// the thing that would stop the food rotting.
+    ///
+    /// <see cref="RefrigerationGoal"/> is the other half of this and cannot answer it: it is
+    /// LongTerm, needs a power grid, and needs AirConditioning. Pemmican is 500 points,
+    /// Neolithic, with no prerequisites at all — among the cheapest projects in the game — and
+    /// it keeps for **70 days** against a simple meal's 1.4. It is made at a campfire or butcher
+    /// table, both of which the planner already builds, so nothing new has to be constructed.
+    ///
+    /// Nothing else was needed to make the colony cook it. ProductionModule keeps a bill for any
+    /// recipe whose product has a stock target, and pemmican is preferability MealSimple, so it
+    /// is already treated as a meal the moment the recipe becomes available. The gap was only
+    /// ever that nobody asked for the research.
+    /// </summary>
+    public class PreservedFoodGoal : ColonyGoal
+    {
+        public const string Id = "Food that keeps";
+        public override string Name { get { return Id; } }
+
+        /// <summary>
+        /// ShortTerm, deliberately. It is not an emergency — a colony with a rotting larder and
+        /// no food today is answered by FeedColonyGoal, which is Immediate and stays above this.
+        /// But it is not a luxury either: it is the thing that stops next week looking like this
+        /// week, and left LongTerm it sits behind every room and never happens.
+        /// </summary>
+        public override GoalHorizon Horizon { get { return GoalHorizon.ShortTerm; } }
+
+        public override string[] RequiresResearch { get { return Research; } }
+        static readonly string[] Research = { "Pemmican" };
+
+        /// <summary>
+        /// Somewhere to research, because this goal is *only* research — it wants no room and no
+        /// building of its own, so as a focus with no bench on the map it would leave the colony
+        /// with nothing to do about it and research that cannot progress. Stating the dependency
+        /// lets the planner walk back to the room by itself, the same way wanting a freezer
+        /// resolves into wanting power. "Food that keeps, via somewhere to research" is also
+        /// exactly what is happening, which is what the chronicle should say.
+        /// </summary>
+        public override string[] Requires { get { return NeedsBench; } }
+        static readonly string[] NeedsBench = { ResearchCapacityGoal.Id };
+
+        /// <summary>
+        /// Either way of keeping food counts. A colony that got refrigeration working does not
+        /// also need pemmican, and one that can make pemmican does not need a freezer to stop
+        /// starving — which is the whole point, since the freezer is what it cannot afford.
+        /// </summary>
+        public override bool Satisfied(DirectorContext ctx)
+        {
+            if (ctx.state.workingCoolers > 0) return true;
+            return IsResearchFinished("Pemmican");
+        }
+
+        /// <summary>
+        /// Scaled by heat, because rot is. Food keeps by itself below freezing, so a colony on a
+        /// cold map is not being told to spend 500 research points solving a problem it does not
+        /// have — and at low urgency this cannot pull the research room forward either.
+        /// </summary>
+        public override float Urgency(DirectorContext ctx)
+        {
+            float temp = ctx.map.mapTemperature != null ? ctx.map.mapTemperature.OutdoorTemp : 15f;
+
+            // Nothing rots below freezing; by 30C a simple meal is gone in about a day.
+            float rot = AcMath.Clamp01((temp - 0f) / 30f);
+
+            // Worth more when there is actually a larder to lose. A colony with nothing in store
+            // has a hunger problem, not a preservation problem, and FeedColonyGoal owns that.
+            float stock = AcMath.Clamp01(ctx.state.daysOfFood / 4f);
+
+            return AcMath.Clamp01(rot * (0.35f + 0.65f * stock));
+        }
+
+        public override string Explain(DirectorContext ctx)
+        {
+            return string.Format("{0:0}C, {1:0.0} days in store — a simple meal keeps 1.4 days, " +
+                                 "pemmican keeps 70",
+                ctx.map.mapTemperature != null ? ctx.map.mapTemperature.OutdoorTemp : 0f,
+                ctx.state.daysOfFood);
+        }
+    }
+
     public class RefrigerationGoal : ColonyGoal
     {
         public const string Id = "Refrigeration";

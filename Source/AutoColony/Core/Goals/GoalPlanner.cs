@@ -68,6 +68,7 @@ namespace AutoColony.Goals
             new FarmGoal(),
             new FoodStockGoal(),
             new WeatherClothingGoal(),
+            new PreservedFoodGoal(),
             new ResearchCapacityGoal(),
 
             new MasonryGoal(),
@@ -456,6 +457,14 @@ namespace AutoColony.Goals
                 if (other == goal) continue;
                 if (other.Horizon >= goal.Horizon) continue;   // not nearer
                 if (other.Satisfied(ctx)) continue;
+
+                // Blocked is not the same as pressing. A near-horizon goal that wants almost
+                // nothing right now — preserving food on a map cold enough that food keeps by
+                // itself — is still technically stuck behind its research, and promoting a whole
+                // room on its behalf would spend the colony's building on something it does not
+                // need this season. Only work the colony actually wants doing can pull the
+                // research room forward.
+                if (Urgency(other, ctx) < PressingUrgency) continue;
 
                 var needs = other.RequiresResearch;
                 if (needs == null) continue;
