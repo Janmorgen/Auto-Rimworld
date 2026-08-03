@@ -741,6 +741,78 @@ namespace AutoColony.Modules
         readonly HashSet<int> repurposeHeldNoted = new HashSet<int>();
 
         /// <summary>Records a conversion being declined, once per room, so inaction explains itself.</summary>
+        readonly HashSet<string> shellTooSmallNoted = new HashSet<string>();
+        readonly HashSet<int> furnitureStuckNoted = new HashSet<int>();
+
+        /// <summary>
+        /// Whether the standing shell is below the space its would-be new role needs.
+        ///
+        /// Asks the game for the room's Space stat and bands it exactly as the finish-time check
+        /// does, so one standard governs both. A shell the game cannot rate — not enclosed, or
+        /// open to the map edge — is left alone rather than guessed at; ShellComplete has already
+        /// said the walls close, so failing to find a room here means something unusual and the
+        /// safe reading of an unusual room is not to take it.
+        /// </summary>
+        static bool ShellTooSmallFor(DirectorContext ctx, PlannedRoom shell, RoomRole role)
+        {
+            try
+            {
+                var room = shell.Center.GetRoom(ctx.map);
+                if (room == null || room.TouchesMapEdge || room.PsychologicallyOutdoors) return true;
+
+                int stage = BandIndex(RoomStatDefOf.Space, room.GetStat(RoomStatDefOf.Space));
+                return stage < Rooms.RoomQuality.StandardFor(role.ToString()).space;
+            }
+            catch (Exception) { return false; }
+        }
+
+        void NoteShellTooSmall(PlannedRoom room, RoomRole role)
+        {
+            if (!shellTooSmallNoted.Add(room.role + ">" + role + room.Center)) return;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "left the {0} room alone rather than making it a {1} — the shell is too small for " +
+                "that role and walls cannot be moved afterwards",
+                room.role, role));
+        }
+
+        /// <summary>
+        /// Whether anything in the room would refuse to come out when the role changes.
+        ///
+        /// Only owned beds, today: <see cref="ClearFurnitureFor"/> leaves those where they are,
+        /// and a room that keeps its beds keeps being a bedroom to the game no matter what the
+        /// layout calls it.
+        /// </summary>
+        static bool FurnitureCannotBeCleared(DirectorContext ctx, PlannedRoom room)
+        {
+            if (room.role != RoomRole.Bedroom && room.role != RoomRole.Hospital &&
+                room.role != RoomRole.Prison) return false;
+
+            foreach (var cell in room.Interior)
+            {
+                if (!cell.InBounds(ctx.map)) continue;
+
+                var things = cell.GetThingList(ctx.map);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var bed = things[i] as Building_Bed;
+                    if (bed == null || !bed.Spawned) continue;
+                    if (bed.OwnersForReading != null && bed.OwnersForReading.Count > 0) return true;
+                }
+            }
+            return false;
+        }
+
+        void NoteFurnitureStuck(PlannedRoom room)
+        {
+            if (!furnitureStuckNoted.Add(room.minX * 10000 + room.minZ)) return;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "left the {0} room alone — somebody has claimed a bed in it, so its fittings " +
+                "cannot come out and changing the label would leave it neither thing",
+                room.role));
+        }
+
         void NoteRepurposeHeld(PlannedRoom room)
         {
             if (!repurposeHeldNoted.Add(room.minX * 10000 + room.minZ)) return;
@@ -845,6 +917,43 @@ namespace AutoColony.Modules
                 // And only one nobody needs for what it currently is — the same test used
                 // before taking a room down, since the question is the same one.
                 if (!Upkeep.DefectSurvey.Expendable(ctx.map, layout, room)) continue;
+
+                // A shell too small to do the new job is not a saving.
+                //
+                // Repurposing judged a shell only on whether it was standing and spare, never on
+                // whether it was the right size for what it was about to become. Bedrooms are
+                // 6x6 and workshops are 9x7 — sixteen interior cells against thirty-five — so
+                // taking a spare bedroom for a workshop buys a room with under half the floor
+                // its role was drawn for. Watched in run 36 at day 1 10h: the repurposed shell
+                // finished two hours later at 17.9 space, which the game itself calls "rather
+                // tight", and there is no fixing it afterwards because walls do not move.
+                //
+                // Asks the game for the shell's space and holds it to the same floor the finish
+                // check uses, so the standard gates the decision rather than only narrating the
+                // outcome. Reading the stat needs the room enclosed, which ShellComplete above
+                // has already established.
+                if (ShellTooSmallFor(ctx, room, role))
+                {
+                    NoteShellTooSmall(room, role);
+                    continue;
+                }
+
+                // And only one whose old fittings can actually come out.
+                //
+                // ClearFurnitureFor skips beds a colonist has claimed, which is correct on its
+                // own — nobody should have their bed deconstructed out from under them. But it
+                // means a bedroom with owned beds is repurposed and then cannot be emptied, so
+                // the beds stay for good: run 36 turned a bedroom into a workshop at day 1 10h
+                // and the game was still calling the result a Barracks two hours later, with the
+                // workbench left to fit around whatever the beds did not occupy.
+                //
+                // The clearing has to be possible *before* the label changes, or the room ends
+                // up being neither thing.
+                if (FurnitureCannotBeCleared(ctx, room))
+                {
+                    NoteFurnitureStuck(room);
+                    continue;
+                }
 
                 var was = room.role;
                 ClearFurnitureFor(ctx, room, was);

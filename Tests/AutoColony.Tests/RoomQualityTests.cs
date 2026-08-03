@@ -120,6 +120,39 @@ namespace AutoColony.Tests
             Assert.False(standard.impressivenessMatters);
         }
 
+        // ------------------------------------------------------------------ gating a repurpose
+
+        [Fact]
+        public void ABedroomSizedShellIsTooSmallToBecomeAWorkshop()
+        {
+            // The case that motivated gating repurposing on this: run 36 turned a 6x6 bedroom
+            // into a workshop, and the result finished at 17.9 space — stage 1, "rather tight" —
+            // against a workshop profile drawn at 9x7. Walls do not move afterwards.
+            Assert.True(1 < RoomQuality.StandardFor("Workshop").space);
+        }
+
+        [Fact]
+        public void ThatSameShellIsFineForTheRolesDrawnThatSmall()
+        {
+            // The guard must not refuse every repurpose, only the ones that buy a room too
+            // small to do the job. A bedroom shell is still a fine bedroom, prison or freezer.
+            Assert.True(1 >= RoomQuality.StandardFor("Bedroom").space);
+            Assert.True(1 >= RoomQuality.StandardFor("Prison").space);
+            Assert.True(1 >= RoomQuality.StandardFor("Freezer").space);
+            Assert.True(1 >= RoomQuality.StandardFor("Power").space);
+        }
+
+        [Fact]
+        public void AnOrdinarySevenBySevenShellClearsEveryWorkRole()
+        {
+            // A 7x7 rates 35 space, which is stage 2 — the floor every worked-in role asks for.
+            // If this ever fails, repurposing has been gated into uselessness.
+            Assert.True(2 >= RoomQuality.StandardFor("Workshop").space);
+            Assert.True(2 >= RoomQuality.StandardFor("Kitchen").space);
+            Assert.True(2 >= RoomQuality.StandardFor("Research").space);
+            Assert.True(2 >= RoomQuality.StandardFor("Storage").space);
+        }
+
         [Fact]
         public void AnUnknownRoleFallsBackToWantingOnlyToBeEnclosed()
         {
