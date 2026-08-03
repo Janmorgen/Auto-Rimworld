@@ -470,6 +470,17 @@ namespace AutoColony.Modules
             if (!cell.InBounds(map)) return false;
             if (map.zoneManager.ZoneAt(cell) != null) return false;
             if (cell.GetEdifice(map) != null) return false;
+
+            // Nothing on its way here either.
+            //
+            // The fertile-cell search has always checked this and the stockpile search never
+            // did, though they share this test — and the stockpile search prefers the *interior
+            // of the storage room*, which is exactly where the planner is about to blueprint
+            // its shelves. So the zone went down on top of them, and the game said so twenty
+            // times a colony: "Added zone over zone-incompatible thing Blueprint_Shelf". Nothing
+            // was counting warnings, so nobody heard it.
+            if (PlacementUtil.HasAnyConstructionAt(map, cell)) return false;
+
             return cell.Standable(map);
         }
 
