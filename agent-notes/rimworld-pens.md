@@ -97,6 +97,24 @@ four. Score the minimum across all four.
 - **Do not demand a perfectly clear square.** A 23×23 pen is 529 cells; requiring every one to
   be unobstructed means a large pen never fits on a real map. The *perimeter* must take a fence
   all the way round; the interior can afford a few boulders.
+- **"Nothing is standing here" is not "a fence can be built here".** Marsh and water hold no
+  edifice and refuse a fence anyway. A perimeter checked with `GetEdifice` ran through bog, the
+  colony refused 7 of its 40 cells, and the pen could never close — the game's "Pen not
+  enclosed" alert stayed up all run. Ask `GenConstruct.CanPlaceBlueprintAt` with the real def
+  *and stuff*, which is the game's own answer to the question being guessed at. Check the gate
+  cell against the gate, not the fence.
+
+  This belongs in **site selection**, not a repair pass: an unclosable perimeter is not a pen
+  awaiting completion, it is ground that should never have been chosen. Measured either way:
+
+  | site filter | fenced | closed? | grazes |
+  |---|---|---|---|
+  | `GetEdifice` only | 32 sections, 7 refused | never | 0 cells |
+  | `CanPlaceBlueprintAt` | 39 sections, 0 refused | day 0 13h | 81 of 81 |
+- **A map may have no seasons.** Tropical maps report `permanent summer` for all four quadrums,
+  so "its leanest season" is meaningless and a year-round shortfall reads as a seasonal one —
+  a different problem with a different answer. Compare the four labels before naming a lean
+  season.
 - **Grazing animals are `RaceProps.Roamer`.** A husky needs no pen and proves nothing when
   testing one.
 
