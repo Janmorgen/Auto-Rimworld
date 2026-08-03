@@ -94,6 +94,23 @@ Cheap to fix — a `worstMood` beside `avgMood` in the same loop that already su
 would not change behaviour today, because the response it gates cannot fire anyway (above). It
 is recorded here so the next attempt keys off the right number from the start.
 
+## The score cannot see the thing that kills
+
+`Food security` counts days of stockpiled food. Seven colonies have now died with it at or
+near 1.00 — run 59 finished with `Food security 1.00`, `Health 1.00`, `Infrastructure 1.00`,
+9.4 days of food, and `NeedFood at 44.0`, both survivors dead at `health 1.00` and downed.
+Malnutrition, beside a full store, because `summaryHealth` does not count needs and a downed
+pawn cannot feed itself.
+
+So the term is not wrong, it is answering a different question from the one that matters. "Is
+there food" and "is anybody eating" diverge exactly when the colony is dying, and only the
+first is measured. A search optimising this score is told nothing about the failure mode that
+ends most of its colonies, which is a poor thing for a fitness function to be silent about.
+
+Cheap to close: `NeedFood` already appears in the upkeep survey's complaint list, so the
+evaluator has access to the fact that colonists are hungry. A Food security term built on
+"days in store *and* nobody starving" would separate a stocked colony from a fed one.
+
 ## Where a fix would actually go
 
 Not another builder. The colonies dying here need *labour*, and the levers that do not need it
