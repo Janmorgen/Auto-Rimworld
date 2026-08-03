@@ -87,14 +87,42 @@ and sowing — both of which produce more of the thing that is rotting. `Resourc
 reports "not hunting: 6.5 days of meat already killed and waiting to be butchered", which is a
 true statement about a colony that will be at 0.9 days by nightfall.
 
-## The shape of a fix
+## The fix, as built
 
-A goal — the codebase's own idiom, since goals carry `RequiresResearch` and the research module
-picks whatever the plan needs. Something like *"food that keeps"*, satisfied when the colony
-either has working refrigeration or can make pemmican, and declaring `Pemmican` as its
-research. That puts a cheap, prerequisite-free project in front of the plan exactly when the
-larder is a sieve, and does nothing on a cold map where food keeps by itself.
+`PreservedFoodGoal` — the codebase's own idiom, since goals carry `RequiresResearch` and the
+research module researches whatever the plan names. Satisfied when the colony either has a
+working cooler *or* can make pemmican; declares `Pemmican`; urgency scaled by heat and by how
+much there is in the larder to lose.
 
-Not yet built. It needs its horizon deciding and its loop checking against every rule already
-there — the same review every control surface in this project now gets, because eight pairs of
-individually-correct rules have composed into cycles so far.
+**Nothing else was needed to make the colony cook it.** `ProductionModule` keeps a bill for any
+recipe whose product has a stock target, and pemmican is `preferability: MealSimple`, so
+`DesiredCount` already treats it as a meal — `colonists × MealsPerColonist` — the moment the
+recipe unlocks. The gap was only ever that nobody asked for the research.
+
+Two things about how a research-only goal sits in the plan, both found by running the self-test
+rather than by reading the code:
+
+- **It must declare `Requires = ResearchCapacity`.** This goal *is* research: it wants no room
+  and builds nothing. As a focus with no bench on the map it left the colony with nothing to do
+  and research that could not progress. Stating the dependency makes the planner walk back by
+  itself, and the probe then reads `focus=Somewhere to research, wanted=Food that keeps` — both
+  actionable and an honest description of what is happening.
+- **Blocked is not the same as pressing.** The horizon-promotion rule in `GoalPlanner` now
+  requires the blocked goal's urgency to clear `PressingUrgency` before it can pull the research
+  room forward. Without that, preserving food on a map cold enough that food keeps by itself
+  would still be technically stuck behind its research, and would promote a whole room for a
+  problem the colony does not have this season. Seen both ways in one probe set: at urgency
+  0.21 research stayed at 800.45, at 0.73 it was promoted to 900.45.
+
+Ordering holds where it should — `Plant fields` at 900.85 still outranks it, because growing
+food beats preserving it, and `Clothe the colony` at 901.15 still wins a hard freeze.
+
+**Unverified:** the climate scaling. The self-test probes simulate weather for the clothing goal
+without moving `mapTemperature.OutdoorTemp`, so the rot term is never exercised across
+temperatures. It reads the same source `RefrigerationGoal` uses, which is consistency and not
+evidence.
+
+The passive cooler is still not used for food — `RoomRole.Freezer` places an electric `Cooler`
+and nothing else, so a colony with no electricity still has no cold store. Pemmican now covers
+the hot-map case that made it urgent, so this is a smaller gap than it was, but it is the same
+`defA ?? defB` trap recorded above and still open.
