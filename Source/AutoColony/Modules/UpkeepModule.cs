@@ -533,12 +533,21 @@ namespace AutoColony.Modules
             // second — it just cannot order five at once while none of them have been started.
             if (AnyJoyPending(ctx)) return false;
 
-            // A rec room is where these belong, and once one is planned the planner furnishes
-            // it. Scattering another game table through the kitchen would only take the
-            // recreation *out* of the room the mood bonus is paid for — RimWorld scores joy by
-            // where it was taken, so a chess table in a bedroom earns nothing the rec room
-            // would have earned.
-            if (ctx.layout != null && ctx.layout.HasRoom(RoomRole.Recreation)) return false;
+            // A rec room is where these belong, and once one *has something in it* the planner
+            // is furnishing it. Scattering another game table through the kitchen would only
+            // take the recreation out of the room the mood bonus is paid for — RimWorld scores
+            // joy by where it was taken, so a chess table in a bedroom earns nothing the rec
+            // room would have earned.
+            //
+            // Planned is not the same as standing, and the difference is a loop I put here
+            // myself. Mood collapse now makes the planner site a recreation room, and this
+            // stood down the moment it was sited — so a colony in the exact crisis the room was
+            // ordered for lost its only immediate answer and waited days for walls. Watched in
+            // run 55: mood 0.22 at two colonists, 0.08 at one, fed and uninjured throughout.
+            //
+            // The fast remedy therefore keeps working until the slow one has actually produced
+            // something to use.
+            if (RecRoomHasSomethingToDo(ctx)) return false;
 
             for (int i = 0; i < JoyBuildings.Length; i++)
             {
@@ -550,6 +559,31 @@ namespace AutoColony.Modules
                     "recreation: placed a " + (def.label ?? def.defName) +
                     " — the first joy building that would actually fit the space");
                 return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether a planned recreation room actually holds a joy building yet, built or coming.
+        ///
+        /// The test the remedy stands down on. A room that exists on paper is not somewhere to
+        /// play chess.
+        /// </summary>
+        static bool RecRoomHasSomethingToDo(DirectorContext ctx)
+        {
+            if (ctx.layout == null || ctx.map == null) return false;
+
+            for (int r = 0; r < ctx.layout.rooms.Count; r++)
+            {
+                var room = ctx.layout.rooms[r];
+                if (room.role != RoomRole.Recreation) continue;
+
+                for (int i = 0; i < JoyBuildings.Length; i++)
+                {
+                    var def = AcDefs.Thing(JoyBuildings[i]);
+                    if (def == null) continue;
+                    if (CountIn(ctx.map, room, def) > 0) return true;
+                }
             }
             return false;
         }
