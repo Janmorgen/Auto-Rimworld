@@ -423,6 +423,25 @@ namespace AutoColony.Modules
                 // no walls queued, and the planner obligingly queues them all again.
                 if (room.deferredUntilTick > Find.TickManager.TicksGame) continue;
 
+                // A room still being dug out is not a room that keeps failing.
+                //
+                // Enclosed() requires every interior cell to be in one region, and a cell under
+                // an impassable building is in no region at all — so a boulder the colony has
+                // designated for mining but not yet mined makes a finished shell read as an
+                // unfinished one. Six passes later the site is abandoned as "the wrong site",
+                // and the planner sites the same room somewhere else and pays for the walls
+                // again.
+                //
+                // Run 102 gave up on three sites this way, all with the same reason once the
+                // shell test was made to say which half had failed: "every wall stands but the
+                // interior is not one sealed space". The walls were built. The rock was not
+                // gone yet.
+                //
+                // Sixth loop of this shape: two rules each correct alone — clear the footprint,
+                // and abandon a site that never finishes — closing on a colony that never
+                // finishes a room.
+                if (StillBeingCleared(ctx.map, room)) continue;
+
                 if (!room.wallsQueued)
                 {
                     // Walls already going up from an earlier pass are walls already queued.
@@ -533,6 +552,25 @@ namespace AutoColony.Modules
                 //
                 // Two rules that each held on their own, closing a loop. Fifth time today.
                 if (room.deferredUntilTick > Find.TickManager.TicksGame) continue;
+
+                // A room still being dug out is not a room that keeps failing.
+                //
+                // Enclosed() requires every interior cell to be in one region, and a cell under
+                // an impassable building is in no region at all — so a boulder the colony has
+                // designated for mining but not yet mined makes a finished shell read as an
+                // unfinished one. Six passes later the site is abandoned as "the wrong site",
+                // and the planner sites the same room somewhere else and pays for the walls
+                // again.
+                //
+                // Run 102 gave up on three sites this way, all with the same reason once the
+                // shell test was made to say which half had failed: "every wall stands but the
+                // interior is not one sealed space". The walls were built. The rock was not
+                // gone yet.
+                //
+                // Sixth loop of this shape: two rules each correct alone — clear the footprint,
+                // and abandon a site that never finishes — closing on a colony that never
+                // finishes a room.
+                if (StillBeingCleared(ctx.map, room)) continue;
 
                 if (!ShellComplete(ctx.map, room))
                 {
