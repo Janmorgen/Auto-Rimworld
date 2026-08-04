@@ -573,6 +573,98 @@ namespace AutoColony.Goals
         }
     }
 
+    /// <summary>
+    /// More hands, when the colony can carry them.
+    ///
+    /// The ultra-long layer that was missing entirely: fourteen goals and none about growing
+    /// the colony, while every run this project has driven peaked at three or four colonists
+    /// and died on losing two. Labour is the binding constraint in almost every postmortem, and
+    /// the only lasting answer to a labour shortage is people.
+    ///
+    /// Deliberately wants nothing directly buildable. Its force runs through the levers that
+    /// already exist — the incident module accepting joiners, the prisoner module preferring
+    /// recruitment — which read <c>PopulationWanted</c> off the plan. Growing past what the
+    /// colony can feed is how colonies die, so it is satisfied unless there is a spare bed AND
+    /// a food margin: the colony votes with its own larder on whether it can carry another
+    /// mouth.
+    /// </summary>
+    public class GrowColonyGoal : ColonyGoal
+    {
+        public const string Id = "Grow the colony";
+        public override string Name { get { return Id; } }
+        public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
+
+        public override bool Satisfied(DirectorContext ctx)
+        {
+            // Room for one more, literally: a built bed nobody sleeps in, and food enough that
+            // another mouth is margin rather than risk.
+            bool spareBed = ctx.state.colonistBeds > ctx.state.colonists;
+            bool fedWithMargin = ctx.state.daysOfFood >= 6f;
+            return !(spareBed && fedWithMargin);
+        }
+
+        public override float Urgency(DirectorContext ctx)
+        {
+            // Scales with how comfortably another colonist would fit. Never pressing — this is
+            // the layer that pulls when nothing nearer is pulling harder.
+            float slack = AcMath.Clamp01((ctx.state.daysOfFood - 6f) / 12f);
+            return 0.2f + slack * 0.4f;
+        }
+
+        public override string Explain(DirectorContext ctx)
+        {
+            return ctx.state.colonists + " colonists, " + ctx.state.colonistBeds + " beds, " +
+                   ctx.state.daysOfFood.ToString("0.0") + "d food — room for more hands";
+        }
+    }
+
+    /// <summary>
+    /// Something for the evenings — psychite tea, the labour-free mood lever.
+    ///
+    /// The mood note's own conclusion: the colonies dying of mood need answers that cost no
+    /// hands, because hands are what they are out of. Tea is that lever. PsychoidBrewing is 500
+    /// points, Neolithic, no prerequisites; the recipe runs at a campfire or stove the colony
+    /// already has — not the drug lab it looks like it needs — and the leaves come off a plot
+    /// the social crop already plants once this research lands. Joy 0.40 at addictiveness 0.02,
+    /// the safest ratio in the game.
+    ///
+    /// Consumption is gated where the game gates it: the drug policy allows tea for joy only
+    /// below a mood floor, so a content colony never touches it and a miserable one has
+    /// something in the cupboard. The AlcoholWithdrawal postmortem is the reason for the gate.
+    /// </summary>
+    public class ComfortGoal : ColonyGoal
+    {
+        public const string Id = "Comfort";
+        public override string Name { get { return Id; } }
+        public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
+
+        public override string[] Requires { get { return NeedsBench; } }
+        static readonly string[] NeedsBench = { ResearchCapacityGoal.Id };
+
+        public override string[] RequiresResearch { get { return Research; } }
+        static readonly string[] Research = { "PsychoidBrewing" };
+
+        public override bool Satisfied(DirectorContext ctx)
+        {
+            return IsResearchFinished("PsychoidBrewing");
+        }
+
+        public override float Urgency(DirectorContext ctx)
+        {
+            // Keyed on the worst colonist, because breaks are individual — and only when fed,
+            // because a hungry colony has sharper problems than joyless evenings.
+            float misery = AcMath.Clamp01((0.45f - ctx.state.minMood) * 2f);
+            float fed = AcMath.Clamp01(ctx.state.daysOfFood / 5f);
+            return misery * fed * 0.8f;
+        }
+
+        public override string Explain(DirectorContext ctx)
+        {
+            return "worst mood " + ctx.state.minMood.ToString("0.00") +
+                   " — tea is joy 0.40 at addictiveness 0.02, brewed at a campfire";
+        }
+    }
+
     public class RefrigerationGoal : ColonyGoal
     {
         public const string Id = "Refrigeration";

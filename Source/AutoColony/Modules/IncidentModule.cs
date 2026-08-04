@@ -27,6 +27,8 @@ namespace AutoColony.Modules
         const int GraceTicks = 2500;
 
         static readonly string[] AcceptKeys = { "accept", "yes", "agree", "allow", "take", "join", "hire" };
+        static readonly string[] JoinerKeys = { "join", "wanderer", "refugee", "asks to be accepted" };
+
         static readonly string[] DeclineKeys = { "reject", "decline", "refuse", "no,", "deny", "turn away" };
 
         /// <summary>
@@ -150,6 +152,12 @@ namespace AutoColony.Modules
             Note("marked " + (cut + harvested) + " blighted plants");
         }
 
+        static string TextOf(ChoiceLetter letter)
+        {
+            try { return letter.Text.ToString().ToLowerInvariant(); }
+            catch (Exception) { return ""; }
+        }
+
         bool Resolve(ChoiceLetter letter, float risk, DirectorContext ctx)
         {
             DiaOption accept = null;
@@ -180,6 +188,16 @@ namespace AutoColony.Modules
             float effectiveRisk = risk;
             if (ctx.state.daysOfFood < ctx.Gene(Genes.FoodDaysPerColonist) * 0.5f) effectiveRisk *= 0.4f;
             if (ctx.state.danger != StoryDanger.None) effectiveRisk *= 0.5f;
+
+            // People are the exception to gene-gated caution. When the growth layer says the
+            // colony can carry another colonist — a spare bed, a food margin — a joiner is the
+            // single most valuable thing an incident can offer, because labour is what every
+            // postmortem here is short of. The capacity discounts above still apply: a colony
+            // that WANTS people and cannot feed them still says no.
+            bool offersAPerson = MatchesAny(letter.Label.ToString().ToLowerInvariant(), JoinerKeys) ||
+                                 MatchesAny(TextOf(letter), JoinerKeys);
+            if (offersAPerson && ctx.plan != null && ctx.plan.PopulationWanted)
+                effectiveRisk = System.Math.Max(effectiveRisk, 0.75f);
 
             var chosen = accept != null && effectiveRisk >= 0.5f
                 ? accept

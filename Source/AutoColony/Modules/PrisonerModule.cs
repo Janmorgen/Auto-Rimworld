@@ -206,6 +206,14 @@ namespace AutoColony.Modules
             if (ctx.state.prisoners == 0) return;
 
             float recruitBias = ctx.Gene(Genes.ColonistRecruitBias);
+
+            // The growth layer leans on this the way it leans on joiner letters: when the
+            // colony can carry another pair of hands, a prisoner is a recruit the raid already
+            // delivered. The gene still matters — it is a bias, not an override — and the
+            // policy's own food check still refuses a mouth the larder cannot cover.
+            if (ctx.plan != null && ctx.plan.PopulationWanted)
+                recruitBias = AcMath.Clamp01(recruitBias + 0.3f);
+
             var prisoners = ctx.map.mapPawns.PrisonersOfColony;
 
             for (int i = 0; i < prisoners.Count; i++)

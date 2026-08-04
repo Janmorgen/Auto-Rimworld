@@ -304,9 +304,30 @@ namespace AutoColony.Modules
                 return;
             }
 
-            if (AlreadyGrowing(ctx, crop)) return;
+            // Sized by the herd, and widened as it grows. The pen is fenced once for the
+            // animals standing there on the day; every animal bought, born or tamed after that
+            // deepens a winter shortfall the pen report already names and nothing was answering.
+            // The fodder plot is the answer that needs no fence surgery: hay scales by adding
+            // cells, and the plot is re-checked every pass against the herd that exists now.
+            int wanted = System.Math.Max(FodderPlotCells, ctx.state.tamedAnimals * 12);
 
-            var cells = FindFertileCells(ctx, FodderPlotCells);
+            var existing = FindZoneGrowing(ctx, crop);
+            if (existing != null)
+            {
+                int have = existing.Cells.Count;
+                if (have >= wanted) return;
+
+                var extra = FindFertileCells(ctx, wanted - have);
+                for (int i = 0; i < extra.Count; i++) existing.AddCell(extra[i]);
+                if (extra.Count > 0)
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "widened the {0} plot by {1} cells for a herd of {2} — the pen was fenced " +
+                        "for fewer animals than stand in it now, and hay is how the gap is fed",
+                        crop.label ?? crop.defName, extra.Count, ctx.state.tamedAnimals));
+                return;
+            }
+
+            var cells = FindFertileCells(ctx, wanted);
             if (cells.Count == 0) return;
 
             var map = ctx.map;
@@ -344,6 +365,18 @@ namespace AutoColony.Modules
                 if (best == null || def.plant.growDays < best.plant.growDays) best = def;
             }
             return best;
+        }
+
+        static Zone_Growing FindZoneGrowing(DirectorContext ctx, ThingDef crop)
+        {
+            foreach (var zone in ctx.map.zoneManager.AllZones)
+            {
+                var g = zone as Zone_Growing;
+                if (g == null) continue;
+                var plant = g.GetPlantDefToGrow();
+                if (plant != null && plant.defName == crop.defName) return g;
+            }
+            return null;
         }
 
         static bool AlreadyGrowing(DirectorContext ctx, ThingDef crop)

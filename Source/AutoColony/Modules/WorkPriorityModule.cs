@@ -428,7 +428,12 @@ namespace AutoColony.Modules
             Need("Research", s.hasResearchBench ? 1.2f : 0.3f);
             Need("Warden", s.prisoners > 0 ? 2f : 0.2f);
             Need("Handling", 1f);
-            Need("Cleaning", s.avgMood < 0.6f ? 1.6f : 0.9f);
+            // A pending surgery makes the mop a medical instrument: the theatre's cleanliness
+            // sets surgery success (0.60x filthy) and post-operative infection (full odds
+            // filthy, a fifth sterile), so when somebody is losing to a disease the room they
+            // will be cut open in is the most consequential floor in the colony.
+            Need("Cleaning", s.colonistsLosingToDisease > 0 ? 3f
+                           : s.avgMood < 0.6f ? 1.6f : 0.9f);
             // Items outdoors deteriorate wherever they are, and in a dry climate they are also
             // the easiest thing on the map to lose. Getting them into storage is preventative
             // rather than tidy, so it outranks ordinary hauling as the map dries out.

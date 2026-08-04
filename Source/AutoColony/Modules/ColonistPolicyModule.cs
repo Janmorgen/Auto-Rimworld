@@ -32,6 +32,8 @@ namespace AutoColony.Modules
         // would simply have fought each other.
         protected override void Act(DirectorContext ctx)
         {
+            EnsureComfortPolicy(ctx);
+
             ApplyColonistSettings(ctx);
             ApplyShelterRestriction(ctx);
         }
@@ -176,6 +178,53 @@ namespace AutoColony.Modules
             }
 
             if (changed > 0) Note("updated policy on " + changed + " settings");
+        }
+
+        /// <summary>Set once the tea entry has been written, so the policy is not rewritten hourly.</summary>
+        static bool teaPolicyEnsured;
+
+        /// <summary>
+        /// Lets colonists drink psychite tea when they are miserable, and only then.
+        ///
+        /// The default SocialDrugs policy covers beer and smokeleaf and not tea, so a colony
+        /// could brew tea it would never drink. The entry added here is the game's own gating,
+        /// not a rule of ours: allowedForJoy with onlyIfMoodBelow means a content colonist
+        /// never touches it and one at 0.35 has something between them and a break.
+        ///
+        /// The mood floor is the addiction guard. Tea is joy 0.40 at addictiveness 0.02 — the
+        /// safest ratio in the game — but the AlcoholWithdrawal postmortem is what a standing
+        /// habit looks like, so the policy hands it out as medicine rather than as routine.
+        /// </summary>
+        static void EnsureComfortPolicy(DirectorContext ctx)
+        {
+            if (teaPolicyEnsured) return;
+            var tea = AcDefs.PsychiteTea;
+            if (tea == null) return;
+
+            try
+            {
+                var pawns = ctx.map.mapPawns.FreeColonists;
+                for (int i = 0; i < pawns.Count; i++)
+                {
+                    var pawn = pawns[i];
+                    if (pawn == null || pawn.drugs == null) continue;
+                    var policy = pawn.drugs.CurrentPolicy;
+                    if (policy == null) continue;
+
+                    for (int e = 0; e < policy.Count; e++)
+                    {
+                        var entry = policy[e];
+                        if (entry == null || entry.drug != tea) continue;
+                        entry.allowedForJoy = true;
+                        entry.onlyIfMoodBelow = 0.35f;
+                    }
+                }
+                teaPolicyEnsured = true;
+                Chronicle.Record(ChronicleCategory.Health,
+                    "psychite tea allowed for joy below mood 0.35 — handed out as medicine, not " +
+                    "routine, which is the difference between a comfort and a habit");
+            }
+            catch (System.Exception) { }
         }
 
     }

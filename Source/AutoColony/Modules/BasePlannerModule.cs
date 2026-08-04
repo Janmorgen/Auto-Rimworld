@@ -691,6 +691,7 @@ namespace AutoColony.Modules
             MarkMedicalBeds(ctx);
             EnsureAnimalPen(ctx);
             VerifyPen(ctx);
+            FloorMechanicalRooms(ctx);
 
             // Opening a building project is not how a fire or a raid is answered, and the labour
             // it claims is the labour the emergency needs. Everything already reserved carries on
@@ -1380,6 +1381,105 @@ namespace AutoColony.Modules
         }
 
         /// <summary>Finds an open, growable patch big enough to be worth fencing.</summary>
+        /// <summary>Floor blueprints laid per pass, so a big room does not flood the build queue.</summary>
+        const int FloorBudgetPerPass = 12;
+
+        readonly HashSet<int> floorsNoted = new HashSet<int>();
+
+        /// <summary>
+        /// Lays a real floor in the rooms where cleanliness has mechanical effects.
+        ///
+        /// The director never laid a floor, so every room every colony built stood on bare soil
+        /// at cleanliness -1.0 — the bottom of a range that runs to +0.6. Against the measured
+        /// curves that is surgery at 0.60x instead of 1.00x, post-operative infection at full
+        /// odds instead of half, a food-poisoning tax on every meal, and research at 0.75x.
+        ///
+        /// Deliberately only the three rooms where the number does mechanical work — Hospital
+        /// (surgery success, infection chance), Kitchen (food poisoning), Research (speed) —
+        /// because the big step is bare soil to any built floor at all, and flooring corridors
+        /// spends wood on aesthetics. Concrete where Stonecutting is done, since a kitchen full
+        /// of open flame on a flammable floor is its own hazard; wood plank otherwise, which
+        /// needs no research and costs three wood a cell.
+        ///
+        /// Laid as blueprints for colonists to build, not painted onto the map — the same line
+        /// the refuel decision drew: asking colonists to do it is playing, doing it directly is
+        /// editing.
+        /// </summary>
+        void FloorMechanicalRooms(DirectorContext ctx)
+        {
+            if (ctx.layout == null) return;
+
+            // Not while the colony cannot afford walls. A floor is the definition of
+            // discretionary building.
+            float means = Upkeep.BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists);
+            if (Upkeep.BuildingMeans.Destitute(means)) return;
+
+            var floor = ChooseFloor(ctx);
+            if (floor == null) return;
+
+            int placed = 0;
+            for (int i = 0; i < ctx.layout.rooms.Count && placed < FloorBudgetPerPass; i++)
+            {
+                var room = ctx.layout.rooms[i];
+                if (room.role != RoomRole.Hospital && room.role != RoomRole.Kitchen &&
+                    room.role != RoomRole.Research) continue;
+                if (!room.furnitureQueued) continue;   // the room proper comes first
+
+                int before = placed;
+                foreach (var cell in room.Interior)
+                {
+                    if (placed >= FloorBudgetPerPass) break;
+                    if (!cell.InBounds(ctx.map)) continue;
+
+                    var terrain = cell.GetTerrain(ctx.map);
+                    if (terrain == floor) continue;                       // already done
+                    if (terrain != null && terrain.layerable) continue;   // already a built floor
+                    if (PlacementUtil.HasAnyConstructionAt(ctx.map, cell)) continue;
+
+                    try
+                    {
+                        if (!GenConstruct.CanPlaceBlueprintAt(floor, cell, Rot4.North, ctx.map,
+                                false, null, null, null).Accepted) continue;
+                        GenConstruct.PlaceBlueprintForBuild(floor, cell, ctx.map, Rot4.North,
+                            Faction.OfPlayer, null);
+                        placed++;
+                    }
+                    catch (Exception) { return; }
+                }
+
+                if (placed > before && floorsNoted.Add(room.Center.GetHashCode()))
+                    Chronicle.Record(ChronicleCategory.Build, string.Format(
+                        "laying {0} through the {1} room — bare soil is cleanliness -1.0, and in " +
+                        "this room that number does mechanical work: surgery, infection, food " +
+                        "poisoning and research speed all read it",
+                        floor.label, room.role));
+            }
+        }
+
+        /// <summary>
+        /// The floor the colony can actually lay. Concrete once Stonecutting is done — a
+        /// kitchen full of open flame on a flammable floor is its own hazard — wood plank
+        /// otherwise, which needs no research at all.
+        /// </summary>
+        static TerrainDef ChooseFloor(DirectorContext ctx)
+        {
+            var concrete = TerrainDef.Named("Concrete");
+            if (concrete != null && ResearchDoneFor(concrete) && ctx.state.steel > 150) return concrete;
+
+            var plank = TerrainDef.Named("WoodPlankFloor");
+            if (plank != null && ResearchDoneFor(plank) && ctx.state.wood > 150) return plank;
+            return null;
+        }
+
+        static bool ResearchDoneFor(TerrainDef terrain)
+        {
+            var wanted = terrain.researchPrerequisites;
+            if (wanted == null) return true;
+            for (int i = 0; i < wanted.Count; i++)
+                if (wanted[i] != null && !wanted[i].IsFinished) return false;
+            return true;
+        }
+
         bool penSiteNoted;
         bool? penEnclosedLast;
         int penMarkerStandingSince = -1;

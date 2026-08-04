@@ -80,6 +80,13 @@ namespace AutoColony.Goals
         /// </summary>
         public readonly HashSet<RoomRole> RolesAnyGoalWants = new HashSet<RoomRole>();
 
+        /// <summary>
+        /// True while the growth layer wants another colonist — a spare bed stands and the
+        /// larder carries a margin. The recruitment levers read this: joiner letters, prisoner
+        /// recruitment. Population is grown by intent rather than by accident.
+        /// </summary>
+        public bool PopulationWanted;
+
         public string Describe()
         {
             if (Focus == null) return "nothing outstanding";
@@ -122,6 +129,8 @@ namespace AutoColony.Goals
 
             new MasonryGoal(),
             new PowerGoal(),
+            new GrowColonyGoal(),
+            new ComfortGoal(),
             new RefrigerationGoal(),
             new FortifyGoal(),
         };
@@ -174,6 +183,7 @@ namespace AutoColony.Goals
                 if (record.blockedSince < 0) record.blockedSince = now;
 
                 if (goal.WantsRoom.HasValue) plan.RolesWanted.Add(goal.WantsRoom.Value);
+                if (goal is GrowColonyGoal) plan.PopulationWanted = true;
 
                 // What this goal wants, folded into the colony's total pull. The weight is the
                 // horizon — Immediate 3, ShortTerm 2, LongTerm 1 — times how badly the goal

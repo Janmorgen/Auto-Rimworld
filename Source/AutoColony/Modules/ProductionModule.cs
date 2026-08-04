@@ -282,6 +282,13 @@ namespace AutoColony.Modules
             {
                 target = ctx.Gene(Genes.TextilesTarget);
             }
+            else if (product == AcDefs.PsychiteTea)
+            {
+                // The labour-free mood lever. Two cups a head is an evening's comfort in the
+                // cupboard, not a habit: consumption is gated by the drug policy to colonists
+                // whose mood is already low, so stock beyond that is addiction risk on a shelf.
+                target = colonists * 2f;
+            }
             else if (product.IsApparel)
             {
                 // Clothes were never made at all: apparel fell through to the default and

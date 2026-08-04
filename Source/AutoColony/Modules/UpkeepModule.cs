@@ -65,6 +65,10 @@ namespace AutoColony.Modules
             // Withdraw anything the colony asked for and no longer wants, before asking for more.
             if (!crisis && CancelStaleOrders(ctx)) return;
 
+            // Surgery outranks the defect survey and runs even in a crisis: a colonist losing to
+            // an infection is a death on a timer, and every other remedy here is furniture.
+            QueueLifesavingSurgery(ctx);
+
             unhandled.Clear();
             var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled,
                                               ctx.Gene(Genes.RoomEssentialWeight),
@@ -219,6 +223,155 @@ namespace AutoColony.Modules
         /// gets its own line rather than inheriting this one's silence.
         /// </summary>
         static bool graveWaitNoted;
+
+        /// <summary>Reported surgeries, so each is chronicled once rather than every pass.</summary>
+        static readonly HashSet<int> surgeryNoted = new HashSet<int>();
+
+        /// <summary>
+        /// Amputates what is killing a colonist, when tending has lost the race.
+        ///
+        /// An infection climbs towards lethalSeverity while the body builds immunity towards 1,
+        /// and tending only speeds the immunity side. When the disease is ahead the answer is to
+        /// remove the part it lives in — no amount of medicine substitutes once the race is
+        /// lost, which is how colonists here have died of Infection (extreme) with twenty
+        /// medicine in the cupboard.
+        ///
+        /// Guarded four ways, each from the design notes:
+        ///  - only when actually losing, not merely infected — the race, not the diagnosis
+        ///  - only parts the game itself would suggest amputating (canSuggestAmputation), which
+        ///    excludes torsos and heads; whole-body diseases like plague have no part at all
+        ///    and fall out naturally — for those, bed rest and cleanliness are all there is
+        ///  - only in a clean room (cleanliness >= 0), because a filthy room cuts surgery to
+        ///    0.60x and leaves post-operative infection at full odds — operating there to cure
+        ///    an infection hands the colonist a fresh one. Overridden only when death is near
+        ///    (past 85% of lethal), where a dirty table beats a grave
+        ///  - queued once, on the pawn's own surgery bills, like a player would
+        ///
+        /// After the amputation, a peg leg. InstallPegLeg consumes one wood log directly —
+        /// there is no prosthetic item to craft — so the whole aftermath is a second bill. The
+        /// better rungs (simple prosthetic, bionic) sit behind Electricity and are queued by
+        /// nothing here; a peg leg today, an upgrade when research pays the debt back.
+        /// </summary>
+        static void QueueLifesavingSurgery(DirectorContext ctx)
+        {
+            var remove = DefDatabase<RecipeDef>.GetNamedSilentFail("RemoveBodyPart");
+            if (remove == null) return;
+
+            for (int i = 0; i < ctx.state.allColonists.Count; i++)
+            {
+                var pawn = ctx.state.allColonists[i];
+                if (pawn == null || pawn.Dead || pawn.health == null) continue;
+
+                TryQueueAmputation(ctx, pawn, remove);
+                TryQueuePegLeg(ctx, pawn);
+            }
+        }
+
+        static void TryQueueAmputation(DirectorContext ctx, Verse.Pawn pawn, RecipeDef remove)
+        {
+            var hediffs = pawn.health.hediffSet.hediffs;
+            for (int h = 0; h < hediffs.Count; h++)
+            {
+                var hediff = hediffs[h];
+                if (hediff == null || hediff.def == null) continue;
+                if (hediff.def.lethalSeverity <= 0f) continue;
+                if (hediff.Part == null) continue;                        // whole-body: no surgery for it
+                if (!hediff.Part.def.canSuggestAmputation) continue;
+
+                var immunizable = hediff.TryGetComp<HediffComp_Immunizable>();
+                if (immunizable == null || immunizable.FullyImmune) continue;
+
+                float towardsDeath = hediff.Severity / hediff.def.lethalSeverity;
+                if (towardsDeath <= immunizable.Immunity) continue;       // winning; leave the limb on
+
+                if (HasBill(pawn, remove, hediff.Part)) continue;
+
+                // A dirty theatre is its own infection. Hold the knife until the room is clean,
+                // unless the race is nearly over — past 85% a dirty table beats a grave.
+                float cleanliness = RoomCleanlinessAround(pawn);
+                if (cleanliness < 0f && towardsDeath < 0.85f)
+                {
+                    if (surgeryNoted.Add(pawn.thingIDNumber ^ 0x5A5A))
+                        Chronicle.Record(ChronicleCategory.Health, string.Format(
+                            "{0} is losing to {1} ({2:P0} towards lethal, immunity {3:P0}) and needs " +
+                            "the {4} amputated — holding the surgery until the room is clean, because " +
+                            "a filthy theatre cuts success to 0.6x and reinfects at full odds",
+                            pawn.LabelShortCap, hediff.def.label, towardsDeath, immunizable.Immunity,
+                            hediff.Part.Label));
+                    continue;
+                }
+
+                var bill = new Bill_Medical(remove, null);
+                pawn.health.surgeryBills.AddBill(bill);
+                bill.Part = hediff.Part;
+
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "amputating {0}\'s {1} — {2} is at {3:P0} of lethal against {4:P0} immunity, " +
+                    "so tending has lost this race and the part goes before the colonist does",
+                    pawn.LabelShortCap, hediff.Part.Label, hediff.def.label,
+                    towardsDeath, immunizable.Immunity));
+                return;   // one theatre booking per pass
+            }
+        }
+
+        /// <summary>
+        /// A peg leg for anyone missing a leg. The install consumes one wood log directly, so
+        /// there is nothing to craft first — the bill is the whole aftermath.
+        /// </summary>
+        static void TryQueuePegLeg(DirectorContext ctx, Verse.Pawn pawn)
+        {
+            if (ctx.state.wood < 1) return;
+            var install = DefDatabase<RecipeDef>.GetNamedSilentFail("InstallPegLeg");
+            if (install == null || install.appliedOnFixedBodyParts == null) return;
+
+            var missing = pawn.health.hediffSet.GetMissingPartsCommonAncestors();
+            for (int i = 0; i < missing.Count; i++)
+            {
+                var part = missing[i].Part;
+                if (part == null || !install.appliedOnFixedBodyParts.Contains(part.def)) continue;
+                if (HasBill(pawn, install, part)) continue;
+
+                var bill = new Bill_Medical(install, null);
+                pawn.health.surgeryBills.AddBill(bill);
+                bill.Part = part;
+
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "fitting {0} with a peg leg for the missing {1} — one wood log, no research, " +
+                    "and a slower colonist beats a bedridden one. Research buys this back later: " +
+                    "prosthetic, then bionic, each replacing the last",
+                    pawn.LabelShortCap, part.Label));
+                return;
+            }
+        }
+
+        static bool HasBill(Verse.Pawn pawn, RecipeDef recipe, BodyPartRecord part)
+        {
+            var bills = pawn.health.surgeryBills;
+            if (bills == null) return false;
+            for (int i = 0; i < bills.Count; i++)
+            {
+                var medical = bills[i] as Bill_Medical;
+                if (medical != null && medical.recipe == recipe && medical.Part == part) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Cleanliness where this pawn would be operated on — their bed\'s room if they are in
+        /// one, the room they stand in otherwise. Live stat, because cleanliness is not a
+        /// property of the building but of whether anybody swept.
+        /// </summary>
+        static float RoomCleanlinessAround(Verse.Pawn pawn)
+        {
+            try
+            {
+                var bed = pawn.CurrentBed() ?? pawn.ownership?.OwnedBed;
+                var room = bed != null ? bed.GetRoom() : pawn.GetRoom();
+                if (room == null || room.PsychologicallyOutdoors) return -1f;
+                return room.GetStat(RoomStatDefOf.Cleanliness);
+            }
+            catch (Exception) { return -1f; }
+        }
 
         static bool BuryDead(DirectorContext ctx, ColonyDefect defect)
         {
