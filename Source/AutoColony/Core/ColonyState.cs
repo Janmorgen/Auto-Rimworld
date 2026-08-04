@@ -61,6 +61,17 @@ namespace AutoColony
         public int colonistsUntendedLethal;
 
         /// <summary>
+        /// Colonists whose disease is ahead of their immunity — losing the race, whether or not
+        /// anybody has tended them.
+        ///
+        /// This is the number that says a death is coming rather than that somebody is ill.
+        /// Tending helps the immunity side and does not guarantee it; an infection that is
+        /// winning is answered by removing the part it is in, which is a decision the director
+        /// cannot currently take at all.
+        /// </summary>
+        public int colonistsLosingToDisease;
+
+        /// <summary>
         /// Colonists who are actually going hungry — <c>Need_Food.Starving</c>, the game's own
         /// definition, which is the point at which malnutrition starts accruing.
         ///
@@ -115,6 +126,42 @@ namespace AutoColony
                     if (!hediff.def.tendable) continue;
                     if (hediff.def.lethalSeverity <= 0f) continue;
                     if (hediff.TendableNow(false)) return true;
+                }
+            }
+            catch (Exception) { }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether a colonist is losing the race against something that kills.
+        ///
+        /// An infection is not one condition but two outcomes. The disease climbs towards
+        /// lethalSeverity while the body builds immunity towards 1, and whichever arrives first
+        /// decides. Tending speeds the immunity side; it does not guarantee it, which is why
+        /// some infections end in an amputation instead — removing the part removes the disease,
+        /// and no amount of medicine substitutes for that once the race is lost.
+        ///
+        /// So "has an infection" and "is dying of one" are different questions, and only the
+        /// second is an emergency. Compared as fractions of their own finish lines, which is
+        /// what the game's own health tab shows the player.
+        /// </summary>
+        static bool LosingToDisease(Pawn pawn)
+        {
+            try
+            {
+                var hediffs = pawn.health.hediffSet.hediffs;
+                for (int i = 0; i < hediffs.Count; i++)
+                {
+                    var hediff = hediffs[i];
+                    if (hediff == null || hediff.def == null) continue;
+                    if (hediff.def.lethalSeverity <= 0f) continue;
+
+                    var immunizable = hediff.TryGetComp<HediffComp_Immunizable>();
+                    if (immunizable == null) continue;
+                    if (immunizable.FullyImmune) continue;
+
+                    float towardsDeath = hediff.Severity / hediff.def.lethalSeverity;
+                    if (towardsDeath > immunizable.Immunity) return true;
                 }
             }
             catch (Exception) { }
@@ -628,6 +675,10 @@ namespace AutoColony
                             s.colonistsUntended++;
                             if (HasLethalUntended(p)) s.colonistsUntendedLethal++;
                         }
+
+                        // Asked of everyone, tended or not. A tended infection can still be
+                        // losing, and that is exactly the case where tending is not the answer.
+                        if (LosingToDisease(p)) s.colonistsLosingToDisease++;
                     }
                     catch (Exception) { }
                 }
@@ -1238,6 +1289,7 @@ namespace AutoColony
             m.colonistsStarving = colonistsStarving;
             m.colonistsUntended = colonistsUntended;
             m.colonistsUntendedLethal = colonistsUntendedLethal;
+            m.colonistsLosingToDisease = colonistsLosingToDisease;
             m.daysOfFoodUnbutchered = daysOfFoodUnbutchered;
             m.daysOfFoodSpoiling = daysOfFoodSpoiling;
             m.medicineCount = medicineCount;

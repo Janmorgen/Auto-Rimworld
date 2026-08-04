@@ -177,10 +177,11 @@ namespace AutoColony
                     ? string.Format(CultureInfo.InvariantCulture, " ({0} STARVING, hungriest {1:0.00})",
                         m.colonistsStarving, m.minFood)
                     : "",
-                m.colonistsUntended > 0
-                    ? string.Format(CultureInfo.InvariantCulture, " ({0} UNTENDED{1})",
+                m.colonistsUntended > 0 || m.colonistsLosingToDisease > 0
+                    ? string.Format(CultureInfo.InvariantCulture, " ({0} UNTENDED{1}{2})",
                         m.colonistsUntended,
-                        m.colonistsUntendedLethal > 0 ? ", " + m.colonistsUntendedLethal + " LETHAL" : "")
+                        m.colonistsUntendedLethal > 0 ? ", " + m.colonistsUntendedLethal + " LETHAL" : "",
+                        m.colonistsLosingToDisease > 0 ? ", " + m.colonistsLosingToDisease + " LOSING" : "")
                     : "",
                 m.daysOfFoodUnbutchered >= 0.1f
                     ? string.Format(CultureInfo.InvariantCulture, " (+{0:0.0}d unbutchered)", m.daysOfFoodUnbutchered)

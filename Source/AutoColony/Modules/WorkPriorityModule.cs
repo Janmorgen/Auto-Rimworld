@@ -363,7 +363,8 @@ namespace AutoColony.Modules
             // Ordinary untended stays where it was. A grazed knuckle is not an emergency, and
             // treating every scratch as one would hold Doctor at the top for ever.
             Need("Doctor", notReachingThem ? 5f
-                         : (s.colonistsDowned > 0 || s.colonistsUntendedLethal > 0) ? 4f
+                         : (s.colonistsDowned > 0 || s.colonistsUntendedLethal > 0
+                            || s.colonistsLosingToDisease > 0) ? 4f
                          : s.colonistsUntended > 0 ? 3f
                          : (s.avgHealth < 0.9f ? 2f : 1f));
 

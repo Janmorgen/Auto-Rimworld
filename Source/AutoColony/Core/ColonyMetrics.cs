@@ -38,6 +38,9 @@ namespace AutoColony
         /// <summary>Of those, how many carry something that can kill them if left.</summary>
         public int colonistsUntendedLethal;
 
+        /// <summary>Colonists whose disease is ahead of their immunity.</summary>
+        public int colonistsLosingToDisease;
+
         /// <summary>Days of food still inside unbutchered animal corpses.</summary>
         public float daysOfFoodUnbutchered;
 
