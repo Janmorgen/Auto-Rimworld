@@ -1323,8 +1323,7 @@ namespace AutoColony.Modules
 
         /// <summary>Finds an open, growable patch big enough to be worth fencing.</summary>
         bool penSiteNoted;
-        bool penVerdictGiven;
-        bool penFailureNoted;
+        bool? penEnclosedLast;
         int penMarkerStandingSince = -1;
 
         /// <summary>How long a standing marker gets to become an enclosed pen before it is called a failure.</summary>
@@ -1346,7 +1345,8 @@ namespace AutoColony.Modules
         /// </summary>
         void VerifyPen(DirectorContext ctx)
         {
-            if (penVerdictGiven) return;
+            // Deliberately no "already answered" guard. See the bottom of this method: the
+            // answer can change, so this asks every pass and speaks only when it changes.
 
             var markerDef = AcDefs.PenMarker;
             if (markerDef == null) return;
@@ -1373,11 +1373,6 @@ namespace AutoColony.Modules
             // not being enclosed is the answer rather than the wait.
             if (!enclosed && Find.TickManager.TicksGame - penMarkerStandingSince < PenGraceTicks)
                 return;
-
-            // The complaint is worth making once. Carry on checking after it, though — a fence
-            // finished late still closes the pen, and a verdict that stopped looking would call
-            // it broken for ever on the strength of one early reading.
-            if (!enclosed && penFailureNoted) return;
 
             string forage = "";
             try
@@ -1410,15 +1405,21 @@ namespace AutoColony.Modules
             }
             catch (Exception) { }
 
+            // Speak only when the answer changes. Asked every pass, this would otherwise
+            // repeat itself for the life of the colony.
+            if (penEnclosedLast.HasValue && penEnclosedLast.Value == enclosed) return;
+
             Chronicle.Record(ChronicleCategory.Build, enclosed
                 ? "the pen is closed — the game agrees the fence holds, so the animals stay in it and " +
                   "graze rather than wander off." + forage
                 : "the pen has a marker standing but the game does not call it enclosed, so it holds " +
                   "nothing — a gap in the fence, or a gate the colony has not built yet." + forage);
 
-            // A closed pen is settled and never asked about again. An open one is noted once
-            // and kept under watch, because the fence may yet be finished.
-            if (enclosed) penVerdictGiven = true; else penFailureNoted = true;
+            // Not latched on success. Run 83 recorded "the pen is closed" on day 0 and the
+            // game was showing "Pen not enclosed" on day 25 — a fence section had gone in
+            // between, to a raid or a fire or an animal, and the verdict had stopped looking.
+            // A pen is not a fact established once. It is a wall, and walls come down.
+            penEnclosedLast = enclosed;
         }
 
         /// <summary>
