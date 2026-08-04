@@ -361,7 +361,22 @@ namespace AutoColony.Modules
             Need("Cooking", (starving ? 4.5f : 1f + foodShortfall * 1.5f)
                             * (s.winterComing ? 1.3f : 1f));
 
-            Need("Construction", s.pendingBlueprints + s.pendingFrames > 0 ? 2.2f : 0.8f);
+            // Building scales with the backlog, the way gathering scales with the shortfall.
+            //
+            // These two were asymmetric and the asymmetry had a direction. Mining and
+            // PlantCutting are 1 + shortfall x 1.5 x aggression, so they climb to 2.5 when
+            // stores are low. Construction was a flat 2.2 whenever any work existed at all,
+            // however much was waiting — so a colony could not express "there is a great deal
+            // to build" the way it could express "there is not much wood".
+            //
+            // Run 99 spent day ten with five rooms sited, one finished, 390 material in hand
+            // and means at 1.00, chopping wood at 2.5 against building at 2.2 while three
+            // colonists shared two beds. Nothing was misweighted; building simply had no way to
+            // say it was falling behind.
+            int backlog = s.pendingBlueprints + s.pendingFrames;
+            Need("Construction", backlog > 0
+                ? 2.2f + AcMath.Clamp01(backlog / 30f) * 1.5f
+                : 0.8f);
 
             // Against the plan's target as well as the genome's, the same way the resource
             // module designates against both. Otherwise the colony digs and chops for what the
