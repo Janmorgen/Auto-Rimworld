@@ -816,6 +816,20 @@ namespace AutoColony.Modules
 
                     if (!LeadsSomewhereUseful(ctx, pawn, thing, seen)) continue;
 
+                    // Take the roof off first, if there is one over them.
+                    //
+                    // A wall holds up the roof beside it, so pulling one out of a sealed pocket
+                    // drops that roof — onto the person being rescued. The first run of the
+                    // walled scenario produced a Roof collapse incident doing exactly this; the
+                    // colonist survived it, which is luck rather than design.
+                    //
+                    // Stripping a roof is a job a colonist does deliberately and safely, so the
+                    // repair spends a pass on it and comes back for the wall once the pocket is
+                    // open to the sky. Slower, and it cannot crush the colonist it is digging
+                    // out. RoofCollapseUtility is the game's own support test, so this asks the
+                    // same question the collapse itself will ask.
+                    if (StripRoofFirst(ctx, pawn, seen)) return true;
+
                     bool ordered = mine ? Mine(map, thing) : PlacementUtil.TryDeconstruct(map, thing);
                     if (!ordered) continue;
 
@@ -859,6 +873,54 @@ namespace AutoColony.Modules
             }
             return false;
         }
+
+        /// <summary>
+        /// Whether the pocket still has a roof that would come down on them, and asking for it
+        /// to be taken off if so.
+        ///
+        /// Returns true when it has ordered roof work, which ends the pass — the wall stays up
+        /// one more cycle and the colonist stays sealed, which is the safe way round. A pocket
+        /// already open to the sky, or one whose roof is held by something other than the wall
+        /// being removed, falls straight through to the deconstruct.
+        /// </summary>
+        static bool StripRoofFirst(DirectorContext ctx, Pawn pawn, HashSet<IntVec3> pocket)
+        {
+            var map = ctx.map;
+            if (map == null || map.roofGrid == null) return false;
+
+            bool ordered = false;
+            foreach (var cell in pocket)
+            {
+                if (!cell.InBounds(map)) continue;
+                if (!map.roofGrid.Roofed(cell)) continue;
+
+                // Natural thick rock overhead is not something a colonist can strip, and mining
+                // out from under a mountain is the rock branch's job rather than this one.
+                var roof = map.roofGrid.RoofAt(cell);
+                if (roof != null && roof.isNatural && !roof.isThickRoof) { /* strippable */ }
+                else if (roof != null && roof.isThickRoof) continue;
+
+                // Supported by something else anyway: no collapse to avoid.
+                if (RoofCollapseUtility.WithinRangeOfRoofHolder(cell, map, false) &&
+                    !pocket.Contains(cell)) continue;
+
+                PlacementUtil.MarkNoRoof(map, cell);
+                ordered = true;
+            }
+
+            if (ordered && !roofStripNoted)
+            {
+                roofStripNoted = true;
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "taking the roof off around {0} before touching the wall — pulling a wall out " +
+                    "from under a roof drops it, and they are standing under this one",
+                    pawn.LabelShortCap));
+            }
+            if (!ordered) roofStripNoted = false;
+            return ordered;
+        }
+
+        static bool roofStripNoted;
 
         static bool Mine(Map map, Thing rock)
         {

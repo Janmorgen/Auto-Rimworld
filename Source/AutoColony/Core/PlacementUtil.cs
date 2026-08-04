@@ -303,6 +303,15 @@ namespace AutoColony
             if (noRoof != null && noRoof[cell]) noRoof[cell] = false;
         }
 
+        /// <summary>Asks for the roof over this cell to be stripped, safely, by a colonist.</summary>
+        public static void MarkNoRoof(Map map, IntVec3 cell)
+        {
+            if (map == null || map.areaManager == null || !cell.InBounds(map)) return;
+            ClearBuildRoof(map, cell);
+            var noRoof = map.areaManager.NoRoof;
+            if (noRoof != null) noRoof[cell] = true;
+        }
+
         /// <summary>Withdraws a request to roof this cell, for when it is about to be pulled down.</summary>
         public static void ClearBuildRoof(Map map, IntVec3 cell)
         {

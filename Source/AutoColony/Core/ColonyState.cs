@@ -872,6 +872,24 @@ namespace AutoColony
                 ? mealNutrition / (s.colonists * NutritionPerColonistDay)
                 : mealNutrition;
 
+            // Cut off is a statement about this colonist against the rest of the colony, so it
+            // means nothing when nobody can reach food.
+            //
+            // At tick zero the colony's supplies are still inside drop pods and are not spawned
+            // things, so every colonist reads as unable to reach food and the vitals opened with
+            // "3 WALLED IN" before a single wall existed. Left alone that would put Construction
+            // and Mining at 5.0 on the first pass of every game.
+            //
+            // A colony where genuinely nobody can reach any food has a food problem, and the
+            // repair below could not help anyway: it frees people by finding somebody on the
+            // outside who can already reach the far side of the wall, and here there is no
+            // outside.
+            if (s.cutOff != null && s.colonists > 0 && s.colonistsCutOff >= s.colonists)
+            {
+                s.colonistsCutOff = 0;
+                s.cutOff = null;
+            }
+
             s.unbutcheredNutrition = UnbutcheredNutrition(map);
             s.daysOfFoodUnbutchered = s.colonists > 0
                 ? s.unbutcheredNutrition / (s.colonists * NutritionPerColonistDay)
