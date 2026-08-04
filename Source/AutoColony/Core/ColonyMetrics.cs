@@ -35,6 +35,9 @@ namespace AutoColony
         /// <summary>Colonists with an untended condition the game says needs tending.</summary>
         public int colonistsUntended;
 
+        /// <summary>Of those, how many carry something that can kill them if left.</summary>
+        public int colonistsUntendedLethal;
+
         /// <summary>Days of food still inside unbutchered animal corpses.</summary>
         public float daysOfFoodUnbutchered;
 

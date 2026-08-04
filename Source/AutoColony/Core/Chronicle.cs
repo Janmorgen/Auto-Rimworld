@@ -178,7 +178,9 @@ namespace AutoColony
                         m.colonistsStarving, m.minFood)
                     : "",
                 m.colonistsUntended > 0
-                    ? string.Format(CultureInfo.InvariantCulture, " ({0} UNTENDED)", m.colonistsUntended)
+                    ? string.Format(CultureInfo.InvariantCulture, " ({0} UNTENDED{1})",
+                        m.colonistsUntended,
+                        m.colonistsUntendedLethal > 0 ? ", " + m.colonistsUntendedLethal + " LETHAL" : "")
                     : "",
                 m.daysOfFoodUnbutchered >= 0.1f
                     ? string.Format(CultureInfo.InvariantCulture, " (+{0:0.0}d unbutchered)", m.daysOfFoodUnbutchered)

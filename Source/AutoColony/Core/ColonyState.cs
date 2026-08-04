@@ -45,6 +45,22 @@ namespace AutoColony
         public int colonistsUntended;
 
         /// <summary>
+        /// Colonists carrying an untended condition that can actually kill them.
+        ///
+        /// "Needs tending" covers a grazed knuckle and a plague alike, and treating those the
+        /// same cost Lubov. They walked around with an untended infection for days — the
+        /// vitals said "1 UNTENDED" the whole time and the colony held twenty medicine — while
+        /// Doctor sat at the untended tier of 3.0 and Tailoring sat at 3.2, because it was 39C
+        /// and nobody was dressed for it. Sewing outranked treating an infection, and the
+        /// infection won.
+        ///
+        /// A hediff with lethalSeverity above zero is the game stating that this one ends in a
+        /// death if it is left alone. That is a different urgency from a scratch, and it is the
+        /// distinction the priority ladder was missing.
+        /// </summary>
+        public int colonistsUntendedLethal;
+
+        /// <summary>
         /// Colonists who are actually going hungry — <c>Need_Food.Starving</c>, the game's own
         /// definition, which is the point at which malnutrition starts accruing.
         ///
@@ -80,6 +96,31 @@ namespace AutoColony
         /// prisoner, a visitor or dead does not want a double bed, they want something the
         /// planner cannot build.
         /// </summary>
+        /// <summary>
+        /// Whether any tendable condition on this colonist is one the game says can kill.
+        ///
+        /// lethalSeverity is the marker: infections, plague and malaria carry it, a bruise does
+        /// not. Asked of the def rather than by name, so a modded disease counts without anyone
+        /// listing it.
+        /// </summary>
+        static bool HasLethalUntended(Pawn pawn)
+        {
+            try
+            {
+                var hediffs = pawn.health.hediffSet.hediffs;
+                for (int i = 0; i < hediffs.Count; i++)
+                {
+                    var hediff = hediffs[i];
+                    if (hediff == null || hediff.def == null) continue;
+                    if (!hediff.def.tendable) continue;
+                    if (hediff.def.lethalSeverity <= 0f) continue;
+                    if (hediff.TendableNow(false)) return true;
+                }
+            }
+            catch (Exception) { }
+            return false;
+        }
+
         static int CountCouples(Map map)
         {
             var paired = new HashSet<Pawn>();
@@ -582,7 +623,11 @@ namespace AutoColony
                 {
                     try
                     {
-                        if (p.health.HasHediffsNeedingTendByPlayer(false)) s.colonistsUntended++;
+                        if (p.health.HasHediffsNeedingTendByPlayer(false))
+                        {
+                            s.colonistsUntended++;
+                            if (HasLethalUntended(p)) s.colonistsUntendedLethal++;
+                        }
                     }
                     catch (Exception) { }
                 }
@@ -1192,6 +1237,7 @@ namespace AutoColony
             m.minFood = minFood;
             m.colonistsStarving = colonistsStarving;
             m.colonistsUntended = colonistsUntended;
+            m.colonistsUntendedLethal = colonistsUntendedLethal;
             m.daysOfFoodUnbutchered = daysOfFoodUnbutchered;
             m.daysOfFoodSpoiling = daysOfFoodSpoiling;
             m.medicineCount = medicineCount;

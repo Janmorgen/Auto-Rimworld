@@ -352,8 +352,18 @@ namespace AutoColony.Modules
             //
             // Not a new rule: the same rung of the same ladder, given a better input. avgHealth
             // stays underneath it, because damaged parts are still worth a doctor's time.
+            // An untended infection is a downed colonist that has not happened yet.
+            //
+            // Lubov died of one while Doctor sat at 3.0 and Tailoring at 3.2 — a heat wave with
+            // nobody dressed for it, so sewing was genuinely urgent and it still should not have
+            // outranked an infection with twenty medicine in the cupboard. The two are the same
+            // urgency class and differ only in how far along they are, so a condition the game
+            // says can kill now ranks beside a colonist already on the floor.
+            //
+            // Ordinary untended stays where it was. A grazed knuckle is not an emergency, and
+            // treating every scratch as one would hold Doctor at the top for ever.
             Need("Doctor", notReachingThem ? 5f
-                         : s.colonistsDowned > 0 ? 4f
+                         : (s.colonistsDowned > 0 || s.colonistsUntendedLethal > 0) ? 4f
                          : s.colonistsUntended > 0 ? 3f
                          : (s.avgHealth < 0.9f ? 2f : 1f));
 
