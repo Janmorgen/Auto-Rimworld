@@ -325,6 +325,18 @@ namespace AutoColony.Modules
             // food nobody has hauled into a stockpile is food nobody can be fed from.
             bool notReachingThem = s.colonistsStarving > 0 && s.daysOfFood >= 1f;
 
+            // An empty larder with meat lying in the field is not a hunting problem.
+            //
+            // A corpse is food two jobs away — haul it, butcher it — and answering it with more
+            // hunting produces another corpse beside the first. A colony here once hunted
+            // thirteen gazelles and starved at 0.0 days with all of it lying where it fell.
+            //
+            // So when the larder is short and there is more than a day of meat waiting, the
+            // work that closes the gap is butchering and the hauling that feeds it, not another
+            // kill. Hunting is left alone rather than suppressed: the animals may still be
+            // needed, and a colony that stops hunting on a bad reading starves twice.
+            bool meatWaiting = s.daysOfFood < 4f && s.daysOfFoodUnbutchered >= 1f;
+
             // Emergencies first: fire and untreated casualties outrank everything.
             // Only fires that could reach the colony justify dropping everything; a distant
             // wildfire is not worth a work-hour.
@@ -358,7 +370,8 @@ namespace AutoColony.Modules
                             * (s.growingSeasonNow ? 1f : 1.4f));
             // Preserving the harvest matters more with the cold coming, because what is not
             // cooked and stored before the fields die is not eaten in the months after.
-            Need("Cooking", (starving ? 4.5f : 1f + foodShortfall * 1.5f)
+            // Butchering is Cooking work, so this is the same lever for both jobs.
+            Need("Cooking", (starving ? 4.5f : meatWaiting ? 4f : 1f + foodShortfall * 1.5f)
                             * (s.winterComing ? 1.3f : 1f));
 
             // Building scales with the backlog, the way gathering scales with the shortfall.
@@ -397,7 +410,10 @@ namespace AutoColony.Modules
             float outdoorPressure = s.itemsOutdoors > 0 ? AcMath.Clamp01(s.itemsOutdoors / 40f) : 0f;
             // Hauling is normally kept off the top of the table on purpose, but food nobody has
             // carried into a stockpile is food a hungry colonist cannot be fed from.
-            Need("Hauling", (notReachingThem ? 4f : 1.1f) + fireRisk * outdoorPressure * 2f);
+            // Hauling matters for both cases and for the same reason: food that nobody has
+            // carried anywhere is food nobody can eat, whether it is in a stockpile or a corpse.
+            Need("Hauling", (notReachingThem || meatWaiting ? 4f : 1.1f)
+                            + fireRisk * outdoorPressure * 2f);
             Need("Smithing", 1f);
             // Tailoring rose with the *cloth pile*, which says how much raw material is spare
             // and nothing about whether anyone is cold. The apparel work added a bench, a bill,

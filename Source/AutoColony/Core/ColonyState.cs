@@ -113,6 +113,26 @@ namespace AutoColony
         /// <see cref="foodNutrition"/>, which is a hauling backlog rather than a shortage.
         /// </summary>
         public float foodStored;
+
+        /// <summary>
+        /// Nutrition standing in fresh animal corpses nobody has butchered yet, and the days of
+        /// food that would become if they did.
+        ///
+        /// A corpse is not food — colonists will not eat one, and counting it as food is what
+        /// let a colony read fifty days while starving beside a dead thrumbo. But it is not
+        /// nothing either: it is food two jobs away, hauling and butchering, and the right
+        /// answer to an empty larder with a full field is to butcher rather than to hunt again.
+        /// A colony here once hunted thirteen gazelles and starved at 0.0 days with the meat
+        /// lying where it fell.
+        ///
+        /// ResourceModule has computed this for its own hunting decision all along. Kept here
+        /// so the work priorities and the chronicle can see the same number instead of each
+        /// deciding for themselves what a corpse is worth.
+        /// </summary>
+        public float unbutcheredNutrition;
+
+        /// <summary>Days of food locked in corpses, on the same scale as <see cref="daysOfFood"/>.</summary>
+        public float daysOfFoodUnbutchered;
         public float daysOfFood;
         /// <summary>Medicine the colony can reach, stockpiled or loose. What decides treatment.</summary>
         public int medicineCount;
@@ -643,6 +663,11 @@ namespace AutoColony
                 ? s.foodNutrition / (s.colonists * NutritionPerColonistDay)
                 : s.foodNutrition;
 
+            s.unbutcheredNutrition = UnbutcheredNutrition(map);
+            s.daysOfFoodUnbutchered = s.colonists > 0
+                ? s.unbutcheredNutrition / (s.colonists * NutritionPerColonistDay)
+                : s.unbutcheredNutrition;
+
             // Map-wide, like the rest. These decide whether to go and get more — ResourceModule
             // stops chopping at "wood >= target" and starts mining at "steel < target" — and a
             // colony that has felled a forest but not tidied it away reads zero and fells
@@ -774,6 +799,36 @@ namespace AutoColony
             int total = 0;
             for (int i = 0; i < clothingStuffCache.Count; i++)
                 total += CountOnMap(map, clothingStuffCache[i]);
+            return total;
+        }
+
+        /// <summary>
+        /// Meat waiting inside fresh animal corpses. Fresh only — a rotted corpse yields
+        /// nothing worth hauling, and counting it would promise food that is not coming.
+        /// </summary>
+        static float UnbutcheredNutrition(Map map)
+        {
+            if (map == null || map.listerThings == null) return 0f;
+
+            float total = 0f;
+            try
+            {
+                var corpses = map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse);
+                for (int i = 0; i < corpses.Count; i++)
+                {
+                    var corpse = corpses[i] as Corpse;
+                    if (corpse == null || !corpse.Spawned) continue;
+                    if (corpse.IsForbidden(Faction.OfPlayer)) continue;
+
+                    var pawn = corpse.InnerPawn;
+                    if (pawn == null || pawn.RaceProps == null) continue;
+                    if (!pawn.RaceProps.Animal) continue;
+                    if (corpse.GetRotStage() != RotStage.Fresh) continue;
+
+                    total += pawn.RaceProps.baseBodySize * 3.5f;   // roughly the meat it yields
+                }
+            }
+            catch (Exception) { }
             return total;
         }
 
@@ -1075,6 +1130,7 @@ namespace AutoColony
             m.minFood = minFood;
             m.colonistsStarving = colonistsStarving;
             m.colonistsUntended = colonistsUntended;
+            m.daysOfFoodUnbutchered = daysOfFoodUnbutchered;
             m.medicineCount = medicineCount;
             m.medicineStored = medicineStored;
             m.usableMaterial = usableMaterial;
