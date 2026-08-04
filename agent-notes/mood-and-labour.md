@@ -111,6 +111,31 @@ Cheap to close: `NeedFood` already appears in the upkeep survey's complaint list
 evaluator has access to the fact that colonists are hungry. A Food security term built on
 "days in store *and* nobody starving" would separate a stocked colony from a fed one.
 
+### Measured at last — run 82
+
+`ColonyState` now carries `colonistsStarving` (`Need_Food.Starving`) and `minFood`, and the
+vitals line says so. The first colony to run with it made the divergence unarguable:
+
+```
+food 9.1d (1 STARVING, hungriest 0.00)   colonists 3 (down 1)
+food 5.3d (1 STARVING, hungriest 0.00)   colonists 2 (down 1)
+```
+
+A colonist at food need **0.00** — not low, zero — beside **9.1 days of food**. Before this the
+vitals read `food 9.1d` and looked healthy. Final score: `Food security 1.00`, with the
+postmortem naming `NeedFood at 26.0` as the worst unmet complaint in the same breath.
+
+**The work response fired and was not enough.** `Doctor 5.0` and `Hauling 6.0` appear fourteen
+times, exactly as intended — but the same lines read `Firefighter 6.0` and `colonists 2 (down
+1)`. One upright colonist, a fire burning for 43% of the epoch, and a warg and a grizzly taking
+the others. Raising the priority of feeding a patient does nothing when the only person who
+could do it is fighting a fire.
+
+Which is the same conclusion this note reached before, now with numbers behind it: the colonies
+dying here have a *labour* problem, and re-ordering one pair of hands cannot answer it. The
+value of the instrument is not that it saved run 82 — it did not — but that the failure is
+finally visible while it is happening rather than inferred afterwards from a corpse.
+
 ## A near-term goal blocked behind a far-term room
 
 Run 72 lost Tamii to `Hypothermia (extreme)` at -12C, with the colony dutifully making
