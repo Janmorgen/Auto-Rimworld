@@ -114,7 +114,8 @@ namespace AutoColony.Goals
 
         public override string Explain(DirectorContext ctx)
         {
-            return ctx.state.itemsOutdoors + " items outdoors";
+            return string.Format("{0} items deteriorating outdoors, worth {1:N0}",
+                ctx.state.itemsOutdoors, ctx.state.valueOutdoors);
         }
 
     }

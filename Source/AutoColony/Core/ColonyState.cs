@@ -250,6 +250,13 @@ namespace AutoColony
         public int itemsOutdoors;
 
         /// <summary>
+        /// What those items are worth. A count treats a rifle and a slag chunk alike; this is
+        /// what the colony is actually losing to the weather, and what decides whether hauling
+        /// them in is worth an afternoon.
+        /// </summary>
+        public float valueOutdoors;
+
+        /// <summary>
         /// Cells the colony has under cultivation, and how many distinct crops are growing in
         /// them.
         ///
@@ -944,7 +951,29 @@ namespace AutoColony
                     if (thing == null || !thing.Spawned) continue;
                     if (thing.def.category != ThingCategory.Item) continue;
                     if (roofs != null && roofs.Roofed(thing.Position)) continue;
+
+                    // Only things the weather is actually taking.
+                    //
+                    // This counted every haulable item under open sky, so a colony with seven
+                    // hundred granite chunks in a field read as a storage emergency while one
+                    // with five components and a rifle in the rain read as almost fine. Chunks
+                    // do not deteriorate; components deteriorate at 2.0 a day, and weapons,
+                    // apparel and medicine all rot away outdoors — which is most of what a raid
+                    // leaves lying on the ground.
+                    //
+                    // DeteriorationRate is the game's own answer to "is the sky costing me
+                    // this", so it holds for modded items without a list.
+                    float rate;
+                    try { rate = thing.GetStatValue(StatDefOf.DeteriorationRate); }
+                    catch (Exception) { rate = 0f; }
+                    if (rate <= 0f) continue;
+
                     s.itemsOutdoors++;
+
+                    // And what it is worth, because one rifle is not one steel slag chunk. This
+                    // is the number that says whether hauling is worth a colonist's afternoon.
+                    try { s.valueOutdoors += thing.MarketValue * thing.stackCount; }
+                    catch (Exception) { }
                 }
             }
         }
