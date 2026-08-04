@@ -31,6 +31,9 @@ namespace AutoColony
 
         /// <summary>Colonists the game itself calls starving.</summary>
         public int colonistsStarving;
+
+        /// <summary>Medicine of any grade in store. Distinguishes "could not treat" from "did not".</summary>
+        public int medicineCount;
         public float avgHealth;
 
         // sustenance and economy

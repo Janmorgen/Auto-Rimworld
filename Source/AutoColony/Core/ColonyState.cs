@@ -874,6 +874,7 @@ namespace AutoColony
             m.minMood = minMood;
             m.minFood = minFood;
             m.colonistsStarving = colonistsStarving;
+            m.medicineCount = medicineCount;
             m.avgHealth = avgHealth;
             m.daysOfFood = daysOfFood;
             m.outdoorTemperature = outdoorTemperature;
