@@ -1019,6 +1019,7 @@ namespace AutoColony
             m.colonistsUntended = colonistsUntended;
             m.medicineCount = medicineCount;
             m.medicineStored = medicineStored;
+            m.usableMaterial = usableMaterial;
             m.avgHealth = avgHealth;
             m.daysOfFood = daysOfFood;
             m.outdoorTemperature = outdoorTemperature;

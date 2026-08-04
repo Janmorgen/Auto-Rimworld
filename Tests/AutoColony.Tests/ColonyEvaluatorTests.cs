@@ -36,6 +36,44 @@ namespace AutoColony.Tests
         }
 
         /// <summary>
+        /// A colony that has built itself unable to build is not well-infrastructured.
+        ///
+        /// Infrastructure paid for beds and asked nothing about the bill. Run 96 put up fifteen
+        /// rooms for three colonists, went destitute, and its own overbuilding remedy answered
+        /// by demolishing the research room the plan was still asking for.
+        /// </summary>
+        [Fact]
+        public void SpendingTheColonyDestituteCostsInfrastructure()
+        {
+            var end = Baseline();
+
+            var solvent = new EpochAccumulator();
+            var broke = new EpochAccumulator();
+
+            var comfortable = Baseline();
+            comfortable.usableMaterial = 2000;
+
+            var destitute = Baseline();
+            destitute.usableMaterial = 0;      // identical beds, nothing left to build with
+
+            for (int i = 0; i < 40; i++)
+            {
+                solvent.Observe(comfortable);
+                broke.Observe(destitute);
+            }
+
+            Assert.True(broke.DestituteFraction > 0.9f, "the colony could not afford to build");
+            Assert.True(solvent.DestituteFraction < 0.1f, "the solvent one could");
+
+            List<ScoreTerm> a, b;
+            float solventScore = ColonyEvaluator.Evaluate(StartFrom(end), end, solvent, out a);
+            float brokeScore = ColonyEvaluator.Evaluate(StartFrom(end), end, broke, out b);
+
+            Assert.True(brokeScore < solventScore,
+                "a colony that spent itself unable to build must not score as well as one that did not");
+        }
+
+        /// <summary>
         /// A colony leaving wounds untended is not a healthy one.
         ///
         /// avgHealth is SummaryHealthPercent, which counts damaged body parts and is blind to

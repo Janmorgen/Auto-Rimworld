@@ -127,6 +127,12 @@ namespace AutoColony
         {
             get { return samples > 0 ? (float)untendedSamples / samples : 0f; }
         }
+
+        /// <summary>How much of the epoch the colony could not afford to build.</summary>
+        public float DestituteFraction
+        {
+            get { return samples > 0 ? (float)destituteSamples / samples : 0f; }
+        }
         /// <summary>
         /// Samples in which somebody was actually going hungry, whatever the larder held.
         ///
@@ -146,6 +152,17 @@ namespace AutoColony
         /// was told the difference was small.
         /// </summary>
         public int untendedSamples;
+
+        /// <summary>
+        /// Samples in which the colony could not afford to build anything.
+        ///
+        /// Being destitute is not bad luck — it is the bill for what was built. Run 96 put up
+        /// fifteen rooms and nine beds for three colonists, went destitute at means 0.12, and
+        /// the overbuilding remedy answered by pulling down the research room the plan was
+        /// still asking for. Every step was a rule working as written; the whole was a colony
+        /// spending itself into demolishing what it needed.
+        /// </summary>
+        public int destituteSamples;
         public int mentalBreakSamples;
         public int fireSamples;
         public int downedSamples;
@@ -220,6 +237,7 @@ namespace AutoColony
             foodSecureSamples = 0;
             starvingSamples = 0;
             untendedSamples = 0;
+            destituteSamples = 0;
             mentalBreakSamples = 0;
             fireSamples = 0;
             downedSamples = 0;
@@ -268,6 +286,8 @@ namespace AutoColony
                 if (m.colonistsStarving > 0) starvingSamples++;
             }
             if (m.colonistsUntended > 0) untendedSamples++;
+            if (Upkeep.BuildingMeans.Destitute(
+                    Upkeep.BuildingMeans.Assess(m.usableMaterial, m.colonists))) destituteSamples++;
             if (m.colonistsInMentalState > 0) mentalBreakSamples++;
             // Only fires that actually threaten the colony. Counting every fire on the map
             // meant a wildfire ninety cells away — one the director is designed to ignore, and
@@ -503,6 +523,20 @@ namespace AutoColony
             // --- infrastructure: everyone housed, with a little slack ---
             float bedRatio = end.colonists > 0 ? end.colonistBeds / (float)end.colonists : 1f;
             float infra = AcMath.Clamp01(bedRatio) * 0.7f + AcMath.Clamp01(1f - acc.FireFraction) * 0.3f;
+
+            // Discounted by how long the colony could not afford to build anything.
+            //
+            // Infrastructure paid for rooms and beds and asked nothing about what they cost.
+            // Run 96 put up fifteen rooms and nine beds for three colonists, went destitute at
+            // means 0.12, and the overbuilding remedy answered by pulling down the research
+            // room its own plan was still asking for. Every rule involved worked as written;
+            // the whole was a colony spending itself into demolishing what it needed.
+            //
+            // Being destitute is not bad luck. It is the bill for what was built, and until now
+            // the building was scored and the bill was not — so a genome that over-built was
+            // rewarded for the rooms and never charged for the poverty. This does not forbid
+            // building; it stops paying for the part that leaves the colony unable to act.
+            infra *= AcMath.Clamp01(1f - acc.DestituteFraction * 0.6f);
             breakdown.Add(new ScoreTerm("Infrastructure", infra, WInfrastructure));
 
             // --- defense readiness, scaled by the threat wealth actually attracts ---

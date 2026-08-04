@@ -40,6 +40,12 @@ namespace AutoColony
 
         /// <summary>Of that, how much has been hauled into storage.</summary>
         public int medicineStored;
+
+        /// <summary>
+        /// Material the colony could actually put into a wall. Carried so the evaluator can see
+        /// a colony that has built itself unable to build.
+        /// </summary>
+        public int usableMaterial;
         public float avgHealth;
 
         // sustenance and economy
