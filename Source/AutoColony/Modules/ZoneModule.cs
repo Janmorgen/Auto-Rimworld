@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AutoColony.Learning;
+using AutoColony.Plants;
 using RimWorld;
 using Verse;
 
@@ -30,6 +31,9 @@ namespace AutoColony.Modules
             EnsureGrowingZone(ctx);
             EnsureCropVariety(ctx);
             EnsureMedicinePlot(ctx);
+            EnsureTextilePlot(ctx);
+            EnsureFodderPlot(ctx);
+            EnsureSocialPlot(ctx);
             EnsureStockpile(ctx);
         }
 
@@ -150,6 +154,198 @@ namespace AutoColony.Modules
 
         /// <summary>Enough healroot to keep a small colony in herbal medicine, not a cash crop.</summary>
         const int MedicinePlotCells = 24;
+
+        /// <summary>Cloth for a coat each, roughly, rather than a textile industry.</summary>
+        const int TextilePlotCells = 30;
+
+        /// <summary>Hay to carry a small herd through one lean season.</summary>
+        const int FodderPlotCells = 40;
+
+        bool textileReported;
+        bool fodderReported;
+
+        /// <summary>A comfort crop, not a cash crop.</summary>
+        const int SocialPlotCells = 24;
+
+        /// <summary>
+        /// Something to take the edge off, when there is slack to grow it and a way to use it.
+        ///
+        /// Drug crops are permissible and they do real work — beer, smokeleaf and psychite all
+        /// carry mood, and mood is what six of this project's colonies actually died of. What
+        /// they are not is food, which is the mistake that started all of this.
+        ///
+        /// Three guards, and each is a lesson already paid for:
+        ///
+        /// The colony must be able to *process* it. A field of psychoid leaves is worth nothing
+        /// without Drug Production; that is the original error wearing a different hat, and
+        /// CanProcess asks the recipe graph rather than assuming.
+        ///
+        /// There must be food first, with margin. Ground under a comfort crop is ground not
+        /// under potatoes, and a hungry colony has no business growing psychite.
+        ///
+        /// And it must be wanted. Mood is checked on the worst colonist rather than the average,
+        /// because breaks are an individual event and in a colony of three a contented pair
+        /// hides the person about to go berserk.
+        /// </summary>
+        void EnsureSocialPlot(DirectorContext ctx)
+        {
+            if (ctx.state.growingCells <= 0) return;
+            if (ctx.state.daysOfFood < 5f) return;              // dinner, with margin
+            if (ctx.state.minMood > 0.45f) return;              // nobody is struggling
+
+            var crop = BestOfRole(ctx, PlantRole.Social);
+            if (crop == null || !PlantTaxonomy.CanProcess(crop)) return;
+            if (AlreadyGrowing(ctx, crop)) return;
+
+            var cells = FindFertileCells(ctx, SocialPlotCells);
+            if (cells.Count == 0) return;
+
+            var map = ctx.map;
+            var plot = new Zone_Growing(map.zoneManager);
+            map.zoneManager.RegisterZone(plot);
+            plot.SetPlantDefToGrow(crop);
+            for (int i = 0; i < cells.Count; i++) plot.AddCell(cells[i]);
+
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "{0} sown across {1} cells — the worst mood here is {2:0.00} and there are {3:0.0} " +
+                "days of food, so there is room to grow something that is not dinner",
+                crop.label ?? crop.defName, cells.Count, ctx.state.minMood, ctx.state.daysOfFood));
+        }
+
+        /// <summary>
+        /// Cloth, because colonists have frozen to death for want of a coat.
+        ///
+        /// Run 72 lost two people to Hypothermia (extreme) while the colony dutifully made
+        /// tribalwear, and the whole chain behind that has been unpicked since — but every
+        /// version of it ends at cloth, and nothing in the director has ever grown any. Textiles
+        /// were measured (ColonyState.textiles), given a production target
+        /// (Genes.TextilesTarget) and used in bills, with no source on the map at all: a colony
+        /// with no trader and no cotton simply never had cloth to sew.
+        ///
+        /// Only when there is little in store. A field of cotton is worth nothing to a colony
+        /// that already has bolts of it, and the cells are better under food.
+        /// </summary>
+        void EnsureTextilePlot(DirectorContext ctx)
+        {
+            if (ctx.state.growingCells <= 0) return;              // dinner first
+            if (ctx.state.textiles >= 120) return;                // enough to sew with
+
+            var crop = BestOfRole(ctx, PlantRole.Textile);
+            if (crop == null)
+            {
+                // Cotton needs no research; devilstrand does. If neither is available it is
+                // worth saying, because "the colony never made clothes" and "the colony could
+                // not grow anything to make them from" look identical from outside.
+                if (!textileReported)
+                {
+                    textileReported = true;
+                    Chronicle.Record(ChronicleCategory.Economy,
+                        "no textile crop can be sown here, so cloth has to be bought or taken — " +
+                        "which is the same corner run 72 froze in");
+                }
+                return;
+            }
+
+            if (AlreadyGrowing(ctx, crop)) return;
+
+            var cells = FindFertileCells(ctx, TextilePlotCells);
+            if (cells.Count == 0) return;
+
+            var map = ctx.map;
+            var plot = new Zone_Growing(map.zoneManager);
+            map.zoneManager.RegisterZone(plot);
+            plot.SetPlantDefToGrow(crop);
+            for (int i = 0; i < cells.Count; i++) plot.AddCell(cells[i]);
+
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "{0} sown across {1} cells — the colony holds {2} cloth, and a tailor bench with " +
+                "nothing to sew is a colonist in tribalwear at -12C",
+                crop.label ?? crop.defName, cells.Count, ctx.state.textiles));
+        }
+
+        /// <summary>
+        /// Hay, for animals the pen cannot feed all year.
+        ///
+        /// The pen report already names this exact shortfall — "the herd eats 0.80 a day and
+        /// winter forages only 0.00, so this pen needs hay hauled to it for one season a year"
+        /// — and until now nothing could act on it, because the colony had no way to produce
+        /// hay. Grazing is free while the grass grows; the question a pen asks is what happens
+        /// when it stops.
+        ///
+        /// Only with animals to feed. Hay is worth nothing to a colony that has none, and
+        /// haygrass is the least useful thing that can occupy fertile soil otherwise.
+        /// </summary>
+        void EnsureFodderPlot(DirectorContext ctx)
+        {
+            if (ctx.state.growingCells <= 0) return;
+            if (ctx.state.tamedAnimals <= 0) return;
+
+            var crop = BestOfRole(ctx, PlantRole.Fodder);
+            if (crop == null)
+            {
+                if (!fodderReported)
+                {
+                    fodderReported = true;
+                    Chronicle.Record(ChronicleCategory.Economy,
+                        "animals to feed and no fodder crop that will grow here — they live on " +
+                        "what the pen forages or they do not live");
+                }
+                return;
+            }
+
+            if (AlreadyGrowing(ctx, crop)) return;
+
+            var cells = FindFertileCells(ctx, FodderPlotCells);
+            if (cells.Count == 0) return;
+
+            var map = ctx.map;
+            var plot = new Zone_Growing(map.zoneManager);
+            map.zoneManager.RegisterZone(plot);
+            plot.SetPlantDefToGrow(crop);
+            for (int i = 0; i < cells.Count; i++) plot.AddCell(cells[i]);
+
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "{0} sown across {1} cells for {2} animals — a pen feeds itself while the grass " +
+                "grows, and this is what they eat when it stops",
+                crop.label ?? crop.defName, cells.Count, ctx.state.tamedAnimals));
+        }
+
+        /// <summary>
+        /// The best sowable plant of a given role — cheapest to grow that the colony can
+        /// actually sow. Skill and research are hard limits, as everywhere else here: a crop
+        /// nobody can sow is a field that stays bare and never says why.
+        /// </summary>
+        static ThingDef BestOfRole(DirectorContext ctx, PlantRole role)
+        {
+            int skill = BestGrowingSkill(ctx);
+            ThingDef best = null;
+
+            var sowable = PlantTaxonomy.Sowable();
+            for (int i = 0; i < sowable.Count; i++)
+            {
+                var def = sowable[i];
+                if (PlantTaxonomy.RoleOf(def) != role) continue;
+                if (def.plant.sowMinSkill > skill) continue;
+                if (!PlacementUtil.ResearchDone(def)) continue;
+
+                // Fastest to a harvest wins. Devilstrand is better cloth and takes most of a
+                // year; a colony that is cold now needs cotton now.
+                if (best == null || def.plant.growDays < best.plant.growDays) best = def;
+            }
+            return best;
+        }
+
+        static bool AlreadyGrowing(DirectorContext ctx, ThingDef crop)
+        {
+            foreach (var zone in ctx.map.zoneManager.AllZones)
+            {
+                var g = zone as Zone_Growing;
+                if (g == null) continue;
+                var plant = g.GetPlantDefToGrow();
+                if (plant != null && plant.defName == crop.defName) return true;
+            }
+            return false;
+        }
 
         /// <summary>Set once the skill shortfall has been reported, so it is said once, not hourly.</summary>
         bool medicineSkillReported;
@@ -307,37 +503,24 @@ namespace AutoColony.Modules
             for (int i = 0; i < all.Count; i++)
             {
                 var def = all[i];
+                // Dinner, and nothing that merely looks like it.
+                //
+                // Two attempts before this one filtered here by hand and both let psychoid
+                // through — first because its leaves give nutrition, then because they are not
+                // classed as a drug. A colony planted seventy-two cells of the stuff as
+                // insurance against blight, lost its rice to blight, and starved beside the
+                // field. PlantTaxonomy answers the question properly now, and answers it the
+                // same way everywhere the question is asked.
+                // Sowable first, and not as a detail. Replacing the old hand-rolled filters
+                // with the taxonomy dropped this check with them, and the very next colony
+                // planted seventy-two cells of agarilux — a wild cave plant that is genuinely
+                // food by every test the taxonomy applies and cannot be sown in a field at all.
+                // The category was right and the plant was unplantable, which is its own kind
+                // of wrong answer.
                 if (def.plant == null || !def.plant.Sowable) continue;
                 if (def.plant.harvestedThingDef == null) continue;
-                // Food crops only; textiles are managed elsewhere and healroot has its own plot,
-                // since it is medicine rather than dinner.
-                if (!def.plant.harvestedThingDef.IsNutritionGivingIngestible) continue;
 
-                // And not drugs, which that test does not exclude.
-                //
-                // Psychoid and smokeleaf leaves are ingestible and carry enough nutrition to
-                // pass for food, so the colony planted seventy-two cells of psychoid as its
-                // second *food* crop — a field of psychite where the larder needed potatoes.
-                // Harmless while there was only ever one crop and the bandit favoured a real
-                // one; the moment a second, deliberately different crop was added, the next arm
-                // along was whatever the filter had failed to exclude.
-                if (def.plant.harvestedThingDef.IsDrug) continue;
-
-                // And that was not enough. Run 86 planted seventy-two cells of psychoid on the
-                // build that already carried the line above, then lost its rice to blight and
-                // starved with three colonists at NeedFood beside a full field of the stuff.
-                //
-                // PsychoidLeaves is not a drug. It is the raw ingredient a drug is made from,
-                // carries no drugCategory at all, and passes IsNutritionGivingIngestible — so
-                // both tests waved it through. What it actually is is written one line further
-                // down its def: preferability DesperateOnly, which is the game saying nobody
-                // eats this unless they are starving.
-                //
-                // Preferability is the honest test, and it is the one the game itself uses to
-                // decide whether a pawn will eat something. Real crops inherit RawBad or better
-                // from PlantFoodRawBase; psychoid, smokeleaf and haygrass all sit below it.
-                var ingestible = def.plant.harvestedThingDef.ingestible;
-                if (ingestible == null || ingestible.preferability < FoodPreferability.RawBad) continue;
+                if (PlantTaxonomy.RoleOf(def) != PlantRole.Food) continue;
 
                 // Skill and research are hard limits, not preferences: a crop nobody can sow is
                 // a field that stays bare, and the colony would never find out why.

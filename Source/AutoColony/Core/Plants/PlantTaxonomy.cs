@@ -174,6 +174,42 @@ namespace AutoColony.Plants
             return false;
         }
 
+        /// <summary>
+        /// Whether the colony could actually turn this plant's harvest into anything.
+        ///
+        /// The whole lesson of the psychoid field is that a crop the colony cannot use is worse
+        /// than no crop at all: it costs the soil, the sowing and the hauling, and returns
+        /// leaves. A social crop is only worth ground if the research to process it is done —
+        /// psychite tea needs Drug Production, beer needs Brewing, and a colony without either
+        /// grows a field of something it can only eat when starving.
+        ///
+        /// Asked of the recipe graph rather than named, so it holds for modded drugs too. Beer
+        /// is reachable this way even though nothing makes beer: Make_Wort consumes hops, and
+        /// whether that recipe is unlocked is the question that matters.
+        /// </summary>
+        public static bool CanProcess(ThingDef plant)
+        {
+            if (plant == null || plant.plant == null) return false;
+            var harvest = plant.plant.harvestedThingDef;
+            if (harvest == null) return false;
+
+            var recipes = DefDatabase<RecipeDef>.AllDefsListForReading;
+            for (int i = 0; i < recipes.Count; i++)
+            {
+                var recipe = recipes[i];
+                if (recipe.ingredients == null) continue;
+                if (recipe.researchPrerequisite != null && !recipe.researchPrerequisite.IsFinished) continue;
+
+                for (int g = 0; g < recipe.ingredients.Count; g++)
+                {
+                    var ingredient = recipe.ingredients[g];
+                    if (ingredient == null || ingredient.filter == null) continue;
+                    if (ingredient.filter.Allows(harvest)) return true;
+                }
+            }
+            return false;
+        }
+
         /// <summary>Every plant the colony could sow, for reporting and for choosing one.</summary>
         public static List<ThingDef> Sowable()
         {
