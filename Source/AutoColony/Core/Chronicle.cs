@@ -169,7 +169,7 @@ namespace AutoColony
             Record(ChronicleCategory.Vitals, string.Format(
                 CultureInfo.InvariantCulture,
                 "colonists {0} (down {1}, breaking {2})  mood {3:0.00} (worst {10:0.00})  health {4:0.00}{12}  " +
-                "food {5:0.0}d{11}{13}  med {14}  wealth {6:N0}  beds {7}  fires {8}  {9:0}C",
+                "food {5:0.0}d{11}{13}{15}  med {14}  wealth {6:N0}  beds {7}  fires {8}  {9:0}C",
                 m.colonists, m.colonistsDowned, m.colonistsInMentalState, m.avgMood, m.avgHealth,
                 m.daysOfFood, m.wealthTotal, m.colonistBeds, m.fires, m.outdoorTemperature,
                 m.minMood,
@@ -186,7 +186,10 @@ namespace AutoColony
                 m.medicineCount > m.medicineStored
                     ? string.Format(CultureInfo.InvariantCulture, "{0} ({1} stored)",
                         m.medicineCount, m.medicineStored)
-                    : m.medicineCount.ToString()));
+                    : m.medicineCount.ToString(),
+                m.daysOfFoodSpoiling >= 0.5f
+                    ? string.Format(CultureInfo.InvariantCulture, " ({0:0.0}d SPOILING)", m.daysOfFoodSpoiling)
+                    : ""));
         }
 
         /// <summary>Real seconds between heartbeats.</summary>

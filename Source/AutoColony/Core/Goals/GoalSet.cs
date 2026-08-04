@@ -515,10 +515,23 @@ namespace AutoColony.Goals
         /// </summary>
         public override float Urgency(DirectorContext ctx)
         {
-            float temp = ctx.map.mapTemperature != null ? ctx.map.mapTemperature.OutdoorTemp : 15f;
-
-            // Nothing rots below freezing; by 30C a simple meal is gone in about a day.
-            float rot = AcMath.Clamp01((temp - 0f) / 30f);
+            // Measured spoilage first, temperature only as a stand-in for it.
+            //
+            // Temperature was always a proxy for "is the food going to survive", and the colony
+            // can now answer the real question: TicksUntilRotAtCurrentTemp, summed over the
+            // larder. That accounts for a freezer without this needing to know what a cooler
+            // is, and for the case temperature gets wrong — a warm colony whose food is all
+            // pemmican is not in trouble, and a cool one whose meals are three days old is.
+            float rot;
+            if (ctx.state.daysOfFood > 0.1f)
+            {
+                rot = AcMath.Clamp01(ctx.state.daysOfFoodSpoiling / ctx.state.daysOfFood);
+            }
+            else
+            {
+                float temp = ctx.map.mapTemperature != null ? ctx.map.mapTemperature.OutdoorTemp : 15f;
+                rot = AcMath.Clamp01((temp - 0f) / 30f);
+            }
 
             // Worth more when there is actually a larder to lose. A colony with nothing in store
             // has a hunger problem, not a preservation problem, and FeedColonyGoal owns that.
@@ -529,10 +542,10 @@ namespace AutoColony.Goals
 
         public override string Explain(DirectorContext ctx)
         {
-            return string.Format("{0:0}C, {1:0.0} days in store — a simple meal keeps 1.4 days, " +
-                                 "pemmican keeps 70",
+            return string.Format("{0:0}C, {1:0.0} days in store of which {2:0.0} is spoiling — " +
+                                 "a simple meal keeps 1.4 days, pemmican keeps 70",
                 ctx.map.mapTemperature != null ? ctx.map.mapTemperature.OutdoorTemp : 0f,
-                ctx.state.daysOfFood);
+                ctx.state.daysOfFood, ctx.state.daysOfFoodSpoiling);
         }
     }
 

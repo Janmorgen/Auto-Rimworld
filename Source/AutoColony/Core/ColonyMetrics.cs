@@ -38,6 +38,9 @@ namespace AutoColony
         /// <summary>Days of food still inside unbutchered animal corpses.</summary>
         public float daysOfFoodUnbutchered;
 
+        /// <summary>Days of food that will rot before it is eaten.</summary>
+        public float daysOfFoodSpoiling;
+
         /// <summary>Medicine of any grade in store. Distinguishes "could not treat" from "did not".</summary>
         public int medicineCount;
 

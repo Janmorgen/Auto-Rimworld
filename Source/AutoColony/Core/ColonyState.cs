@@ -133,6 +133,20 @@ namespace AutoColony
 
         /// <summary>Days of food locked in corpses, on the same scale as <see cref="daysOfFood"/>.</summary>
         public float daysOfFoodUnbutchered;
+
+        /// <summary>
+        /// Days of food that will rot before it can be eaten.
+        ///
+        /// A larder is a promise with a clock on it. Food spoils, so an excess the colony cannot
+        /// eat in time is not security — it is work already done and about to be thrown away,
+        /// and the same is true of every perishable in the chain: a hunted animal that is never
+        /// hauled, meat that is never cooked, meals stacked beyond what gets eaten.
+        ///
+        /// Asked as TicksUntilRotAtCurrentTemp, which is the game's own answer and already
+        /// accounts for temperature — so a freezer shows up here as food that is not spoiling,
+        /// without this code needing to know what a cooler is.
+        /// </summary>
+        public float daysOfFoodSpoiling;
         public float daysOfFood;
         /// <summary>Medicine the colony can reach, stockpiled or loose. What decides treatment.</summary>
         public int medicineCount;
@@ -657,11 +671,16 @@ namespace AutoColony
             //
             // Colonists eat any reachable unforbidden food, stockpiled or not, so reachable is
             // the honest measure of what the colony has to eat.
-            s.foodNutrition = ReachableHumanEdibleNutrition(map);
+            float spoilingNutrition;
+            s.foodNutrition = ReachableHumanEdibleNutrition(map, out spoilingNutrition);
             s.foodStored = rc.TotalHumanEdibleNutrition;
             s.daysOfFood = s.colonists > 0
                 ? s.foodNutrition / (s.colonists * NutritionPerColonistDay)
                 : s.foodNutrition;
+
+            s.daysOfFoodSpoiling = s.colonists > 0
+                ? spoilingNutrition / (s.colonists * NutritionPerColonistDay)
+                : spoilingNutrition;
 
             s.unbutcheredNutrition = UnbutcheredNutrition(map);
             s.daysOfFoodUnbutchered = s.colonists > 0
@@ -726,8 +745,12 @@ namespace AutoColony
         /// Human-edible nutrition lying anywhere the colony can get at it. Mirrors what
         /// ResourceCounter reports, minus its restriction to storage.
         /// </summary>
-        static float ReachableHumanEdibleNutrition(Map map)
+        /// <summary>Shelf life below which food counts as about to be lost.</summary>
+        const float SpoilingSoonDays = 3f;
+
+        static float ReachableHumanEdibleNutrition(Map map, out float spoiling)
         {
+            spoiling = 0f;
             if (map == null || map.listerThings == null) return 0f;
 
             float total = 0f;
@@ -759,7 +782,17 @@ namespace AutoColony
                 if (def == null || def.ingestible == null) continue;
                 if (!def.IsNutritionGivingIngestible || !def.ingestible.HumanEdible) continue;
 
-                total += def.ingestible.CachedNutrition * thing.stackCount;
+                float nutrition = def.ingestible.CachedNutrition * thing.stackCount;
+                total += nutrition;
+
+                // And how much of it will not last. A stack with days left in it is fine
+                // wherever it is; one about to turn is work the colony is about to lose.
+                var rot = thing.TryGetComp<CompRottable>();
+                if (rot != null && rot.Active)
+                {
+                    float daysLeft = rot.TicksUntilRotAtCurrentTemp / 60000f;
+                    if (daysLeft < SpoilingSoonDays) spoiling += nutrition;
+                }
             }
             return total;
         }
@@ -1131,6 +1164,7 @@ namespace AutoColony
             m.colonistsStarving = colonistsStarving;
             m.colonistsUntended = colonistsUntended;
             m.daysOfFoodUnbutchered = daysOfFoodUnbutchered;
+            m.daysOfFoodSpoiling = daysOfFoodSpoiling;
             m.medicineCount = medicineCount;
             m.medicineStored = medicineStored;
             m.usableMaterial = usableMaterial;
