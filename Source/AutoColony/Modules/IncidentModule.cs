@@ -60,6 +60,94 @@ namespace AutoColony.Modules
             }
 
             if (handled > 0) Note("answered " + handled + " pending decisions");
+
+            CutBlight(ctx);
+        }
+
+        /// <summary>How many blighted plants may be designated in one pass.</summary>
+        const int BlightBudget = 60;
+
+        int blightNoted;
+
+        /// <summary>
+        /// Cuts blighted crops, which is the only answer there is to blight.
+        ///
+        /// The director knew the word already, but only as an argument for planting two crops
+        /// instead of one — prevention, and good prevention. It had no response at all to blight
+        /// that has actually arrived, and blight does not sit still: each infected plant
+        /// reproduces onto its neighbours, so a field left alone is lost a plant at a time and
+        /// then all at once.
+        ///
+        /// Cut, not saved. A blighted plant is going to die; the only question is how many it
+        /// takes with it, and every hour it stands is another roll for spreading. Where the game
+        /// says a plant is still harvestable it is harvested instead, so the mature part of the
+        /// crop is taken rather than binned — HarvestableNow is the game's own answer to that,
+        /// which means blight suppressing a harvest is handled without this having to know
+        /// whether it does.
+        ///
+        /// Lives in the incident module rather than with the farming code because that is what
+        /// this is — an incident, with the game's own IncidentWorker_CropBlight behind it — and
+        /// because the zone and resource modules run on six-hour and five-hour cadences. Blight
+        /// spreads on TickLong. An hourly pass is the slowest one that is still a response.
+        /// </summary>
+        void CutBlight(DirectorContext ctx)
+        {
+            var map = ctx.map;
+            if (map == null || map.listerThings == null) return;
+
+            int cut = 0, harvested = 0;
+
+            try
+            {
+                var blights = map.listerThings.ThingsOfDef(ThingDefOf.Blight);
+                if (blights == null || blights.Count == 0)
+                {
+                    blightNoted = 0;    // outbreak over; the next one is news again
+                    return;
+                }
+
+                for (int i = 0; i < blights.Count && cut + harvested < BlightBudget; i++)
+                {
+                    var blight = blights[i] as Blight;
+                    if (blight == null) continue;
+
+                    var plant = blight.Plant;
+                    if (plant == null || !plant.Spawned) continue;
+
+                    // Take the crop if the game still says it can be taken; otherwise cut it.
+                    var how = plant.HarvestableNow
+                        ? DesignationDefOf.HarvestPlant
+                        : DesignationDefOf.CutPlant;
+
+                    if (map.designationManager.DesignationOn(plant, how) != null) continue;
+
+                    // A plant already marked the other way is already on its way out.
+                    var other = how == DesignationDefOf.CutPlant
+                        ? DesignationDefOf.HarvestPlant
+                        : DesignationDefOf.CutPlant;
+                    if (map.designationManager.DesignationOn(plant, other) != null) continue;
+
+                    map.designationManager.AddDesignation(new Designation(plant, how));
+                    if (how == DesignationDefOf.HarvestPlant) harvested++; else cut++;
+                }
+            }
+            catch (Exception) { return; }
+
+            if (cut + harvested == 0) return;
+
+            // Once per outbreak rather than every pass, but the total is worth saying, because
+            // "blight" and "blight across a third of the field" are different events.
+            if (blightNoted == 0)
+            {
+                Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                    "blight in the crops — {0} plants marked ({1} still worth harvesting, {2} cut " +
+                    "outright). Every hour an infected plant stands is another chance for it to " +
+                    "spread to its neighbours, so the field is cleared rather than nursed",
+                    cut + harvested, harvested, cut));
+            }
+            blightNoted += cut + harvested;
+
+            Note("marked " + (cut + harvested) + " blighted plants");
         }
 
         bool Resolve(ChoiceLetter letter, float risk, DirectorContext ctx)
