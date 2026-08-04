@@ -337,6 +337,21 @@ namespace AutoColony.Modules
             // needed, and a colony that stops hunting on a bad reading starves twice.
             bool meatWaiting = s.daysOfFood < 4f && s.daysOfFoodUnbutchered >= 1f;
 
+            // A generator that is built and producing nothing is usually an empty fuel hopper.
+            //
+            // Run 105 reached day 21 with a Power room finished, a wood-fired generator standing
+            // in it, a tailor bench wired to it, and "0 generators running (1 built but producing
+            // nothing)" in the plan. Wood was not short — PlantCutting was not even in the work
+            // table. Nobody had loaded it.
+            //
+            // Refuelling is a Hauling job (WorkGiver Refuel, workType Hauling), and Hauling sits
+            // at 1.1 against Construction at 2.3, so with two colonists it never won. PowerGoal
+            // has computed this idle count all along, for its explain line; nothing acted on it.
+            //
+            // Same shape as the two above: the colony owns the thing it needs and the last step
+            // of getting it there has not happened.
+            bool idleGenerator = s.generators > s.workingGenerators;
+
             // Emergencies first: fire and untreated casualties outrank everything.
             // Only fires that could reach the colony justify dropping everything; a distant
             // wildfire is not worth a work-hour.
@@ -423,7 +438,7 @@ namespace AutoColony.Modules
             // carried into a stockpile is food a hungry colonist cannot be fed from.
             // Hauling matters for both cases and for the same reason: food that nobody has
             // carried anywhere is food nobody can eat, whether it is in a stockpile or a corpse.
-            Need("Hauling", (notReachingThem || meatWaiting ? 4f : 1.1f)
+            Need("Hauling", (notReachingThem || meatWaiting || idleGenerator ? 4f : 1.1f)
                             + fireRisk * outdoorPressure * 2f);
             Need("Smithing", 1f);
             // Tailoring rose with the *cloth pile*, which says how much raw material is spare
