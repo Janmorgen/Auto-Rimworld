@@ -151,6 +151,37 @@ corpses --[ButcherCorpseFlesh, no research, TableButcher|ButcherSpot]--> meat + 
 Butchering is ungated and the spot is free, which matters more than it sounds: a colony that
 cannot butcher has meat rotting in the field and no leather to sew with.
 
+### Bodies — amputation and the prosthetic ladder
+
+An infection is a race: the disease climbs toward `lethalSeverity` while the body builds
+immunity toward 1, and whichever arrives first decides. Tending speeds the immunity side and
+does not guarantee it. When the race is lost the answer is **amputation** — removing the part
+removes the disease — which leaves a permanent capacity loss that a prosthetic buys back.
+
+```
+infection losing the race --[amputate]--> missing part  (permanent capacity loss)
+missing part --[InstallPegLeg,     NO research]--> peg leg
+missing part --[InstallSimpleProsthetic*]--------> simple prosthetic
+missing part --[InstallBionic*]------------------> bionic
+```
+
+**Every `Install*` recipe is ungated.** What gates the ladder is *making* the part:
+
+| rung | research | cumulative cost | cost per part |
+|---|---|---|---|
+| peg leg | **none** | 0 | wood |
+| simple prosthetic | Prosthetics 600 ← Machining 1000 ← Electricity 1600 + Smithing 700 | ~3,900 | Steel 40, Comp 4 |
+| bionic | Bionics 2000 ← Fabrication 4000 ← MultiAnalyzer | ~10,000+ | Plasteel 15, ComponentSpacer 4 |
+
+For colonies that die around day 30 having finished no research, **the peg leg is the entire
+ladder**. Everything above it sits behind Electricity, which this project's colonies almost
+never reach — see the research table above, where Electricity alone is 1600.
+
+The upgrade path matters as much as the rungs: a peg leg is *replaced* by a simple prosthetic
+and that by a bionic, so an early amputation is not a permanent verdict on that colonist. It is
+a debt research can pay off later, which is the clearest case in the game of a long-term goal
+buying back a short-term loss.
+
 ---
 
 ## Work types, and what the director weights them on
