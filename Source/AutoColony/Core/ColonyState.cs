@@ -31,6 +31,20 @@ namespace AutoColony
         public float minMood = 1f;
 
         /// <summary>
+        /// Colonists carrying something that wants tending and has not been tended.
+        ///
+        /// SummaryHealthPercent counts damage to body parts and ignores hediffs entirely, so
+        /// infection, hypothermia, heatstroke and malnutrition all read health 1.00 right up to
+        /// the death they cause. Every colony this project has lost to Infection (extreme) was
+        /// reported in perfect health while it happened.
+        ///
+        /// This is the game's own HasHediffsNeedingTendByPlayer — the condition behind its
+        /// "needs tending" alert — so it agrees with what a watching player would see, and it
+        /// is specifically the harm a director *can* do something about by assigning a doctor.
+        /// </summary>
+        public int colonistsUntended;
+
+        /// <summary>
         /// Colonists who are actually going hungry — <c>Need_Food.Starving</c>, the game's own
         /// definition, which is the point at which malnutrition starts accruing.
         ///
@@ -523,6 +537,15 @@ namespace AutoColony
                     catch (Exception) { }
                 }
 
+                if (p.health != null)
+                {
+                    try
+                    {
+                        if (p.health.HasHediffsNeedingTendByPlayer(false)) s.colonistsUntended++;
+                    }
+                    catch (Exception) { }
+                }
+
                 if (p.needs != null && p.needs.food != null)
                 {
                     if (p.needs.food.Starving) s.colonistsStarving++;
@@ -993,6 +1016,7 @@ namespace AutoColony
             m.minMood = minMood;
             m.minFood = minFood;
             m.colonistsStarving = colonistsStarving;
+            m.colonistsUntended = colonistsUntended;
             m.medicineCount = medicineCount;
             m.medicineStored = medicineStored;
             m.avgHealth = avgHealth;

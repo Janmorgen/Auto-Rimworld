@@ -121,6 +121,12 @@ namespace AutoColony
         {
             get { return foodSamples > 0 ? (float)starvingSamples / foodSamples : 0f; }
         }
+
+        /// <summary>How much of the epoch had somebody carrying an untended condition.</summary>
+        public float UntendedFraction
+        {
+            get { return samples > 0 ? (float)untendedSamples / samples : 0f; }
+        }
         /// <summary>
         /// Samples in which somebody was actually going hungry, whatever the larder held.
         ///
@@ -130,6 +136,16 @@ namespace AutoColony
         /// security 1.00 — so the search was told that colony fed itself perfectly.
         /// </summary>
         public int starvingSamples;
+
+        /// <summary>
+        /// Samples in which somebody was carrying an untended condition.
+        ///
+        /// avgHealth is SummaryHealthPercent, which counts damage to body parts and ignores
+        /// hediffs — so infection, hypothermia and heatstroke all read 1.00 until they kill.
+        /// Colonies have died of Infection (extreme) while scoring Health 0.84, and the search
+        /// was told the difference was small.
+        /// </summary>
+        public int untendedSamples;
         public int mentalBreakSamples;
         public int fireSamples;
         public int downedSamples;
@@ -203,6 +219,7 @@ namespace AutoColony
             foodSamples = 0;
             foodSecureSamples = 0;
             starvingSamples = 0;
+            untendedSamples = 0;
             mentalBreakSamples = 0;
             fireSamples = 0;
             downedSamples = 0;
@@ -250,6 +267,7 @@ namespace AutoColony
                 if (m.daysOfFood >= FoodDangerDays) foodSecureSamples++;
                 if (m.colonistsStarving > 0) starvingSamples++;
             }
+            if (m.colonistsUntended > 0) untendedSamples++;
             if (m.colonistsInMentalState > 0) mentalBreakSamples++;
             // Only fires that actually threaten the colony. Counting every fire on the map
             // meant a wildfire ninety cells away — one the director is designed to ignore, and
@@ -461,8 +479,20 @@ namespace AutoColony
             float mood = AcMath.Clamp01(acc.AvgMood) * AcMath.Clamp01(1f - acc.MentalBreakFraction * 0.7f);
             breakdown.Add(new ScoreTerm("Mood", mood, WMood));
 
-            // --- health ---
-            float health = AcMath.Clamp01(acc.AvgHealth);
+            // --- health, discounted by how long anybody went untended ---
+            //
+            // AvgHealth is SummaryHealthPercent, which measures missing and damaged body parts.
+            // It is blind to hediffs, so a colonist dying of an infection reads as perfectly
+            // healthy and the term scores the colony as though nothing were wrong — which is
+            // the same fault Food security had, in the domain next door.
+            //
+            // Discounted rather than replaced. Damage to a body part is real and worth
+            // measuring; what was missing is that a colony leaving wounds untended is not a
+            // healthy one, whatever its parts add up to. Untended is the game's own condition,
+            // the one behind its "needs tending" alert, and it is specifically harm a director
+            // can prevent by putting somebody on Doctor.
+            float health = AcMath.Clamp01(acc.AvgHealth) *
+                           AcMath.Clamp01(1f - acc.UntendedFraction * 0.7f);
             breakdown.Add(new ScoreTerm("Health", health, WHealth));
 
             // --- research throughput ---

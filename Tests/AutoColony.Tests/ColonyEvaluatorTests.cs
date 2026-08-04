@@ -36,6 +36,43 @@ namespace AutoColony.Tests
         }
 
         /// <summary>
+        /// A colony leaving wounds untended is not a healthy one.
+        ///
+        /// avgHealth is SummaryHealthPercent, which counts damaged body parts and is blind to
+        /// hediffs — so colonists have died of Infection (extreme) while the term reported them
+        /// in near-perfect health. The score could not tell a colony that tended its wounded
+        /// from one that watched them die of an infection.
+        /// </summary>
+        [Fact]
+        public void LeavingWoundsUntendedScoresBelowTendingThem()
+        {
+            var end = Baseline();
+
+            var tended = new EpochAccumulator();
+            var neglected = new EpochAccumulator();
+
+            var well = Baseline();
+            var untended = Baseline();
+            untended.colonistsUntended = 1;    // identical body-part health, nobody tending
+
+            for (int i = 0; i < 40; i++)
+            {
+                tended.Observe(well);
+                neglected.Observe(untended);
+            }
+
+            Assert.True(neglected.UntendedFraction > 0.9f, "somebody was untended throughout");
+            Assert.Equal(tended.AvgHealth, neglected.AvgHealth, 3);
+
+            List<ScoreTerm> a, b;
+            float tendedScore = ColonyEvaluator.Evaluate(StartFrom(end), end, tended, out a);
+            float neglectedScore = ColonyEvaluator.Evaluate(StartFrom(end), end, neglected, out b);
+
+            Assert.True(neglectedScore < tendedScore,
+                "a colony that left its wounded untended must not score as well as one that tended them");
+        }
+
+        /// <summary>
         /// A full larder is not a fed colony.
         ///
         /// Seven colonies have died with Food security at or near 1.00 — run 93 on day 20 with a

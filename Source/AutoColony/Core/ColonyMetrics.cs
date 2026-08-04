@@ -32,6 +32,9 @@ namespace AutoColony
         /// <summary>Colonists the game itself calls starving.</summary>
         public int colonistsStarving;
 
+        /// <summary>Colonists with an untended condition the game says needs tending.</summary>
+        public int colonistsUntended;
+
         /// <summary>Medicine of any grade in store. Distinguishes "could not treat" from "did not".</summary>
         public int medicineCount;
 
