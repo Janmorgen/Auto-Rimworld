@@ -46,6 +46,39 @@ namespace AutoColony.Goals
         /// </summary>
         public readonly Dictionary<string, float> NeedPressure = new Dictionary<string, float>();
 
+        /// <summary>
+        /// The largest amount of each material any unsatisfied goal asks for.
+        ///
+        /// plan.Needs is the focus's bill alone, so gathering served whichever single goal was
+        /// top-ranked and nothing else: a colony mining toward the focus's 220 steel while a
+        /// further goal quietly needed 280 stopped 60 short and re-mobilised later. Max rather
+        /// than sum, because two goals wanting 200 wood do not want 400 — they want the store
+        /// to reach 200, and the second is satisfied by the same pile.
+        /// </summary>
+        public readonly Dictionary<string, int> NeedQuantity = new Dictionary<string, int>();
+
+        /// <summary>The most of this material any unsatisfied goal wants. 0 when none do.</summary>
+        public int QuantityWanted(string thingDefName)
+        {
+            int amount;
+            return NeedQuantity.TryGetValue(thingDefName, out amount) ? amount : 0;
+        }
+
+        /// <summary>
+        /// How hard blocked goals are pulling on each research project, by defName — the same
+        /// horizon-times-urgency force as NeedPressure, applied to the project each unsatisfied
+        /// goal is actually startable-blocked on. The research chooser reads this as a prior,
+        /// so a project three goals are waiting on outranks a merely cheap one without any goal
+        /// having to be the focus first.
+        /// </summary>
+        public readonly Dictionary<string, float> ResearchPressure = new Dictionary<string, float>();
+
+        public float PressureForResearch(string projectDefName)
+        {
+            float force;
+            return ResearchPressure.TryGetValue(projectDefName, out force) ? force : 0f;
+        }
+
         /// <summary>Total pull on a material, 0 when nothing wants it.</summary>
         public float PressureFor(string thingDefName)
         {
@@ -571,6 +604,20 @@ namespace AutoColony.Goals
                 float existing;
                 plan.NeedPressure.TryGetValue(want.Key, out existing);
                 plan.NeedPressure[want.Key] = existing + force;
+
+                int held;
+                plan.NeedQuantity.TryGetValue(want.Key, out held);
+                if (want.Value > held) plan.NeedQuantity[want.Key] = want.Value;
+            }
+
+            // And the project this goal is stuck behind, if any — walked back to something
+            // startable, exactly as the focus's own research direction is.
+            var project = ResearchFor(goal);
+            if (project != null)
+            {
+                float held;
+                plan.ResearchPressure.TryGetValue(project, out held);
+                plan.ResearchPressure[project] = held + force;
             }
         }
 

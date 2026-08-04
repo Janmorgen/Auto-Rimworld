@@ -309,7 +309,8 @@ namespace AutoColony.Modules
             // deepens a winter shortfall the pen report already names and nothing was answering.
             // The fodder plot is the answer that needs no fence surgery: hay scales by adding
             // cells, and the plot is re-checked every pass against the herd that exists now.
-            int wanted = System.Math.Max(FodderPlotCells, ctx.state.tamedAnimals * 12);
+            int wanted = System.Math.Max(FodderPlotCells,
+                (int)(ctx.state.tamedAnimals * ctx.Gene(Genes.FodderCellsPerAnimal)));
 
             var existing = FindZoneGrowing(ctx, crop);
             if (existing != null)

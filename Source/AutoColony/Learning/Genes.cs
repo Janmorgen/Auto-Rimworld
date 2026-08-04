@@ -50,6 +50,12 @@ namespace AutoColony.Learning
         public const string MedicinePerColonist = "medicine.perColonist";
         public const string WoodTarget = "wood.target";
         public const string SteelTarget = "steel.target";
+        public const string ResearchUrgentWeight = "research.urgentWeight";
+        public const string ResearchPressureBias = "research.pressureBias";
+        public const string BillBacklogWeight = "work.billBacklog";
+        public const string FodderCellsPerAnimal = "fodder.cellsPerAnimal";
+        public const string GrowthFoodMargin = "growth.foodMargin";
+        public const string TeaMoodFloor = "comfort.teaMoodFloor";
         public const string ComponentsTarget = "components.target";
         public const string TextilesTarget = "textiles.target";
 
@@ -158,6 +164,12 @@ namespace AutoColony.Learning
             Add(MedicinePerColonist, 0f, 10f, 2f, "Stock targets", "Medicine per colonist");
             Add(WoodTarget, 0f, 2000f, 400f, "Stock targets", "Wood stock target");
             Add(SteelTarget, 0f, 2000f, 300f, "Stock targets", "Steel stock target");
+            Add(ResearchUrgentWeight, 1.5f, 4f, 2.6f, "Work", "Research work weight while the plan is blocked on a project");
+            Add(ResearchPressureBias, 0f, 2f, 0.6f, "Research", "How much blocked goals steer project choice");
+            Add(BillBacklogWeight, 0f, 3f, 1.2f, "Work", "How hard waiting production bills pull their work type");
+            Add(FodderCellsPerAnimal, 6f, 20f, 12f, "Farm", "Hay cells sown per animal");
+            Add(GrowthFoodMargin, 4f, 10f, 6f, "Growth", "Days of food before another mouth is wanted");
+            Add(TeaMoodFloor, 0.25f, 0.45f, 0.35f, "Comfort", "Mood below which tea is allowed for joy");
             Add(ComponentsTarget, 0f, 50f, 8f, "Stock targets", "Components stock target");
             Add(TextilesTarget, 0f, 500f, 100f, "Stock targets", "Cloth/leather stock target");
 

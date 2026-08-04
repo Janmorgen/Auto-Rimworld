@@ -156,9 +156,18 @@ namespace AutoColony.Modules
                 // projects fast, but prefer ones the rest of the tree depends on. Cheapness
                 // alone opens on whatever costs least, which is not the same as what helps.
                 float cheapness = 1f / (1f + proj.baseCost / 2000f);
+
+                // What the plan's blocked goals are waiting on, as a prior on top of the
+                // learned value. Directed research already handles the focus; this covers
+                // everything behind it — three goals stuck behind Pemmican outrank a merely
+                // cheap project without any of them having to win the focus first. The bias is
+                // a gene, so how much a strategy lets its goals steer study is learned.
+                float pressure = ctx.plan != null ? ctx.plan.PressureForResearch(key) : 0f;
+
                 float score = bandit.Score(key, explore)
                             + cheapBias * cheapness
-                            + unlockBias * UnlockScore(key);
+                            + unlockBias * UnlockScore(key)
+                            + ctx.Gene(Genes.ResearchPressureBias) * AcMath.Clamp01(pressure / 4f);
 
                 if (score > bestScore)
                 {

@@ -122,7 +122,8 @@ namespace AutoColony.Modules
             // As with mining: what the plan needs raises the standing target. A wood-fired
             // generator burns its fuel continuously, so wanting power is also wanting wood.
             float target = ctx.Gene(Genes.WoodTarget);
-            if (ctx.plan != null) target = AcMath.Max(target, ctx.plan.Needs.For("WoodLog"));
+            if (ctx.plan != null) target = AcMath.Max(target,
+                AcMath.Max(ctx.plan.Needs.For("WoodLog"), ctx.plan.QuantityWanted("WoodLog")));
             if (ctx.state.wood >= target) return 0;
 
             float aggression = ctx.Gene(Genes.ChopAggression);
@@ -159,8 +160,11 @@ namespace AutoColony.Modules
             float componentTarget = ctx.Gene(Genes.ComponentsTarget);
             if (ctx.plan != null)
             {
-                target = AcMath.Max(target, ctx.plan.Needs.For("Steel"));
-                componentTarget = AcMath.Max(componentTarget, ctx.plan.Needs.For("ComponentIndustrial"));
+                target = AcMath.Max(target,
+                    AcMath.Max(ctx.plan.Needs.For("Steel"), ctx.plan.QuantityWanted("Steel")));
+                componentTarget = AcMath.Max(componentTarget,
+                    AcMath.Max(ctx.plan.Needs.For("ComponentIndustrial"),
+                               ctx.plan.QuantityWanted("ComponentIndustrial")));
             }
 
             bool needSteel = ctx.state.steel < target;
@@ -244,7 +248,10 @@ namespace AutoColony.Modules
             // larder — and the colony answers an empty larder by hunting, which produces another
             // corpse it has not processed either. That is the loop: colonists hunting endlessly
             // with nothing to show for it, each kill making the next one look more necessary.
-            float waiting = UnbutcheredNutrition(ctx);
+            // The shared measurement, not a private recount — the same number the work
+            // priorities and the vitals line read, so the three can never disagree about how
+            // much meat is lying in the field.
+            float waiting = ctx.state.unbutcheredNutrition;
             float needed = ctx.state.colonists * ColonyState.NutritionPerColonistDay;
             if (needed > 0f && waiting >= needed * BacklogDays)
             {
@@ -457,30 +464,6 @@ namespace AutoColony.Modules
         /// hunting when it genuinely needs to. Only wild animals too — a dead colonist is not
         /// dinner, and the burial layer has its own opinion about those.
         /// </summary>
-        static float UnbutcheredNutrition(DirectorContext ctx)
-        {
-            float total = 0f;
-
-            try
-            {
-                var corpses = ctx.map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse);
-                for (int i = 0; i < corpses.Count; i++)
-                {
-                    var corpse = corpses[i] as Corpse;
-                    if (corpse == null || !corpse.Spawned) continue;
-
-                    var pawn = corpse.InnerPawn;
-                    if (pawn == null || pawn.RaceProps == null) continue;
-                    if (!pawn.RaceProps.Animal) continue;
-                    if (corpse.GetRotStage() != RotStage.Fresh) continue;
-
-                    total += pawn.RaceProps.baseBodySize * 3.5f;   // roughly the meat it yields
-                }
-            }
-            catch (Exception) { }
-
-            return total;
-        }
 
         readonly Dictionary<string, int> released = new Dictionary<string, int>();
         readonly List<Designation> standing = new List<Designation>();

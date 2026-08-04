@@ -425,7 +425,15 @@ namespace AutoColony.Modules
             Need("PlantCutting", 1f + Shortfall(s.wood, Target(ctx, Genes.WoodTarget, "WoodLog")) * 1.5f
                                    * (0.5f + ctx.Gene(Genes.ChopAggression)));
 
-            Need("Research", s.hasResearchBench ? 1.2f : 0.3f);
+            // Research at a flat 1.2 is how a colony waits sixteen days for a 500-point
+            // project while sewing at 3.2. The plan already publishes the project the focus is
+            // blocked on; when it does, and a bench exists to work at, research is the work
+            // that unblocks everything downstream of it — weighted by the genome, so how hard
+            // a strategy leans into study is learned rather than asserted.
+            bool planBlockedOnResearch = ctx.plan != null && ctx.plan.ResearchWanted != null;
+            Need("Research", !s.hasResearchBench ? 0.3f
+                           : planBlockedOnResearch ? ctx.Gene(Genes.ResearchUrgentWeight)
+                           : 1.2f);
             Need("Warden", s.prisoners > 0 ? 2f : 0.2f);
             Need("Handling", 1f);
             // A pending surgery makes the mop a medical instrument: the theatre's cleanliness
@@ -438,7 +446,10 @@ namespace AutoColony.Modules
             // the easiest thing on the map to lose. Getting them into storage is preventative
             // rather than tidy, so it outranks ordinary hauling as the map dries out.
             float fireRisk = FireRisk.Assess(ctx.map, s);
-            float outdoorPressure = s.itemsOutdoors > 0 ? AcMath.Clamp01(s.itemsOutdoors / 40f) : 0f;
+            // Pressure from what the weather is taking, not how many pieces it is in. A rifle
+            // and a slag chunk are one item each; only one of them is worth an afternoon.
+            float outdoorPressure = AcMath.Clamp01(AcMath.Max(
+                s.itemsOutdoors / 40f, s.valueOutdoors / 1500f));
             // Hauling is normally kept off the top of the table on purpose, but food nobody has
             // carried into a stockpile is food a hungry colonist cannot be fed from.
             // Hauling matters for both cases and for the same reason: food that nobody has
@@ -458,11 +469,92 @@ namespace AutoColony.Modules
                                  + underdressed * 2f);
             Need("Crafting", 1f);
             Need("Art", s.avgMood < 0.5f ? 1.3f : 0.7f);
+
+            // Standing bills pull their own work type.
+            //
+            // The production module keeps bills on every table — blocks at the stonecutter,
+            // meals at the stove, coats at the tailor bench — and none of that waiting work
+            // could raise the priority that performs it: Crafting and Smithing sat at a flat
+            // 1.0 for the life of the project. The mapping from bench to work type is the
+            // game's own (WorkGiver_DoBill definitions), so a modded bench pulls the right
+            // work without being named anywhere here.
+            RaiseBillBacklogs(ctx);
+        }
+
+        static Dictionary<ushort, string> benchWorkType;
+
+        /// <summary>
+        /// The work type that performs bills on each bench, from the game's own
+        /// WorkGiver_DoBill definitions — the same lookup the job system uses, cached once.
+        /// </summary>
+        static string WorkTypeForBench(ThingDef bench)
+        {
+            if (benchWorkType == null)
+            {
+                benchWorkType = new Dictionary<ushort, string>();
+                var givers = DefDatabase<WorkGiverDef>.AllDefsListForReading;
+                for (int i = 0; i < givers.Count; i++)
+                {
+                    var giver = givers[i];
+                    if (giver == null || giver.workType == null) continue;
+                    if (giver.fixedBillGiverDefs == null) continue;
+                    for (int b = 0; b < giver.fixedBillGiverDefs.Count; b++)
+                    {
+                        var def = giver.fixedBillGiverDefs[b];
+                        if (def != null && !benchWorkType.ContainsKey(def.shortHash))
+                            benchWorkType[def.shortHash] = giver.workType.defName;
+                    }
+                }
+            }
+            string workType;
+            return benchWorkType.TryGetValue(bench.shortHash, out workType) ? workType : null;
+        }
+
+        void RaiseBillBacklogs(DirectorContext ctx)
+        {
+            var lister = ctx.map.listerBuildings;
+            if (lister == null) return;
+
+            var backlog = new Dictionary<string, int>();
+            try
+            {
+                foreach (var table in lister.AllBuildingsColonistOfClass<Building_WorkTable>())
+                {
+                    if (table == null || table.billStack == null || table.billStack.Count == 0) continue;
+                    var workType = WorkTypeForBench(table.def);
+                    if (workType == null) continue;
+
+                    int waiting = 0;
+                    for (int i = 0; i < table.billStack.Count; i++)
+                    {
+                        var bill = table.billStack[i];
+                        if (bill != null && !bill.suspended && bill.ShouldDoNow()) waiting++;
+                    }
+                    if (waiting == 0) continue;
+
+                    int held;
+                    backlog.TryGetValue(workType, out held);
+                    backlog[workType] = held + waiting;
+                }
+            }
+            catch (System.Exception) { return; }
+
+            float weight = ctx.Gene(Genes.BillBacklogWeight);
+            foreach (var kv in backlog)
+                RaiseTo(kv.Key, 1.5f + AcMath.Clamp01(kv.Value / 5f) * weight);
         }
 
         void Need(string defName, float value)
         {
             needs[defName] = value;
+        }
+
+        /// <summary>Raises a weight without ever lowering one another rule already set.</summary>
+        void RaiseTo(string defName, float value)
+        {
+            float existing;
+            if (!needs.TryGetValue(defName, out existing) || value > existing)
+                needs[defName] = value;
         }
 
         float NeedFor(string defName)
@@ -477,7 +569,12 @@ namespace AutoColony.Modules
             float target = ctx.Gene(gene);
             if (ctx.plan == null) return target;
 
+            // The focus's bill, and the largest bill any other unsatisfied goal holds. A
+            // colony mining toward the focus's 220 steel while a further goal quietly needs 280
+            // stops 60 short and mobilises twice.
             float wanted = ctx.plan.Needs.For(thingDefName);
+            float layered = ctx.plan.QuantityWanted(thingDefName);
+            if (layered > wanted) wanted = layered;
             return wanted > target ? wanted : target;
         }
 

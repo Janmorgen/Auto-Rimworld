@@ -216,13 +216,14 @@ namespace AutoColony.Modules
                         var entry = policy[e];
                         if (entry == null || entry.drug != tea) continue;
                         entry.allowedForJoy = true;
-                        entry.onlyIfMoodBelow = 0.35f;
+                        entry.onlyIfMoodBelow = ctx.Gene(Genes.TeaMoodFloor);
                     }
                 }
                 teaPolicyEnsured = true;
-                Chronicle.Record(ChronicleCategory.Health,
-                    "psychite tea allowed for joy below mood 0.35 — handed out as medicine, not " +
-                    "routine, which is the difference between a comfort and a habit");
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "psychite tea allowed for joy below mood {0:0.00} — handed out as medicine, " +
+                    "not routine, which is the difference between a comfort and a habit",
+                    ctx.Gene(Genes.TeaMoodFloor)));
             }
             catch (System.Exception) { }
         }

@@ -599,7 +599,7 @@ namespace AutoColony.Goals
             // Room for one more, literally: a built bed nobody sleeps in, and food enough that
             // another mouth is margin rather than risk.
             bool spareBed = ctx.state.colonistBeds > ctx.state.colonists;
-            bool fedWithMargin = ctx.state.daysOfFood >= 6f;
+            bool fedWithMargin = ctx.state.daysOfFood >= ctx.Gene(Genes.GrowthFoodMargin);
             return !(spareBed && fedWithMargin);
         }
 
@@ -607,7 +607,7 @@ namespace AutoColony.Goals
         {
             // Scales with how comfortably another colonist would fit. Never pressing — this is
             // the layer that pulls when nothing nearer is pulling harder.
-            float slack = AcMath.Clamp01((ctx.state.daysOfFood - 6f) / 12f);
+            float slack = AcMath.Clamp01((ctx.state.daysOfFood - ctx.Gene(Genes.GrowthFoodMargin)) / 12f);
             return 0.2f + slack * 0.4f;
         }
 
