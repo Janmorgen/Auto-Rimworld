@@ -40,6 +40,7 @@ namespace AutoColony.Modules
         int bestConstruction;
         int bestMedicine;
         int bestCooking;
+        int bestPlants;
 
         /// <summary>
         /// The colony's only competent medic, when there is exactly one and others are standing.
@@ -84,6 +85,7 @@ namespace AutoColony.Modules
             bestConstruction = 0;
             bestMedicine = 0;
             bestCooking = 0;
+            bestPlants = 0;
             ableHands = 0;
 
             var all = ctx.state.allColonists;
@@ -97,6 +99,7 @@ namespace AutoColony.Modules
                 bestConstruction = Best(bestConstruction, pawn, SkillDefOf.Construction);
                 bestMedicine = Best(bestMedicine, pawn, SkillDefOf.Medicine);
                 bestCooking = Best(bestCooking, pawn, SkillDefOf.Cooking);
+                bestPlants = Best(bestPlants, pawn, SkillDefOf.Plants);
             }
 
             irreplaceableMedic = null;
@@ -167,6 +170,22 @@ namespace AutoColony.Modules
                 // Lifts when desperate for the same reason the doctor's does: a 5% risk of
                 // illness beats a certainty of no meal.
                 case "Cooking": return Demote(pawn, SkillDefOf.Cooking, bestCooking, true);
+
+                // A bad harvester destroys the crop they were sent to bring in.
+                //
+                // Watched on screen before it was found in any log: "Harvest botched" floating
+                // over a colonist in a field the colony was living off. PlantHarvestYield takes
+                // a skillNeedFactor on Plants, so an unskilled harvester returns less of every
+                // plant they touch and wastes the rest — the loss is silent, permanent, and
+                // lands on the one supply that does not have to be fought for.
+                //
+                // Sowing is not the same job. Getting seed into the ground is nearly
+                // skill-independent and the field is worthless unsown, so Growing stays open to
+                // everybody; it is the harvest that wants the grower.
+                //
+                // Lifts when desperate, like the cook and the doctor: a clumsy harvest beats a
+                // field nobody reaps.
+                case "PlantCutting": return Demote(pawn, SkillDefOf.Plants, bestPlants, true);
 
                 // The only medic does not go into the fire.
                 //
