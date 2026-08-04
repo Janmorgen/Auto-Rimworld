@@ -1025,6 +1025,11 @@ namespace AutoColony.Modules
                 var roof = ctx.map.roofGrid.RoofAt(cell);
                 if (roof != null && roof.isNatural) continue;
 
+                // And withdraw any standing request to roof it. The planner marked this room's
+                // interior for BuildRoof when it went up, and that mark outlives the room —
+                // leaving the cell in both areas, which is a colonist roofing and unroofing it
+                // until something else kills them.
+                PlacementUtil.ClearBuildRoof(ctx.map, cell);
                 area[cell] = true;
             }
         }

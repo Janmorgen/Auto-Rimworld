@@ -272,12 +272,43 @@ namespace AutoColony
             if (home != null) home[cell] = true;
         }
 
-        /// <summary>Requests a roof over a cell once its walls exist.</summary>
+        /// <summary>
+        /// Requests a roof over a cell once its walls exist, and withdraws any standing request
+        /// to take one off.
+        ///
+        /// The two areas are contradictory instructions and the game obeys both. A cell in
+        /// BuildRoof with no roof gets one built; a cell in NoRoof with a roof gets it stripped;
+        /// a cell in both is a colonist building and unbuilding the same roof for the rest of
+        /// the colony's life. That is the "roof that already exists gets built again" loop, and
+        /// it is a construction job's worth of labour a day, for ever, in a project where every
+        /// colony that dies is short of hands.
+        ///
+        /// Both areas were write-only — set true in two places and never once set false — so a
+        /// room demolished on day 6 left NoRoof on its ground permanently, and any room built
+        /// over that ground afterwards inherited the fight.
+        /// </summary>
         public static void MarkRoof(Map map, IntVec3 cell)
         {
             if (map == null || !cell.InBounds(map)) return;
+            ClearNoRoof(map, cell);
             var roof = map.areaManager.BuildRoof;
             if (roof != null) roof[cell] = true;
+        }
+
+        /// <summary>Withdraws a request to strip the roof off this cell.</summary>
+        public static void ClearNoRoof(Map map, IntVec3 cell)
+        {
+            if (map == null || map.areaManager == null || !cell.InBounds(map)) return;
+            var noRoof = map.areaManager.NoRoof;
+            if (noRoof != null && noRoof[cell]) noRoof[cell] = false;
+        }
+
+        /// <summary>Withdraws a request to roof this cell, for when it is about to be pulled down.</summary>
+        public static void ClearBuildRoof(Map map, IntVec3 cell)
+        {
+            if (map == null || map.areaManager == null || !cell.InBounds(map)) return;
+            var build = map.areaManager.BuildRoof;
+            if (build != null && build[cell]) build[cell] = false;
         }
 
         /// <summary>
@@ -296,6 +327,7 @@ namespace AutoColony
             var roof = map.areaManager.BuildRoof;
             if (roof == null) return false;
 
+            ClearNoRoof(map, cell);
             roof[cell] = true;
             return true;
         }
