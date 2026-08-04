@@ -323,6 +323,22 @@ namespace AutoColony.Modules
                 // along was whatever the filter had failed to exclude.
                 if (def.plant.harvestedThingDef.IsDrug) continue;
 
+                // And that was not enough. Run 86 planted seventy-two cells of psychoid on the
+                // build that already carried the line above, then lost its rice to blight and
+                // starved with three colonists at NeedFood beside a full field of the stuff.
+                //
+                // PsychoidLeaves is not a drug. It is the raw ingredient a drug is made from,
+                // carries no drugCategory at all, and passes IsNutritionGivingIngestible — so
+                // both tests waved it through. What it actually is is written one line further
+                // down its def: preferability DesperateOnly, which is the game saying nobody
+                // eats this unless they are starving.
+                //
+                // Preferability is the honest test, and it is the one the game itself uses to
+                // decide whether a pawn will eat something. Real crops inherit RawBad or better
+                // from PlantFoodRawBase; psychoid, smokeleaf and haygrass all sit below it.
+                var ingestible = def.plant.harvestedThingDef.ingestible;
+                if (ingestible == null || ingestible.preferability < FoodPreferability.RawBad) continue;
+
                 // Skill and research are hard limits, not preferences: a crop nobody can sow is
                 // a field that stays bare, and the colony would never find out why.
                 if (def.plant.sowMinSkill > bestGrowing) continue;
