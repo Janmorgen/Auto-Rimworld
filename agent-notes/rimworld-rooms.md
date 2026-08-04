@@ -102,6 +102,18 @@ cleanliness by curve, and are therefore work-priority telemetry rather than buil
 
 - `ResearchSpeedFactor` — 0.75× at cleanliness −5, 1.15× at +1
 - `FoodPoisonChance` — 5% at −5, 0% at −2
+- `SurgerySuccessChanceCleanlinessFactor` — **0.60×** at −5, 1.00× at 0, 1.15× at +5
+- `InfectionChanceFactor` — **1.0** at −5, 0.5 at 0, 0.2 at +1
+
+The last two are the ones with a body count. A botched surgery can kill the patient outright,
+and a filthy room takes success down to six-tenths of what it would otherwise be — while
+leaving post-operative infection at full odds. So operating in a dirty room to cure an infection
+hands the colonist a fresh one at maximum probability, which is as close to a closed loop as the
+game gets.
+
+Nothing here is a building outcome, which is the point: the same room scores all four well or
+badly depending only on whether somebody swept it. Cleanliness is work-priority telemetry, and
+`Cleaning` is the one input to it the builder cannot supply.
 
 ### Furniture shrinks the Space *measurement*
 
