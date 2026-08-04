@@ -139,8 +139,15 @@ namespace AutoColony.Furniture
             {
                 var def = all[i];
                 if (!IsSeat(def)) continue;
-                if (def.building.isEdifice) continue;          // a wall you can perch on is not a chair
                 if (!PlacementUtil.ResearchDone(def)) continue;
+
+                // There was an `isEdifice` guard here, on the reasoning that a wall somebody can
+                // perch on is not a chair. isEdifice is true of nearly all furniture — it is what
+                // reserves the one large-thing slot in a cell — so the guard rejected every seat
+                // in the game and CheapestSeat returned nothing. The seating scenario said
+                // "cheapest buildable seat is NONE" beside thirteen correct classifications,
+                // which is the only reason it was found before a colony ran on it. isSittable is
+                // already the whole question; nothing needs to be subtracted from it.
                 if (def.BaseMass <= 0f && def.costList == null && def.costStuffCount <= 0) continue;
 
                 int cost = def.costStuffCount;
