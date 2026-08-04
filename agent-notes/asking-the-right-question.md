@@ -1,0 +1,101 @@
+# Asking the game the right question
+
+Nine faults in one session had the same shape, in nine different subsystems. Each time a
+property existed that looked like the answer and sat one step nearer than the property that
+actually was. Each time the nearer one was *true* — just about something else.
+
+This note is the list, because the list is the lesson.
+
+---
+
+## The pattern
+
+| the question | what was asked | what should have been asked |
+|---|---|---|
+| Is there food? | `ResourceCounter.TotalHumanEdibleNutrition` | reachable food, stockpiled or loose |
+| Is there medicine? | `ResourceCounter.GetCount` | everything on the map, unforbidden |
+| Can we sew a coat? | count of `Cloth` | everything in `Fabric` **or** `Leathery` |
+| Have we material? | stockpiled wood/steel | what a builder can fetch from anywhere |
+| Is this crop food? | `IsNutritionGivingIngestible` | `ingestible.preferability >= RawBad` |
+| Is this a drug crop? | `harvest.IsDrug` | what the leaves are an *ingredient for* |
+| Can we use this crop? | the recipe's research | **its bench's** research too |
+| Is anyone healthy? | `SummaryHealthPercent` | that, **and** whether anyone is untended |
+| Is the colony fed? | days in the larder | that, **and** whether anyone is starving |
+
+Two more of the same family, about time rather than category:
+
+- **Is the pen enclosed?** — asked once and latched. Enclosure is a property of a standing
+  structure, and walls come down. Ask every pass, speak on change.
+- **Is this site buildable?** — asked as "is anything standing here". Marsh and water hold no
+  edifice and refuse a fence anyway. `GenConstruct.CanPlaceBlueprintAt` is the real question.
+
+---
+
+## Why the nearer property is so attractive
+
+It is always the one with the obvious name. `IsDrug` is *right there* on the def and reads
+exactly like the question being asked. `ResourceCounter` is the class called "the thing that
+counts resources". `SummaryHealthPercent` is literally a health percentage.
+
+And it is nearly always correct. `ResourceCounter` gives the right food number for every colony
+that has tidied up. `SummaryHealthPercent` is right about every colonist whose problem is a
+missing leg. The divergence appears **only in the cases that matter** — a colony too busy to
+haul, a colonist dying of an infection — because that is exactly when the two questions come
+apart.
+
+That is what makes it dangerous rather than merely wrong. A test in ordinary conditions confirms
+it. It fails silently, in the emergency, in the direction that hurts.
+
+---
+
+## What to do instead
+
+**Ask the game the question the player would ask.** Where RimWorld already computes something
+for its own UI or alerts, use that: `HasHediffsNeedingTendByPlayer` is behind the "needs
+tending" alert, `CompAnimalPenMarker.PenState.Enclosed` is behind "Pen needed",
+`FoodPreferability` is what a pawn consults before eating. Agreeing with the player's screen is
+worth more than a second implementation that can drift from it.
+
+**Prefer the category to the item.** `Fabric`/`Leathery` rather than `Cloth`. Stuff categories,
+`thingCategories`, `ingestible.preferability` — these hold for DLC and mods without anybody
+maintaining a list, and they are what the bench itself checks.
+
+**Follow the gate one hop further.** A recipe's research is not the only gate; its bench has one
+too. A crop's harvest being nutritious is not the same as anybody eating it. Where a chain has
+steps, check the step that actually stops you.
+
+**Measure once, read everywhere.** `colonistsUntended` was added to make the *score* honest and
+turned out to be the number the *work priorities* should have been reading all along, replacing
+`avgHealth < 0.9` — a proxy that was wrong in both directions. When a real measurement exists,
+everything that was guessing at it should read it.
+
+**Print the number before trusting it.** Four instrument faults in the monitoring scripts this
+session were found because a value looked *slightly* wrong: `pens: 3` where `grep -c "pen is"`
+matched "the o**pen is** elective"; `died: 0\n0` from `grep -c` printing a zero and exiting 1.
+The readings that agree with you are the dangerous ones.
+
+---
+
+## The composition version
+
+The same shape appears between rules rather than inside one. Six times this session, two rules
+each correct in isolation closed into a loop:
+
+- Clear the footprint before building + abandon a site that never finishes → a colony that
+  abandons every site, because a cell under an un-mined boulder is in no region and the finished
+  shell reads as unfinished.
+- The planner marks a room's interior `BuildRoof` + Reclaim marks a demolished room `NoRoof` →
+  a cell in both areas, and a colonist building and unbuilding the same roof for ever.
+- Grow a second crop for blight insurance + count every growing zone as a crop → cotton and hay
+  satisfying the food-variety rule.
+
+The tell is always that each rule, read alone, is obviously right. Ask instead what the *other*
+rule believes about the same fact.
+
+---
+
+## Related
+
+- [[rimworld-defs-and-chains]] — where each gate actually sits
+- [[rimworld-plants]] — the three attempts it took to classify a psychoid plant
+- [[rimworld-pens]] — "nothing is standing here" is not "a fence can be built here"
