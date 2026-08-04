@@ -21,6 +21,9 @@ This note is the list, because the list is the lesson.
 | Can we use this crop? | the recipe's research | **its bench's** research too |
 | Is anyone healthy? | `SummaryHealthPercent` | that, **and** whether anyone is untended |
 | Is the colony fed? | days in the larder | that, **and** whether anyone is starving |
+| Why is nothing cooked? | is there a cook, is there food | **is there fuel in the stove** |
+| Is this joy building usable? | is it built | is a chair *touching* it |
+| Which buildings need fuel? | generators built minus running | `CompRefuelable.ShouldAutoRefuelNow`, of everything |
 
 ### The gate is never on the thing
 
@@ -87,6 +90,17 @@ turned out to be the number the *work priorities* should have been reading all a
 `avgHealth < 0.9` — a proxy that was wrong in both directions. When a real measurement exists,
 everything that was guessing at it should read it.
 
+**A remedy that cannot clear its own complaint will run for ever.** The tell is a repeat count:
+`AddTable` eight times, `AddRecreation` seven. Before adding a remedy, ask what the survey will
+see on the pass *after* it succeeds — if the answer is "the same thing", the remedy is aimed at
+something that is not the cause.
+
+**Some faults produce no thought at all.** The defect survey reads colonist moods, so it can only
+find what a colonist is unhappy about. A colonist who wants to play chess, finds no chair and
+walks away records nothing; they simply take no joy. Every fault found by reading moods was
+findable because the game complains — for the rest, the game's *alert bar* is the instrument, and
+it is the reason the standing rule is to read the screenshot rather than only capture it.
+
 **Print the number before trusting it.** Four instrument faults in the monitoring scripts this
 session were found because a value looked *slightly* wrong: `pens: 3` where `grep -c "pen is"`
 matched "the o**pen is** elective"; `died: 0\n0` from `grep -c` printing a zero and exiting 1.
@@ -106,6 +120,12 @@ each correct in isolation closed into a loop:
   a cell in both areas, and a colonist building and unbuilding the same roof for ever.
 - Grow a second crop for blight insurance + count every growing zone as a crop → cotton and hay
   satisfying the food-variety rule.
+- Nothing cooked → raise Cooking + refuelling is a Hauling job → a cook standing at an unlit
+  stove, while the rule that raised Cooking outranked the Hauling that would have lit it. Run 108
+  held this for eighteen days; the stove had 0.85 of a 50-unit hopper. Mood fell to 0.15, Aisu
+  broke, and the livestock the pen and fodder plot were built for was slaughtered.
+- Place a table when nobody can eat at one + a pawn reaches a table only by finding a chair →
+  eight tables in one colony, and the complaint unchanged after every one of them.
 
 The tell is always that each rule, read alone, is obviously right. Ask instead what the *other*
 rule believes about the same fact.

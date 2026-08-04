@@ -151,6 +151,39 @@ corpses --[ButcherCorpseFlesh, no research, TableButcher|ButcherSpot]--> meat + 
 Butchering is ungated and the spot is free, which matters more than it sounds: a colony that
 cannot butcher has meat rotting in the field and no leather to sew with.
 
+### Fuel — the step that is not in any recipe
+
+```
+WoodLog --[Refuel, WorkGiver Refuel, workType Hauling, prio 140]--> a bench that will run
+```
+
+`FueledStove` holds **50** wood and consumes only while used; a campfire, a smithy and a
+wood-fired generator are the same shape. Nothing in the recipe graph mentions it — `CookMealSimple`
+lists meat and vegetables, not fuel — so a chain walk says the colony can cook when it cannot.
+
+The question to ask is `CompRefuelable.ShouldAutoRefuelNow`, which is the condition
+`WorkGiver_Refuel` itself tests. When it is true the game wants a colonist to carry wood and is
+waiting for one to be free, which makes it a **Hauling** problem and never a problem of whatever
+the bench does. Run 108 raised Cooking to 4.0 for eighteen days over a stove holding 0.85 of 50.
+
+### Seats — the other step that is not in any recipe
+
+```
+ChessTable | PokerTable | any table --[a sittable thing in a touching cell]--> usable
+```
+
+A pawn reaches a dining table only through `Toils_Ingest.TryFindChairOrSpot`, which searches for a
+*chair* within `ingestible.chairSearchRadius` and validates it on `def.building.isSittable`. No
+chair, no table, and `AteWithoutTable` regardless of how many tables stand in the room.
+
+A joy building needs one when a `JoyGiverDef` lists it with `requireChair` **and** a
+`JoyGiver_InteractBuildingSitAdjacent` worker. Both halves matter: `requireChair` defaults to true,
+so alone it catches billiards and horseshoes, which are played standing; the worker class alone
+catches Game-of-Ur, which sets `requireChair` false. Together they give chess and poker — exactly
+the set the game ships `Alert_ChessTableNoChairs` and `Alert_PokerTableNoChairs` for.
+
+Cheapest seat in the game is the **Stool**: 25 of any stuff, no research.
+
 ### Bodies — amputation and the prosthetic ladder
 
 An infection is a race: the disease climbs toward `lethalSeverity` while the body builds
