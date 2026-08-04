@@ -197,7 +197,12 @@ namespace AutoColony
                 // Said out loud, because eighteen days of "0.0d cooked" never once mentioned that
                 // the stove was empty, and every reading of that line went looking for a cook.
                 m.buildingsWantingFuel > 0
-                    ? string.Format(CultureInfo.InvariantCulture, "  {0} DRY", m.buildingsWantingFuel)
+                    ? string.Format(CultureInfo.InvariantCulture, "  {0} DRY{1}",
+                        m.buildingsWantingFuel,
+                        // "8 DRY" reads as a colony falling behind on hauling. "8 DRY, NO FUEL"
+                        // reads as what it is: nothing on the map can light them, and no work
+                        // priority will change that.
+                        m.fuelOnHand <= 0 ? ", NO FUEL" : "")
                     : ""));
         }
 

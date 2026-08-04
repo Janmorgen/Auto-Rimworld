@@ -53,6 +53,9 @@ namespace AutoColony
         /// <summary>Buildings whose fuel hopper the game says wants filling.</summary>
         public int buildingsWantingFuel;
 
+        /// <summary>Units of fuel available for them. Zero with dry hoppers is a supply failure.</summary>
+        public int fuelOnHand;
+
         /// <summary>Medicine of any grade in store. Distinguishes "could not treat" from "did not".</summary>
         public int medicineCount;
 

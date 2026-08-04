@@ -327,6 +327,13 @@ namespace AutoColony
         public List<Building> fuelStarved;
 
         /// <summary>
+        /// Units of fuel the dry buildings could actually be filled with, map-wide and
+        /// unforbidden. Zero with hoppers standing dry is a supply failure, not a labour one —
+        /// and they want opposite responses, so the director has to be able to tell them apart.
+        /// </summary>
+        public int fuelOnHand;
+
+        /// <summary>
         /// Electrical buildings standing under open sky, conduits included.
         ///
         /// Rain shorts these out — `ShortCircuitUtility.TryShortCircuitInRain` — which starts a
@@ -1298,6 +1305,18 @@ namespace AutoColony
                     s.buildingsWantingFuel++;
                     if (s.fuelStarved == null) s.fuelStarved = new List<Building>();
                     s.fuelStarved.Add(building);
+
+                    // And whether there is anything to carry.
+                    //
+                    // "Behind on refuelling" was read as a labour shortage — more dry hoppers
+                    // than colonists to fill them — which quietly assumes the fuel exists and
+                    // hands are what is short. On run 110's map there was no wood at all: not a
+                    // low stock, none, and no tree that yields any. The colonists were not busy.
+                    // There was nothing to carry, and a colony can be idle and dry at once.
+                    //
+                    // Asked through the hopper's own fuelFilter rather than by naming wood, so a
+                    // chemfuel generator or a modded burner answers for itself.
+                    s.fuelOnHand += FuelReachableFor(building.Map, refuelable);
                 }
 
                 var trader = building.TryGetComp<CompPowerTrader>();
@@ -1319,6 +1338,42 @@ namespace AutoColony
                 if (trader.PowerNet == null) s.unpoweredBuildings++;
                 if (coolerDef != null && building.def == coolerDef && trader.PowerOn) s.workingCoolers++;
             }
+        }
+
+        /// <summary>
+        /// How much of what this thing burns is lying about the map, unforbidden.
+        ///
+        /// Map-wide rather than stockpiled, for the reason every other count here is: a colony
+        /// burns wood it has not tidied away. Zero here does not mean "running low" — it means
+        /// the job the game is waiting for cannot be taken by anybody, and no amount of Hauling
+        /// priority will change that.
+        /// </summary>
+        static int FuelReachableFor(Map map, CompRefuelable refuelable)
+        {
+            if (map == null || refuelable == null || refuelable.Props == null) return 0;
+
+            var filter = refuelable.Props.fuelFilter;
+            if (filter == null) return 0;
+
+            int total = 0;
+            try
+            {
+                foreach (var def in filter.AllowedThingDefs)
+                {
+                    if (def == null) continue;
+                    var things = map.listerThings.ThingsOfDef(def);
+                    if (things == null) continue;
+                    for (int i = 0; i < things.Count; i++)
+                    {
+                        var thing = things[i];
+                        if (thing == null || !thing.Spawned) continue;
+                        if (thing.IsForbidden(Faction.OfPlayer)) continue;
+                        total += thing.stackCount;
+                    }
+                }
+            }
+            catch (Exception) { }
+            return total;
         }
 
         static void CaptureResearch(ColonyState s)
@@ -1351,6 +1406,7 @@ namespace AutoColony
             m.daysOfFoodSpoiling = daysOfFoodSpoiling;
             m.daysOfMeals = daysOfMeals;
             m.buildingsWantingFuel = buildingsWantingFuel;
+            m.fuelOnHand = fuelOnHand;
             m.medicineCount = medicineCount;
             m.medicineStored = medicineStored;
             m.usableMaterial = usableMaterial;

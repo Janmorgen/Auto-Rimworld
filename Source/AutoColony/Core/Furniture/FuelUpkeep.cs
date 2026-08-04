@@ -56,8 +56,16 @@ namespace AutoColony.Furniture
         {
             if (!Burns(def)) return true;
             if (state == null) return true;
-            return FuelBudget.CanKeepAnotherFed(state.buildingsWantingFuel, state.colonists,
-                                                CountOn(map, def));
+
+            int built = CountOn(map, def);
+
+            // Supply first. No fuel on the map refuses even the first one, because a burner that
+            // can never light is worse than no burner: it collects hauling trips, bills and a
+            // room plan for a thing that will not work.
+            if (!FuelBudget.WorthBuildingABurner(state.buildingsWantingFuel, state.fuelOnHand, built))
+                return false;
+
+            return FuelBudget.CanKeepAnotherFed(state.buildingsWantingFuel, state.colonists, built);
         }
 
         /// <summary>
@@ -66,6 +74,15 @@ namespace AutoColony.Furniture
         /// </summary>
         public static string Refusal(ColonyState state, ThingDef def)
         {
+            if (state != null &&
+                FuelBudget.NoFuelToBeHad(state.buildingsWantingFuel, state.fuelOnHand))
+                return string.Format(
+                    "not placing a {0} — {1} of the colony's fires are dry and there is no fuel " +
+                    "anywhere on this map to light them with; this is not a shortage of hands and " +
+                    "no work priority answers it",
+                    def != null ? (def.label ?? def.defName) : "burner",
+                    state.buildingsWantingFuel);
+
             return string.Format(
                 "not placing another {0} — {1} of the colony's fires are already waiting on wood " +
                 "and there are {2} colonists to carry it; another one burns the same woodpile and " +

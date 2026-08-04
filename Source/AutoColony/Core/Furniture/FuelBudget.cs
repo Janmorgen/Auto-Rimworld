@@ -41,5 +41,38 @@ namespace AutoColony.Furniture
             if (alreadyBuilt <= 0) return true;
             return !BehindOnFuel(hoppersWantingFuel, colonists);
         }
+
+        /// <summary>
+        /// Hoppers standing dry with nothing on the map that could fill them.
+        ///
+        /// This is a different failure from being behind, and the two want opposite responses.
+        /// Behind means the colony is short of hands and will catch up; the answer is to stop
+        /// adding to the pile and let Hauling work. Dry with no fuel means the job the game is
+        /// waiting for cannot be taken by anyone, however the work table is set — run 110 sat at
+        /// eight dry hoppers on a map with zero wood and no tree that yields any.
+        ///
+        /// Treating the second as the first is what made the whole thing look like a labour
+        /// problem: Hauling was at the top of the table, so the reading was "the colony cannot
+        /// keep up", when the truth was that there was nothing to keep up with.
+        /// </summary>
+        public static bool NoFuelToBeHad(int hoppersWantingFuel, int fuelOnHand)
+        {
+            return hoppersWantingFuel > 0 && fuelOnHand <= 0;
+        }
+
+        /// <summary>
+        /// Whether to build something that burns at all.
+        ///
+        /// Unlike <see cref="CanKeepAnotherFed"/> this refuses the *first* one too. A stove on a
+        /// map with no wood is not a kitchen, it is a wall with a bill list — and every hour
+        /// spent hauling to it, cooking at it, or planning a room around it is spent on
+        /// something that will never light.
+        /// </summary>
+        public static bool WorthBuildingABurner(int hoppersWantingFuel, int fuelOnHand,
+                                                int burnersAlreadyBuilt)
+        {
+            if (burnersAlreadyBuilt <= 0 && hoppersWantingFuel <= 0) return true;
+            return !NoFuelToBeHad(hoppersWantingFuel, fuelOnHand);
+        }
     }
 }
