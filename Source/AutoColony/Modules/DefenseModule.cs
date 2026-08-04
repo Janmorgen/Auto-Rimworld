@@ -430,7 +430,7 @@ namespace AutoColony.Modules
                 Building_Bed bed = null;
                 try { bed = RestUtility.FindBedFor(victim, carrier, false, false, null); }
                 catch (Exception) { }
-                if (bed == null) { NoteNowhereSafe(ctx, victim); continue; }
+                if (bed == null) { NoteNowhereSafe(ctx, victim, NoFires); continue; }
 
                 var job = JobMaker.MakeJob(JobDefOf.Rescue, victim, bed);
                 job.count = 1;
@@ -492,7 +492,7 @@ namespace AutoColony.Modules
                 var bed = SafestBedFor(ctx, victim, carrier, fires);
                 if (bed == null)
                 {
-                    NoteNowhereSafe(ctx, victim);
+                    NoteNowhereSafe(ctx, victim, fires);
                     continue;
                 }
 
@@ -596,15 +596,73 @@ namespace AutoColony.Modules
 
         readonly HashSet<int> nowhereSafeNoted = new HashSet<int>();
 
-        void NoteNowhereSafe(DirectorContext ctx, Pawn victim)
+        /// <summary>Nothing burning — the ordinary casualty case, where any clear cell will do.</summary>
+        static readonly List<Thing> NoFires = new List<Thing>();
+
+        void NoteNowhereSafe(DirectorContext ctx, Pawn victim, List<Thing> fires)
         {
+            // A sleeping spot is a bed as far as rescue is concerned, and it costs nothing.
+            //
+            // This used to log the problem and force the base planner due — which asks for a
+            // *proper* bed to be sited, walled, materialled and built, several minutes of work,
+            // while the colonist lies where the fire is going. Happy died of heatstroke in run
+            // 114 nine in-game hours after this line was written about him.
+            //
+            // SleepingSpot has no cost list, no stuff cost and no work to build; RestUtility
+            // treats it as a bed, so a rescue can target it the instant it exists. The planner
+            // is still woken, because a spot on bare ground is a stopgap and the colony still
+            // wants a real bed — but the stopgap is what decides whether there is anybody left
+            // to put in the real one.
+            if (PlaceRescueSpot(ctx, victim, fires))
+            {
+                if (nowhereSafeNoted.Add(victim.thingIDNumber))
+                    Chronicle.Record(ChronicleCategory.Fire, string.Format(
+                        "{0} is down with fire closing and every bed is taken or in its path — " +
+                        "put a sleeping spot down clear of the fire so they can be moved now " +
+                        "rather than when a bed is finished",
+                        victim.LabelShortCap));
+                if (ctx.director != null) ctx.director.ForceModuleDue("Base planner");
+                return;
+            }
+
             if (!nowhereSafeNoted.Add(victim.thingIDNumber)) return;
             Chronicle.Record(ChronicleCategory.Fire, string.Format(
-                "{0} is down with fire closing and every bed is either taken or in its path — " +
-                "asking the planner for one somewhere clear",
+                "{0} is down with fire closing, every bed is taken or in its path, and there is " +
+                "nowhere clear to put even a sleeping spot",
                 victim.LabelShortCap));
 
             if (ctx.director != null) ctx.director.ForceModuleDue("Base planner");
+        }
+
+        /// <summary>
+        /// Somewhere clear to lay them down, right now.
+        ///
+        /// Searched outward from the casualty so the carry is short, and every candidate has to
+        /// be somewhere the fire is not heading — a spot placed in the fire's path is worse than
+        /// none, because the rescue will run towards it.
+        /// </summary>
+        static bool PlaceRescueSpot(DirectorContext ctx, Pawn victim, List<Thing> fires)
+        {
+            var spot = AcDefs.SleepingSpot;
+            if (spot == null || ctx.map == null) return false;
+
+            var map = ctx.map;
+            foreach (var cell in GenRadial.RadialCellsAround(victim.Position, 24f, true))
+            {
+                if (!cell.InBounds(map)) continue;
+                if (FireIsComingFor(fires, cell)) continue;
+                if (PlacementUtil.HasAnyConstructionAt(map, cell)) continue;
+                if (cell.GetEdifice(map) != null) continue;
+                if (!cell.Standable(map)) continue;
+
+                // No use putting it where the carrier cannot walk to.
+                if (!map.reachability.CanReach(victim.Position, cell, PathEndMode.OnCell,
+                                               TraverseParms.For(TraverseMode.PassDoors, Danger.Deadly)))
+                    continue;
+
+                if (PlacementUtil.TryPlace(map, spot, cell, Rot4.North, null)) return true;
+            }
+            return false;
         }
 
         void HandleFires(DirectorContext ctx, bool meetTheFront)
