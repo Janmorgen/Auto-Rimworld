@@ -111,6 +111,36 @@ leaving post-operative infection at full odds. So operating in a dirty room to c
 hands the colonist a fresh one at maximum probability, which is as close to a closed loop as the
 game gets.
 
+### Floors are the cleanliness lever, and the director lays none
+
+Cleanliness is a per-cell property of the terrain, summed over the room. The spread is large and
+the bottom of it is where every colony in this project has lived:
+
+| terrain | cleanliness | research | cost per cell |
+|---|---|---|---|
+| Mud, marsh | **−2.0** | — | free |
+| **Soil, gravel, sand** | **−1.0** | — | free |
+| Wood plank, concrete, paved tile | **0** | — (concrete: Stonecutting) | 3 wood / 1–2 steel |
+| Metal tile | **+0.2** | none | 7 steel |
+| Sterile tile | **+0.6** | SterileMaterials | 3 steel + 12 silver |
+
+The director **never lays a floor**. The only `SetTerrain` call in the codebase is in the
+scenario harness, so every room every colony has ever built stands on bare soil at −1.0.
+
+That is the difference between the two ends of the curves above: surgery at 0.60× against 1.00×,
+and post-operative infection at full odds against half. The expensive rung is not the point —
+going from bare soil to *any* built floor is most of the gain, and a wood plank floor needs no
+research and costs three wood a cell.
+
+Floors also carry **beauty** and **path cost**, so the same act improves impressiveness (every
+showcase room came out `awful` partly on this) and how fast colonists cross the room. Straw
+matting is the one to avoid indoors: −0.1 cleanliness and flammability 1.5.
+
+Where it matters mechanically is narrow and worth targeting rather than carpeting the base:
+Hospital (surgery success, infection), Kitchen (food poisoning), Research (speed). A colony that
+floors those three and leaves the corridors bare gets nearly all of the benefit for a fraction
+of the wood.
+
 Nothing here is a building outcome, which is the point: the same room scores all four well or
 badly depending only on whether somebody swept it. Cleanliness is work-priority telemetry, and
 `Cleaning` is the one input to it the builder cannot supply.
