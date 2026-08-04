@@ -70,7 +70,7 @@ namespace AutoColony.Modules
                                               ctx.Gene(Genes.RoomEssentialWeight),
                                               ctx.Gene(Genes.RoomOccupancyWeight),
                                               UpkeepWeights(ctx),
-                                              ctx.plan != null ? ctx.plan.RolesWanted : null);
+                                              ctx.plan != null ? ctx.plan.RolesAnyGoalWants : null);
 
             Report(ctx, BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists),
                    defects.Count);

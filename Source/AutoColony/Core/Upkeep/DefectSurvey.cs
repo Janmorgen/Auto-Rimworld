@@ -492,7 +492,7 @@ namespace AutoColony.Upkeep
         public static bool Expendable(Map map, BaseLayout layout, PlannedRoom planned,
                                       HashSet<RoomRole> rolesWanted)
         {
-            // Never the last of a role the plan is still asking for.
+            // Never the last of a role any goal can ask for — satisfied or not.
             //
             // Run 96 built a Research room, finished it, and then reclaimed it for material
             // while the plan read "no research bench, so nothing the colony studies can ever
@@ -503,8 +503,14 @@ namespace AutoColony.Upkeep
             // Asking the plan generalises the hardcoded floor rather than extending it. Kitchen,
             // Storage, Bedroom and Power are on that list because goals want them — Feed the
             // colony, Roofed storage, Shelter everyone, Power — so a rule that protects "the
-            // last room any unsatisfied goal is asking for" covers all four and Research too,
-            // and covers whatever is added next without anybody remembering to update a list.
+            // last room any goal can ask for" covers all four and Research too, and covers
+            // whatever is added next without anybody remembering to update a list.
+            //
+            // Satisfied goals count, and that correction cost a colony. The first version used
+            // only *unsatisfied* goals, so a working Research room was unprotected precisely
+            // because its bench was built — and pulling it down is what made the goal want one
+            // again. A room is not spare because the goal it serves is met; it is met because
+            // the room is standing.
             if (layout.CountRooms(planned.role) <= 1 &&
                 rolesWanted != null && rolesWanted.Contains(planned.role))
                 return false;

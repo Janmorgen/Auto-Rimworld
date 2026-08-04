@@ -63,6 +63,23 @@ namespace AutoColony.Goals
         /// </summary>
         public readonly HashSet<RoomRole> RolesWanted = new HashSet<RoomRole>();
 
+        /// <summary>
+        /// Every room role any goal can ever ask for, satisfied or not.
+        ///
+        /// The difference from RolesWanted is the whole point. That set answers "what is the
+        /// colony short of right now", which is the wrong question to ask before pulling a room
+        /// down — a room is not surplus because the goal it serves is satisfied, it is satisfied
+        /// *because the room is standing*.
+        ///
+        /// Run 104 built a Research room, finished it, got its bench working, and then reclaimed
+        /// it at means 0.07 — because with the bench built ResearchCapacityGoal was satisfied,
+        /// so Research was not in RolesWanted and the room read as spare. Demolishing it made
+        /// the goal want it again, and the colony sited another one forty cells away that could
+        /// not be built. The guard asked whether the plan wanted the room, when the question is
+        /// whether the plan would want it back the moment it was gone.
+        /// </summary>
+        public readonly HashSet<RoomRole> RolesAnyGoalWants = new HashSet<RoomRole>();
+
         public string Describe()
         {
             if (Focus == null) return "nothing outstanding";
@@ -142,6 +159,10 @@ namespace AutoColony.Goals
             {
                 var goal = goals[i];
                 var record = RecordFor(goal);
+
+                // Recorded for every goal, before the satisfied ones are skipped: a satisfied
+                // goal is exactly the one whose room must not be taken away.
+                if (goal.WantsRoom.HasValue) plan.RolesAnyGoalWants.Add(goal.WantsRoom.Value);
 
                 if (Satisfied(goal, ctx))
                 {
