@@ -35,6 +35,48 @@ namespace AutoColony.Tests
             return s;
         }
 
+        /// <summary>
+        /// A full larder is not a fed colony.
+        ///
+        /// Seven colonies have died with Food security at or near 1.00 — run 93 on day 20 with a
+        /// colonist down for 30% of the epoch and thirty-three days of food in store. The term
+        /// measured the larder, so the search was repeatedly told that the way they died was a
+        /// success on the one axis that most decides whether a colony lives.
+        /// </summary>
+        [Fact]
+        public void StarvingBesideAFullLarderScoresBelowAFedColony()
+        {
+            var end = Baseline();
+            end.daysOfFood = 30f;
+
+            var fed = new EpochAccumulator();
+            var starving = new EpochAccumulator();
+
+            var sample = Baseline();
+            sample.daysOfFood = 30f;
+
+            var hungry = Baseline();
+            hungry.daysOfFood = 30f;          // the larder is full the whole time
+            hungry.colonistsStarving = 1;     // and somebody is not eating from it
+
+            for (int i = 0; i < 40; i++)
+            {
+                fed.Observe(sample);
+                starving.Observe(hungry);
+            }
+
+            Assert.True(fed.FoodSecurity > 0.9f, "a stocked colony should read secure");
+            Assert.True(starving.FoodSecurity > 0.9f, "the larder was equally full in both");
+            Assert.True(starving.StarvingFraction > 0.9f, "somebody was starving throughout");
+
+            List<ScoreTerm> a, b;
+            float fedScore = ColonyEvaluator.Evaluate(StartFrom(end), end, fed, out a);
+            float starvingScore = ColonyEvaluator.Evaluate(StartFrom(end), end, starving, out b);
+
+            Assert.True(starvingScore < fedScore,
+                "a colony that starved beside its own food must not score as well as one that ate");
+        }
+
         /// <summary>Runs one epoch's worth of identical observations, then scores it.</summary>
         static float Score(ColonyMetrics end, int deaths = 0, int samples = 40)
         {

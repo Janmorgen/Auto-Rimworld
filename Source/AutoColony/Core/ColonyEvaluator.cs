@@ -115,6 +115,21 @@ namespace AutoColony
         {
             get { return foodSamples > 0 ? (float)foodSecureSamples / foodSamples : 0f; }
         }
+
+        /// <summary>How much of the measured epoch had somebody starving in it.</summary>
+        public float StarvingFraction
+        {
+            get { return foodSamples > 0 ? (float)starvingSamples / foodSamples : 0f; }
+        }
+        /// <summary>
+        /// Samples in which somebody was actually going hungry, whatever the larder held.
+        ///
+        /// "Is there food" and "is anybody eating" only diverge when a colony is dying, and
+        /// until now only the first was scored. Run 93 died on day 20 with a colonist down for
+        /// 30% of the epoch and thirty-three days of food in store, and was awarded Food
+        /// security 1.00 — so the search was told that colony fed itself perfectly.
+        /// </summary>
+        public int starvingSamples;
         public int mentalBreakSamples;
         public int fireSamples;
         public int downedSamples;
@@ -187,6 +202,7 @@ namespace AutoColony
             foodObserved = false;
             foodSamples = 0;
             foodSecureSamples = 0;
+            starvingSamples = 0;
             mentalBreakSamples = 0;
             fireSamples = 0;
             downedSamples = 0;
@@ -232,6 +248,7 @@ namespace AutoColony
             {
                 foodSamples++;
                 if (m.daysOfFood >= FoodDangerDays) foodSecureSamples++;
+                if (m.colonistsStarving > 0) starvingSamples++;
             }
             if (m.colonistsInMentalState > 0) mentalBreakSamples++;
             // Only fires that actually threaten the colony. Counting every fire on the map
@@ -426,9 +443,18 @@ namespace AutoColony
             // worst moment and a poor measure of how a colony was run: one transient hour at zero
             // zeroes a five-day epoch, and run 23 scored 0.00 having never actually run out. The
             // search could not tell a colony that dipped once from one that starved for a week.
+            // Stocked and fed are different claims, and only the second one keeps anybody
+            // alive. A full larder scores nothing for the hours somebody spent starving beside
+            // it, in the same shape the Mood term already uses for mental breaks.
+            //
+            // This is a change to what every colony is measured against, so archived scores
+            // from before it are not strictly comparable. It is made deliberately: seven
+            // colonies have now died with this term at or near 1.00, which means the search has
+            // been repeatedly told that the way they died was a success.
             float food = acc.foodSamples > 0
                 ? acc.FoodSecurity
                 : AcMath.Clamp01(end.daysOfFood / FoodSecureDays);
+            food *= AcMath.Clamp01(1f - acc.StarvingFraction);
             breakdown.Add(new ScoreTerm("Food security", food, WFood));
 
             // --- mood: time-averaged, penalised by how often someone was breaking ---
