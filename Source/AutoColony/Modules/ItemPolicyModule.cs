@@ -60,15 +60,42 @@ namespace AutoColony.Modules
             buffer.AddRange(map.listerThings.ThingsInGroup(ThingRequestGroup.HaulableEver));
             buffer.AddRange(map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse));
 
+            // How far to walk for something depends on what it is.
+            //
+            // Claiming was radius alone, so a slag chunk ten cells out was worth fetching and a
+            // component forty cells out was not — while the plan sat on "needs 6
+            // ComponentIndustrial" and could not build a generator without them.
+            //
+            // What an item is worth is not a property of the item. It is a property of the item
+            // and the colony together: components are what a generator, an electric stove and a
+            // cooler are made of and what repairs them; a dead raider's rifle is a colonist who
+            // hunts better and survives the next raid; medicine off a corpse is the difference
+            // between tending an infection and watching it. The plan already states which of
+            // these the colony is short of, in exactly these terms, and nothing was reading it.
+            //
+            // So the radius is the default and an outstanding need overrides it. Deliberately a
+            // wider reach rather than an unlimited one — a colonist crossing the whole map for
+            // one component is an afternoon spent, and the point is to value the walk, not to
+            // ignore its cost.
+            int wantedRadiusSq = radius * NeededReach * radius * NeededReach;
+            int wanted = 0;
+
             for (int i = 0; i < buffer.Count && done < MaxPerPass; i++)
             {
                 var thing = buffer[i];
                 if (!Claimable(thing, map)) continue;
-                if ((thing.Position - origin).LengthHorizontalSquared > radiusSq) continue;
+
+                bool needed = Needed(ctx, thing);
+                int reachSq = needed ? wantedRadiusSq : radiusSq;
+                if ((thing.Position - origin).LengthHorizontalSquared > reachSq) continue;
 
                 ForbidUtility.SetForbidden(thing, false, false);
                 done++;
+                if (needed) wanted++;
             }
+
+            if (wanted > 0)
+                Note("claimed " + wanted + " items the plan is short of, beyond the usual radius");
 
             return done;
         }
@@ -100,6 +127,24 @@ namespace AutoColony.Modules
             }
 
             return done;
+        }
+
+        /// <summary>How much further the colony will walk for something it actually needs.</summary>
+        const int NeededReach = 2;
+
+        /// <summary>
+        /// Whether the plan is currently short of this.
+        ///
+        /// Asked of the goal layer rather than of a list here, so what counts as valuable
+        /// changes as the colony's situation does — steel while it is building, components while
+        /// it wants power, and neither once those are met.
+        /// </summary>
+        static bool Needed(DirectorContext ctx, Thing thing)
+        {
+            if (ctx.plan == null || thing == null || thing.def == null) return false;
+            if (!ctx.plan.Needs.Any) return false;
+
+            return ctx.plan.Needs.For(thing.def.defName) > 0;
         }
 
         static bool Claimable(Thing thing, Map map)
