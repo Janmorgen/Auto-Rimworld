@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using RimWorld;
 using Verse;
+using Verse.AI;
 
 namespace AutoColony
 {
@@ -82,6 +83,27 @@ namespace AutoColony
         /// only the first was ever asked.
         /// </summary>
         public int colonistsStarving;
+
+        /// <summary>
+        /// Colonists who cannot reach any food on this map, asked of the game's own pathfinder.
+        ///
+        /// The director has had a flag called <c>notReachingThem</c> since run 56 and it never
+        /// asked this. It inferred being cut off from "somebody is starving while the larder is
+        /// full", which is the symptom — true of a walled-in colonist and true of half a dozen
+        /// other things, and silent until somebody is already starving.
+        ///
+        /// It cost a colony on the first biome of the first matrix. The planner sited a Kitchen
+        /// whose west wall ran along a rock face, built it, and sealed Solomon into the one-cell
+        /// gap between the two. He starved at food 0.00 for a day beside four days of cooked
+        /// meals, broke, set fires, and died of heatstroke in them. Doctor sat at 5.0 the whole
+        /// time — the proxy fired correctly and named nothing.
+        ///
+        /// A director that can wall its own colonists in needs to be able to ask whether it has.
+        /// </summary>
+        public int colonistsCutOff;
+
+        /// <summary>Which ones, so something can go and let them out.</summary>
+        public List<Pawn> cutOff;
 
         /// <summary>
         /// The hungriest colonist's food need, 0 to 1. The average would hide exactly the person
@@ -739,6 +761,16 @@ namespace AutoColony
                     if (p.needs.food.Starving) s.colonistsStarving++;
                     float level = p.needs.food.CurLevelPercentage;
                     if (level < s.minFood) s.minFood = level;
+                }
+
+                // Asked of everyone every pass, not only of the hungry. A colonist sealed in at
+                // full belly is a death in two days; waiting for the hunger to show wastes the
+                // day in which the wall could still be taken down cheaply.
+                if (p.Spawned && !CanReachFood(p))
+                {
+                    s.colonistsCutOff++;
+                    if (s.cutOff == null) s.cutOff = new List<Pawn>();
+                    s.cutOff.Add(p);
                 }
 
                 if (p.needs != null && p.needs.mood != null)
@@ -1502,6 +1534,49 @@ namespace AutoColony
             return known;
         }
 
+        /// <summary>
+        /// Whether this colonist can get to anything they could eat.
+        ///
+        /// <c>Reachability.CanReach</c> is the game's own pathfinder answering the question a
+        /// player answers by looking — and it is region-based, so it is cheap and it early-outs
+        /// on the first reachable stack, which for a colonist standing in the base is the first
+        /// thing tested.
+        ///
+        /// Food rather than "the base" on purpose. A colonist sealed in with a stockpile is not
+        /// in trouble; one sealed out of every larder is, whatever else they can walk to.
+        /// </summary>
+        static bool CanReachFood(Pawn pawn)
+        {
+            var map = pawn.Map;
+            if (map == null || map.listerThings == null) return true;
+
+            try
+            {
+                var things = map.listerThings.ThingsInGroup(ThingRequestGroup.FoodSourceNotPlantOrTree);
+                if (things == null) return true;
+
+                var parms = TraverseParms.For(pawn);
+                for (int i = 0; i < things.Count; i++)
+                {
+                    var thing = things[i];
+                    if (thing == null || !thing.Spawned) continue;
+                    if (thing is Corpse || thing is Pawn) continue;
+
+                    var def = thing.def;
+                    if (def == null || def.ingestible == null) continue;
+                    if (!def.IsNutritionGivingIngestible || !def.ingestible.HumanEdible) continue;
+                    if (thing.IsForbidden(Faction.OfPlayer)) continue;
+
+                    if (map.reachability.CanReach(pawn.Position, thing,
+                                                  PathEndMode.ClosestTouch, parms))
+                        return true;
+                }
+            }
+            catch (Exception) { return true; }   // never report a trap on a thrown exception
+
+            return false;
+        }
+
         static void CaptureResearch(ColonyState s)
         {
             var all = DefDatabase<ResearchProjectDef>.AllDefsListForReading;
@@ -1525,6 +1600,7 @@ namespace AutoColony
             m.minMood = minMood;
             m.minFood = minFood;
             m.colonistsStarving = colonistsStarving;
+            m.colonistsCutOff = colonistsCutOff;
             m.colonistsUntended = colonistsUntended;
             m.colonistsUntendedLethal = colonistsUntendedLethal;
             m.colonistsLosingToDisease = colonistsLosingToDisease;

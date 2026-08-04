@@ -32,6 +32,9 @@ namespace AutoColony
         /// <summary>Colonists the game itself calls starving.</summary>
         public int colonistsStarving;
 
+        /// <summary>Colonists who cannot path to any food — walled in.</summary>
+        public int colonistsCutOff;
+
         /// <summary>Colonists with an untended condition the game says needs tending.</summary>
         public int colonistsUntended;
 

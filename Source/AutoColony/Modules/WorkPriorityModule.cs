@@ -342,7 +342,15 @@ namespace AutoColony.Modules
             // spends the hands that would have carried a meal over, so this raises the two work
             // types that actually close the distance — feeding a patient is a Doctor job, and
             // food nobody has hauled into a stockpile is food nobody can be fed from.
-            bool notReachingThem = s.colonistsStarving > 0 && s.daysOfFood >= 1f;
+            // Now asked rather than inferred.
+            //
+            // This was `starving with a full larder`, which is the symptom of being cut off and
+            // is also the symptom of six other things. It fired correctly for a day while
+            // Solomon starved behind a wall the colony had built, and named none of it. The
+            // pathfinder answers the actual question; the old reading stays underneath it,
+            // because food that has not been hauled is still food nobody can be fed from.
+            bool notReachingThem = s.colonistsCutOff > 0 ||
+                                   (s.colonistsStarving > 0 && s.daysOfFood >= 1f);
 
             // An empty larder with meat lying in the field is not a hunting problem.
             //

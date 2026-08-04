@@ -173,10 +173,14 @@ namespace AutoColony
                 m.colonists, m.colonistsDowned, m.colonistsInMentalState, m.avgMood, m.avgHealth,
                 m.daysOfFood, m.wealthTotal, m.colonistBeds, m.fires, m.outdoorTemperature,
                 m.minMood,
-                m.colonistsStarving > 0
-                    ? string.Format(CultureInfo.InvariantCulture, " ({0} STARVING, hungriest {1:0.00})",
-                        m.colonistsStarving, m.minFood)
-                    : "",
+                m.colonistsCutOff > 0
+                    ? string.Format(CultureInfo.InvariantCulture,
+                        " ({0} WALLED IN{1})", m.colonistsCutOff,
+                        m.colonistsStarving > 0 ? ", " + m.colonistsStarving + " STARVING" : "")
+                    : m.colonistsStarving > 0
+                        ? string.Format(CultureInfo.InvariantCulture, " ({0} STARVING, hungriest {1:0.00})",
+                            m.colonistsStarving, m.minFood)
+                        : "",
                 m.colonistsUntended > 0 || m.colonistsLosingToDisease > 0
                     ? string.Format(CultureInfo.InvariantCulture, " ({0} UNTENDED{1}{2})",
                         m.colonistsUntended,

@@ -4,6 +4,7 @@ using AutoColony.Learning;
 using AutoColony.Upkeep;
 using RimWorld;
 using Verse;
+using Verse.AI;
 
 namespace AutoColony.Modules
 {
@@ -68,6 +69,10 @@ namespace AutoColony.Modules
             // Surgery outranks the defect survey and runs even in a crisis: a colonist losing to
             // an infection is a death on a timer, and every other remedy here is furniture.
             QueueLifesavingSurgery(ctx);
+
+            // And let out anyone the colony has walled in. Same class of emergency as the
+            // surgery above — a death on a timer — so it runs in a crisis too.
+            FreeAnyoneWalledIn(ctx);
 
             // Before asking what the colony lacks, finish what it already owns. A chair against a
             // table it already paid for is the cheapest thing the director can buy, and until it
@@ -707,6 +712,164 @@ namespace AutoColony.Modules
 
             Chronicle.Record(ChronicleCategory.Build,
                 "upkeep — " + Furniture.FuelUpkeep.Refusal(ctx.state, def));
+        }
+
+        /// <summary>
+        /// Take down a wall the colony built across somebody's only way out.
+        ///
+        /// The planner sites rooms against rock on purpose — the Storage room's own explanation
+        /// says it "wants to be near rock" — and a wall line run along a rock face can close the
+        /// gap between the two. If a colonist is standing in that gap when the last segment goes
+        /// up, they are sealed in, and nothing in the director noticed until they starved.
+        ///
+        /// Solomon died that way on the first biome of the first matrix: sealed at (136,118)
+        /// between the Kitchen's west wall and the rock, starving at food 0.00 for a day with
+        /// four days of cooked meals a few cells away, then a mental break, then heatstroke in
+        /// the fires he set. Two colonists dead by day 6 on the gentlest map in the set.
+        ///
+        /// The colony undoes its own wall by preference. Mining through rock is the fallback,
+        /// because rock is not the director's mistake and takes far longer to cut.
+        /// </summary>
+        static void FreeAnyoneWalledIn(DirectorContext ctx)
+        {
+            var trapped = ctx.state.cutOff;
+            if (trapped == null || trapped.Count == 0) { walledInNoted = false; return; }
+
+            var map = ctx.map;
+            if (map == null) return;
+
+            for (int i = 0; i < trapped.Count; i++)
+            {
+                var pawn = trapped[i];
+                if (pawn == null || !pawn.Spawned) continue;
+
+                if (!walledInNoted)
+                {
+                    walledInNoted = true;
+                    Chronicle.Record(ChronicleCategory.Health, string.Format(
+                        "{0} cannot reach any food on this map from {1} — walled in. Opening a " +
+                        "way out; this is the colony's own wall, not the weather",
+                        pawn.LabelShortCap, pawn.Position));
+                }
+
+                if (OpenAWayOut(ctx, pawn)) continue;
+
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "{0} is walled in at {1} and nothing adjacent can be taken down or mined — " +
+                    "the pocket has no edge the colony owns",
+                    pawn.LabelShortCap, pawn.Position));
+            }
+        }
+
+        static bool walledInNoted;
+
+        /// <summary>
+        /// Find the cell between where they are and where the food is, and order it removed.
+        ///
+        /// A bounded flood fill over what the pawn can actually stand on, collecting the solid
+        /// things around the edge of that pocket. A candidate is worth removing when a cell on
+        /// its far side can be reached by somebody who is not trapped — which is the definition
+        /// of "this is the wall in the way" rather than a guess at which one it is.
+        /// </summary>
+        static bool OpenAWayOut(DirectorContext ctx, Pawn pawn)
+        {
+            var map = ctx.map;
+            var seen = new HashSet<IntVec3>();
+            var queue = new Queue<IntVec3>();
+            var edge = new List<Thing>();
+
+            queue.Enqueue(pawn.Position);
+            seen.Add(pawn.Position);
+
+            // Bounded: a pocket big enough to hold a colonist and no food is small. If the fill
+            // runs past this the pawn is not in a pocket and something else is wrong.
+            const int MaxPocket = 600;
+
+            while (queue.Count > 0 && seen.Count < MaxPocket)
+            {
+                var cell = queue.Dequeue();
+                for (int d = 0; d < 4; d++)
+                {
+                    var next = cell + GenAdj.CardinalDirections[d];
+                    if (!next.InBounds(map) || seen.Contains(next)) continue;
+
+                    if (next.Walkable(map)) { seen.Add(next); queue.Enqueue(next); continue; }
+
+                    var blocker = next.GetEdifice(map);
+                    if (blocker != null && !edge.Contains(blocker)) edge.Add(blocker);
+                }
+            }
+
+            // Player-built first: the colony taking down its own wall is cheap, immediate, and
+            // is the mistake being corrected. Rock is somebody else's problem and slower to cut.
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 0; i < edge.Count; i++)
+                {
+                    var thing = edge[i];
+                    if (thing == null || thing.Destroyed) continue;
+
+                    bool mine = thing.Faction != Faction.OfPlayer;
+                    if (pass == 0 && mine) continue;
+                    if (pass == 1 && !mine) continue;
+                    if (mine && !(thing is Mineable)) continue;
+
+                    if (!LeadsSomewhereUseful(ctx, pawn, thing, seen)) continue;
+
+                    bool ordered = mine ? Mine(map, thing) : PlacementUtil.TryDeconstruct(map, thing);
+                    if (!ordered) continue;
+
+                    Chronicle.Record(ChronicleCategory.Build, string.Format(
+                        "{0} the {1} at {2} to let {3} out — it is the only thing between them " +
+                        "and the rest of the colony",
+                        mine ? "mining" : "taking down", thing.def.label ?? thing.def.defName,
+                        thing.Position, pawn.LabelShortCap));
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether removing this blocks opens onto ground somebody outside can already stand on.
+        ///
+        /// Without this the colony would cheerfully deconstruct a wall onto more of the same
+        /// pocket, or into open rock, and report that it had freed somebody.
+        /// </summary>
+        static bool LeadsSomewhereUseful(DirectorContext ctx, Pawn trapped, Thing blocker,
+                                         HashSet<IntVec3> pocket)
+        {
+            var map = ctx.map;
+            var colonists = map.mapPawns.FreeColonistsSpawned;
+
+            for (int d = 0; d < 4; d++)
+            {
+                var beyond = blocker.Position + GenAdj.CardinalDirections[d];
+                if (!beyond.InBounds(map) || pocket.Contains(beyond)) continue;
+                if (!beyond.Walkable(map)) continue;
+
+                for (int i = 0; i < colonists.Count; i++)
+                {
+                    var other = colonists[i];
+                    if (other == null || other == trapped || !other.Spawned) continue;
+                    if (map.reachability.CanReach(other.Position, beyond,
+                                                 PathEndMode.OnCell, TraverseParms.For(other)))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        static bool Mine(Map map, Thing rock)
+        {
+            try
+            {
+                if (map.designationManager.DesignationOn(rock, DesignationDefOf.Mine) != null)
+                    return true;
+                map.designationManager.AddDesignation(new Designation(rock, DesignationDefOf.Mine));
+                return true;
+            }
+            catch (Exception) { return false; }
         }
 
         /// <summary>
