@@ -200,14 +200,56 @@ namespace AutoColony.Plants
                 if (recipe.ingredients == null) continue;
                 if (recipe.researchPrerequisite != null && !recipe.researchPrerequisite.IsFinished) continue;
 
-                for (int g = 0; g < recipe.ingredients.Count; g++)
+                bool consumesIt = false;
+                for (int g = 0; g < recipe.ingredients.Count && !consumesIt; g++)
                 {
                     var ingredient = recipe.ingredients[g];
                     if (ingredient == null || ingredient.filter == null) continue;
-                    if (ingredient.filter.Allows(harvest)) return true;
+                    if (ingredient.filter.Allows(harvest)) consumesIt = true;
                 }
+                if (!consumesIt) continue;
+
+                // And somewhere to actually run it.
+                //
+                // Make_Wort carries no research prerequisite of its own, so the recipe alone
+                // says hops are usable — but its only bench is the brewery, and both the
+                // brewery and the fermenting barrel need Brewing. A colony without it can
+                // neither make wort nor turn wort into beer, and a field of hops is then
+                // exactly the psychoid field again: soil, sowing and hauling spent on leaves.
+                //
+                // The gate was one level away from where the first version looked, which is
+                // where it has been every time on this problem.
+                if (BenchAvailable(recipe)) return true;
             }
             return false;
+        }
+
+        /// <summary>Whether any workbench that can run this recipe is researched.</summary>
+        static bool BenchAvailable(RecipeDef recipe)
+        {
+            var users = recipe.AllRecipeUsers;
+            if (users == null) return false;
+
+            bool anyUser = false;
+            foreach (var bench in users)
+            {
+                if (bench == null) continue;
+                anyUser = true;
+
+                if (bench.researchPrerequisites == null) return true;
+
+                bool allDone = true;
+                for (int i = 0; i < bench.researchPrerequisites.Count && allDone; i++)
+                {
+                    var project = bench.researchPrerequisites[i];
+                    if (project != null && !project.IsFinished) allDone = false;
+                }
+                if (allDone) return true;
+            }
+
+            // A recipe with no bench at all is done somewhere else entirely — at a spot, or by
+            // hand. Not a reason to refuse it.
+            return !anyUser;
         }
 
         /// <summary>Every plant the colony could sow, for reporting and for choosing one.</summary>
