@@ -213,6 +213,13 @@ namespace AutoColony.Modules
             return null;
         }
 
+        /// <summary>
+        /// Set once the colony has been told a grave is dug and waiting. Cleared whenever the
+        /// remedy does something, or when there is no unburied body left, so the next death
+        /// gets its own line rather than inheriting this one's silence.
+        /// </summary>
+        static bool graveWaitNoted;
+
         static bool BuryDead(DirectorContext ctx, ColonyDefect defect)
         {
             var grave = AcDefs.Grave;
@@ -228,8 +235,27 @@ namespace AutoColony.Modules
             // RimWorld map arrives forbidden.
             if (EmptyGraveExists(ctx.map))
             {
-                return ReleaseTheDeadForBurial(ctx);
+                if (ReleaseTheDeadForBurial(ctx)) { graveWaitNoted = false; return true; }
+
+                // A grave is on order and the body is still lying there. Nothing more this
+                // remedy can do — the hole is dug when somebody digs it — but silence here is
+                // indistinguishable from the remedy being broken, and the difference matters:
+                // one is a colony short of hands and the other is a bug.
+                //
+                // Run 104 raised this defect once on day 4 and said nothing for the eleven days
+                // that followed, while the largest single mood penalty in the game went on
+                // being paid and the game's own "Colonist left unburied" alert stayed up.
+                if (!graveWaitNoted)
+                {
+                    graveWaitNoted = true;
+                    Chronicle.Record(ChronicleCategory.Build,
+                        "a grave is on order and the body is still where it fell — nothing left to " +
+                        "arrange, it wants a colonist with a shovel. If this line is old, the " +
+                        "colony is too busy to bury its own dead");
+                }
+                return false;
             }
+            graveWaitNoted = false;
 
             // Inside the tomb if there is one. Graves used to go wherever there was room within
             // eighteen cells of the body, which scatters them across the base and leaves them
