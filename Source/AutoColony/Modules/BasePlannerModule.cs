@@ -2963,8 +2963,7 @@ namespace AutoColony.Modules
                     // removed rather than offset, and the only one that costs no labour at all:
                     // a double is 85 stuff against 90 for the two singles it replaces, one build
                     // job instead of two, and the room stays a Bedroom because it is one bed.
-                    if (WantsDoubleBed(ctx)) PlaceOne(ctx, room, AcDefs.DoubleBed);
-                    else PlaceMany(ctx, room, AcDefs.Bed, BedsPerRoom(ctx));
+                    PlaceBeds(ctx, room);
                     break;
                 case RoomRole.Kitchen:
                     PlaceOne(ctx, room, StoveFor(ctx));
@@ -3175,6 +3174,35 @@ namespace AutoColony.Modules
         void PlaceOne(DirectorContext ctx, PlannedRoom room, ThingDef def)
         {
             PlaceMany(ctx, room, def, 1);
+        }
+
+        /// <summary>
+        /// A bed for the room, preferring the double when a couple has none.
+        ///
+        /// Written as one decision with a fallback because the two-branch version left a room
+        /// with no bed at all: if the double could not be placed — a 2x2 footprint needs a clear
+        /// square that a 1x2 does not — the else-branch had already been skipped and nothing
+        /// tried a single. Run 98 reached day 11 with a finished bedroom, 999 material and zero
+        /// beds while "Shelter everyone" sat at the top of the plan.
+        ///
+        /// A couple sleeping apart costs -4 each. A colony sleeping on the ground costs more
+        /// than that and has no bed to carry a casualty to, so the double is a preference and
+        /// never a condition.
+        /// </summary>
+        void PlaceBeds(DirectorContext ctx, PlannedRoom room)
+        {
+            if (WantsDoubleBed(ctx))
+            {
+                int before = ExistingCount(ctx.map, room, AcDefs.DoubleBed);
+                PlaceOne(ctx, room, AcDefs.DoubleBed);
+                if (ExistingCount(ctx.map, room, AcDefs.DoubleBed) > before) return;
+
+                Chronicle.Record(ChronicleCategory.Build,
+                    "no room for a double bed here, so the couple get singles — a bed nobody can " +
+                    "place is worse than a bed that costs -4 a night");
+            }
+
+            PlaceMany(ctx, room, AcDefs.Bed, BedsPerRoom(ctx));
         }
 
         void PlaceMany(DirectorContext ctx, PlannedRoom room, ThingDef def, int count)
