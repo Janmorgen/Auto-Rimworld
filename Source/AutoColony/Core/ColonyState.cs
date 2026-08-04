@@ -795,6 +795,21 @@ namespace AutoColony
                 var grow = zones[i] as Zone_Growing;
                 if (grow == null) continue;
 
+                // Food zones only.
+                //
+                // These two numbers answer "can the colony feed itself" and "is it one blight
+                // from an empty larder", and both counted every growing zone on the map. That
+                // was harmless while the only zones were food and one healroot plot. The moment
+                // cotton, haygrass and hops got plots of their own, a colony with a single food
+                // crop read "6 of 2 crops" and the variety rule stood down satisfied — insurance
+                // against blight, provided by three fields nobody can eat.
+                //
+                // Which is the psychoid mistake again, one level up: the count was of growing
+                // zones and the question was about dinner.
+                var growing = grow.GetPlantDefToGrow();
+                if (growing == null) continue;
+                if (Plants.PlantTaxonomy.RoleOf(growing) != Plants.PlantRole.Food) continue;
+
                 // Only the cells that can actually grow something.
                 //
                 // A roofed cell with no sun lamp over it grows nothing however long it is
@@ -809,8 +824,7 @@ namespace AutoColony
                     s.growingCells++;
                 }
 
-                var plant = grow.GetPlantDefToGrow();
-                if (plant != null) crops.Add(plant.defName);
+                crops.Add(growing.defName);
             }
             s.distinctCrops = crops.Count;
         }
