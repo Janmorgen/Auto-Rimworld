@@ -190,6 +190,7 @@ namespace AutoColony.Modules
         void EnsureSocialPlot(DirectorContext ctx)
         {
             if (ctx.state.growingCells <= 0) return;
+            if (!ctx.state.growingSeasonNow) return;           // see EnsureTextilePlot
             if (ctx.state.daysOfFood < 5f) return;              // dinner, with margin
             if (ctx.state.minMood > 0.45f) return;              // nobody is struggling
 
@@ -229,6 +230,15 @@ namespace AutoColony.Modules
         {
             if (ctx.state.growingCells <= 0) return;              // dinner first
             if (ctx.state.textiles >= 120) return;                // enough to sew with
+
+            // And not into a season that will not grow it.
+            //
+            // Run 97 sowed thirty cells of cotton on a map reading "Fall, nothing grows
+            // outdoors, -31C", then lost two colonists to Hypothermia (extreme) with the field
+            // still bare. A crop that cannot reach harvest is the same waste as one nobody can
+            // eat or process — soil, sowing and hauling spent for nothing — and it is worse
+            // here, because the thing it was meant to produce is what they died without.
+            if (!ctx.state.growingSeasonNow) return;
 
             var crop = BestOfRole(ctx, PlantRole.Textile);
             if (crop == null)
@@ -279,6 +289,7 @@ namespace AutoColony.Modules
         {
             if (ctx.state.growingCells <= 0) return;
             if (ctx.state.tamedAnimals <= 0) return;
+            if (!ctx.state.growingSeasonNow) return;   // see EnsureTextilePlot
 
             var crop = BestOfRole(ctx, PlantRole.Fodder);
             if (crop == null)

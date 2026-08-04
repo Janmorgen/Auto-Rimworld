@@ -651,11 +651,16 @@ namespace AutoColony
             s.wood = CountOnMap(map, ThingDefOf.WoodLog);
             s.steel = CountOnMap(map, ThingDefOf.Steel);
             s.components = CountOnMap(map, ThingDefOf.ComponentIndustrial);
-            // Map-wide, for the third time today. Cloth harvested off a cotton field lies where
-            // it dropped until somebody hauls it, and a tailor works from anything reachable —
-            // so counted off the stockpile, a colony with a full field of cut cotton reads zero
-            // cloth, refuses to sew, and sows more cotton it does not need.
-            s.textiles = CountOnMap(map, AcDefs.Cloth);
+            // Everything a coat can be made of, not just cloth.
+            //
+            // A parka's stuffCategories are Fabric and Leathery. This counted Cloth alone, so a
+            // colony that hunts — which is every colony here — read zero textiles while sitting
+            // on the hides of everything it had killed, and the clothing goal reported "0 cloth
+            // to sew with" as two colonists froze to death at -31C.
+            //
+            // Asked of the stuff categories rather than a list of items, so leathers, wools and
+            // anything a mod adds all count without being named.
+            s.textiles = ClothingStuffOnMap(map);
             s.silver = rc.Silver;
 
             // Map-wide, not stockpile-only.
@@ -716,6 +721,44 @@ namespace AutoColony
 
                 total += def.ingestible.CachedNutrition * thing.stackCount;
             }
+            return total;
+        }
+
+        static List<ThingDef> clothingStuffCache;
+
+        /// <summary>
+        /// Everything on the map that a coat could be made from — fabric, leather, wool.
+        ///
+        /// The categories come from the stuff system rather than a list of defNames, so this
+        /// holds for modded materials, and it is the same question the tailor bench asks when
+        /// it decides whether a bill can run.
+        /// </summary>
+        static int ClothingStuffOnMap(Map map)
+        {
+            if (clothingStuffCache == null)
+            {
+                clothingStuffCache = new List<ThingDef>();
+                var all = DefDatabase<ThingDef>.AllDefsListForReading;
+                for (int i = 0; i < all.Count; i++)
+                {
+                    var def = all[i];
+                    if (!def.IsStuff || def.stuffProps == null || def.stuffProps.categories == null) continue;
+
+                    var categories = def.stuffProps.categories;
+                    for (int c = 0; c < categories.Count; c++)
+                    {
+                        // Fabric covers cloth and the wools; Leathery covers every hide. Those
+                        // are exactly the two a parka accepts.
+                        if (categories[c] == StuffCategoryDefOf.Fabric ||
+                            categories[c] == StuffCategoryDefOf.Leathery)
+                        { clothingStuffCache.Add(def); break; }
+                    }
+                }
+            }
+
+            int total = 0;
+            for (int i = 0; i < clothingStuffCache.Count; i++)
+                total += CountOnMap(map, clothingStuffCache[i]);
             return total;
         }
 
