@@ -74,6 +74,8 @@ namespace AutoColony.Modules
             // is there the survey below will keep asking for a second table.
             if (!crisis) SeatWhatNeedsSeating(ctx);
 
+            NameWhatIsDry(ctx);
+
             unhandled.Clear();
             var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled,
                                               ctx.Gene(Genes.RoomEssentialWeight),
@@ -228,6 +230,9 @@ namespace AutoColony.Modules
         /// gets its own line rather than inheriting this one's silence.
         /// </summary>
         static bool graveWaitNoted;
+
+        /// <summary>What was dry last pass, so the chronicle speaks on change rather than every pass.</summary>
+        static string fuelNoted = "";
 
         /// <summary>Reported surgeries, so each is chronicled once rather than every pass.</summary>
         static readonly HashSet<int> surgeryNoted = new HashSet<int>();
@@ -668,6 +673,52 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
+        /// Say which buildings are dry, not how many.
+        ///
+        /// The vitals line gained "2 DRY" and it is not enough: two dry things could be a stove
+        /// and a generator, which is a colony about to stop eating and stop making power, or two
+        /// torch lamps, which is a colony that will be slightly darker. Run 109 showed "2 DRY"
+        /// standing for fourteen game-hours with Hauling already at 4.0 and no way to tell from
+        /// the log whether that mattered. The list was captured for this and then only counted —
+        /// the field's own doc comment says "so the chronicle can name the thing rather than
+        /// count it", which is a note to somebody who did not then do it.
+        ///
+        /// Spoken on change, like the pen's enclosure verdict, so a long dry spell is one line
+        /// rather than one per pass.
+        /// </summary>
+        static void NameWhatIsDry(DirectorContext ctx)
+        {
+            var dry = ctx.state.fuelStarved;
+            if (dry == null || dry.Count == 0)
+            {
+                if (fuelNoted.Length > 0)
+                {
+                    Chronicle.Record(ChronicleCategory.Economy,
+                        "fuel: everything that burns is loaded again (was " + fuelNoted + ")");
+                    fuelNoted = "";
+                }
+                return;
+            }
+
+            var names = new List<string>();
+            for (int i = 0; i < dry.Count; i++)
+            {
+                var def = dry[i].def;
+                var label = def != null ? (def.label ?? def.defName) : "something";
+                if (!names.Contains(label)) names.Add(label);
+            }
+            names.Sort(StringComparer.Ordinal);
+            string now = string.Join(", ", names.ToArray());
+            if (now == fuelNoted) return;
+
+            fuelNoted = now;
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "fuel: {0} waiting on wood — {1}; refuelling is Hauling work, so that is the " +
+                "lever, not whatever the bench does",
+                dry.Count, now));
+        }
+
+        /// <summary>
         /// Put a seat against everything that cannot be used without one.
         ///
         /// This is not a defect remedy and deliberately sits outside the survey, because the
@@ -707,13 +758,17 @@ namespace AutoColony.Modules
             {
                 var thing = things[i];
                 if (thing == null || thing.Faction != Faction.OfPlayer) continue;
-                if (!Furniture.SeatingRule.NeedsAdjacentSeat(thing.def)) continue;
+
+                // The blueprint counts as the table. Waiting for it to finish leaves a window in
+                // which the survey sees an unseatable colony and orders another table every pass.
+                var subject = Furniture.SeatingRule.Subject(thing);
+                if (subject == null) continue;
 
                 // How many people could be sitting here at once. A dining table is for the
                 // colony, so it is asked of the colony; a joy building only has to be *usable*,
                 // and one seat is what usable means. Neither number is a guess about this
                 // particular building.
-                int wanted = thing.def.surfaceType == SurfaceType.Eat
+                int wanted = subject.surfaceType == SurfaceType.Eat
                     ? Math.Max(1, ctx.state.colonists)
                     : 1;
 
@@ -746,7 +801,7 @@ namespace AutoColony.Modules
                         have++;
                         Chronicle.Record(ChronicleCategory.Build, string.Format(
                             "seating: a {0} beside the {1} — it cannot be used without one",
-                            seat.label ?? seat.defName, thing.def.label ?? thing.def.defName));
+                            seat.label ?? seat.defName, subject.label ?? subject.defName));
                     }
             }
         }

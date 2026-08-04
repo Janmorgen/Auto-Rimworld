@@ -902,8 +902,11 @@ namespace AutoColony.Modules
             {
                 reservedMedic = best;
                 Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    // "medicine 0" here meant a skill level and was read as a supply count by the
+                    // one person who has ever had to interpret this line, next to a vitals line
+                    // saying med 30 in the same hour. Said in full.
                     "{0} colonists down — holding {1} back from the fight to tend them " +
-                    "(medicine {2}, leaving {3} in the line)",
+                    "(Medicine skill {2}, leaving {3} in the line)",
                     ctx.state.colonistsDowned, best.LabelShortCap, bestSkill, fighters.Count - 1));
             }
 

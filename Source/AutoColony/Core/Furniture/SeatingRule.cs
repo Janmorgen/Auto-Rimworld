@@ -114,13 +114,45 @@ namespace AutoColony.Furniture
         }
 
         /// <summary>
-        /// The cells touching the thing's footprint — where a chair would have to go. Corners are
-        /// excluded: a pawn sits square-on to what they are using.
+        /// The cells where a chair would actually work — orthogonally touching the footprint,
+        /// corners excluded.
+        ///
+        /// This said "corners are excluded" and then returned <c>ExpandedBy(1).EdgeCells</c>,
+        /// which includes all four of them. The game does not: the validator behind
+        /// <c>TryFindChairOrSpot</c> walks <c>GenAdj.CardinalDirections</c> from the chair and
+        /// asks whether the edifice there has <c>surfaceType == Eat</c>. A diagonal chair is not
+        /// at the table.
+        ///
+        /// So run 109 put stools on corners, counted them as satisfying the need, and left the
+        /// table unusable — while <c>AteWithoutTable</c> went on firing and AddTable went on
+        /// ordering tables. Six tables and thirteen stools for two colonists. The rule was right
+        /// and my idea of "next to" was one cell wider than the game's, which is the whole bug.
         /// </summary>
         public static IEnumerable<IntVec3> Adjacent(Thing thing)
         {
             var rect = thing.OccupiedRect();
-            return rect.ExpandedBy(1).EdgeCells;
+            var ring = SeatingGeometry.CardinalRing(rect.minX, rect.maxX, rect.minZ, rect.maxZ);
+
+            var cells = new List<IntVec3>(ring.Count);
+            for (int i = 0; i < ring.Count; i++) cells.Add(new IntVec3(ring[i].x, 0, ring[i].z));
+            return cells;
+        }
+
+        /// <summary>
+        /// What this thing is or is about to be — a table, or the blueprint of one.
+        ///
+        /// Seating ran on built furniture only, so a table spent its whole construction with no
+        /// stool coming, and the survey went on reporting "nowhere to eat off a table" and
+        /// ordering another table for every pass of that window. Six went out before the first
+        /// stool. The seat belongs in the same queue as the thing it serves.
+        /// </summary>
+        public static ThingDef Subject(Thing thing)
+        {
+            if (thing == null) return null;
+            if (NeedsAdjacentSeat(thing.def)) return thing.def;
+
+            var building = PlacementUtil.BuildTargetOf(thing);
+            return NeedsAdjacentSeat(building) ? building : null;
         }
 
         /// <summary>
