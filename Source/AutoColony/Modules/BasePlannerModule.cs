@@ -556,11 +556,14 @@ namespace AutoColony.Modules
                         // close comparison.
                         if (++room.shellAttempts > MaxShellAttempts)
                         {
+                            string why;
+                            ShellComplete(ctx.map, room, out why);
                             Chronicle.Record(ChronicleCategory.Build, string.Format(
                                 "giving up on the {0} room at {1} — its walls have been started " +
-                                "{2} times and never finished, so the site is the problem rather " +
-                                "than the building; freeing it and choosing somewhere else",
-                                room.role, room.Center, room.shellAttempts - 1));
+                                "{2} times and never finished ({3}), so the site is the problem " +
+                                "rather than the building; freeing it and choosing somewhere else",
+                                room.role, room.Center, room.shellAttempts - 1,
+                                why ?? "reason unclear"));
                             layout.rooms.RemoveAt(i);
                             Note("abandoned an unbuildable " + room.role + " site");
                             return;
@@ -2826,15 +2829,47 @@ namespace AutoColony.Modules
         /// </summary>
         static bool ShellComplete(Map map, PlannedRoom room)
         {
+            string why;
+            return ShellComplete(map, room, out why);
+        }
+
+        /// <summary>
+        /// As above, saying which test failed.
+        ///
+        /// The two failures need entirely different answers and were indistinguishable. A gap in
+        /// the wall means the colony has not finished building and should carry on. An enclosed
+        /// test that fails with every wall standing means the *site* is wrong — split by an
+        /// obstruction, or open to the map edge — and no amount of building will fix it.
+        ///
+        /// Run 100 abandoned three sites at day 10 as "walls started 6 times and never
+        /// finished", re-sited duplicates of both roles, and reached day 10 with one room
+        /// working. The give-up counter only advances when the shell is neither complete nor
+        /// pending, so those walls were built and something else was failing — and nothing
+        /// recorded which something.
+        /// </summary>
+        static bool ShellComplete(Map map, PlannedRoom room, out string why)
+        {
             var door = room.Door;
             foreach (var cell in room.Rect.EdgeCells)
             {
                 if (cell.x == door.x && cell.z == door.z) continue;
                 if (!cell.InBounds(map)) continue;
-                if (cell.GetEdifice(map) == null) return false;
+                if (cell.GetEdifice(map) == null)
+                {
+                    why = "a gap in the wall at " + cell;
+                    return false;
+                }
             }
 
-            return Enclosed(map, room);
+            if (!Enclosed(map, room))
+            {
+                why = "every wall stands but the interior is not one sealed space — split by " +
+                      "something inside it, or open to the map edge";
+                return false;
+            }
+
+            why = null;
+            return true;
         }
 
         /// <summary>
