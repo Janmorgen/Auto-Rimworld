@@ -331,8 +331,18 @@ namespace AutoColony.Modules
             Need("Firefighter", s.firesNearBase > 0 ? 6f : 1f);
             Need("Patient", 1f);
             Need("PatientBedRest", 1f);
+            // Untended is the sharper signal, and avgHealth is the blind one.
+            //
+            // avgHealth is SummaryHealthPercent, which counts damaged body parts and cannot see
+            // a hediff — so an infection reads as perfect health and never lifts Doctor at all,
+            // while a colonist with an old scar drags it up for ever. Asking the game who
+            // actually needs tending replaces a proxy with the fact it was standing in for.
+            //
+            // Not a new rule: the same rung of the same ladder, given a better input. avgHealth
+            // stays underneath it, because damaged parts are still worth a doctor's time.
             Need("Doctor", notReachingThem ? 5f
                          : s.colonistsDowned > 0 ? 4f
+                         : s.colonistsUntended > 0 ? 3f
                          : (s.avgHealth < 0.9f ? 2f : 1f));
 
             // Sowing in a season nothing grows in is work that produces nothing.
