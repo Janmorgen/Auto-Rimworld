@@ -128,18 +128,47 @@ namespace AutoColony.Modules
             medicineSkillReported = false;
 
             var map = ctx.map;
-            foreach (var zone in map.zoneManager.AllZones)
+
+            // Sized by the colony and widened when it runs short, rather than sown once at a
+            // fixed 24 cells and never thought about again.
+            //
+            // Medicine was the only quantity in ColonyState that nothing acted on. It was
+            // measured map-wide, printed in the vitals, and read by exactly one caller — the
+            // player model — so "med 0" and "med 30" produced identical behaviour. Run 110 hit
+            // med 0 with the game's own Low medicine alert up, a heatstroke casualty, and a
+            // plot the right size for a colony that was not short.
+            //
+            // "Short" is RimWorld's own line: Alert_LowMedicine fires below
+            // MedicinePerColonistThreshold, which is 2 per colonist. Borrowing it means the
+            // colony starts growing more at the moment the player's screen starts warning, and
+            // nobody here has to invent a number.
+            bool short_ = ctx.state.medicineCount < LowMedicinePerColonist * ctx.state.colonists;
+            int wanted = System.Math.Max(MedicinePlotCells,
+                                         ctx.state.colonists * MedicineCellsPerColonist);
+            if (short_) wanted *= 2;
+
+            var standing = FindZoneGrowing(ctx, healroot);
+            if (standing != null)
             {
-                var g = zone as Zone_Growing;
-                if (g == null) continue;
-                var plant = g.GetPlantDefToGrow();
-                if (plant != null && plant.defName == healroot.defName) return;   // already have one
+                int have = standing.Cells.Count;
+                if (have >= wanted) return;
+
+                var more = FindFertileCells(ctx, wanted - have);
+                for (int i = 0; i < more.Count; i++) standing.AddCell(more[i]);
+                if (more.Count > 0)
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "widened the healroot plot by {0} cells — {1} medicine for {2} colonists, " +
+                        "and the game calls anything under {3} apiece low; healroot takes about " +
+                        "eleven days, so the time to sow more is before the last one is used",
+                        more.Count, ctx.state.medicineCount, ctx.state.colonists,
+                        LowMedicinePerColonist));
+                return;
             }
 
             // Only once the colony is feeding itself. Medicine matters, but not before dinner.
             if (ctx.state.growingCells <= 0) return;
 
-            var cells = FindFertileCells(ctx, MedicinePlotCells);
+            var cells = FindFertileCells(ctx, wanted);
             if (cells.Count == 0) return;
 
             var plot = new Zone_Growing(map.zoneManager);
@@ -154,6 +183,16 @@ namespace AutoColony.Modules
 
         /// <summary>Enough healroot to keep a small colony in herbal medicine, not a cash crop.</summary>
         const int MedicinePlotCells = 24;
+
+        /// <summary>Plot cells per colonist, so the plot grows with the people it treats.</summary>
+        const int MedicineCellsPerColonist = 10;
+
+        /// <summary>
+        /// RimWorld's own <c>Alert_LowMedicine.MedicinePerColonistThreshold</c>, read out of the
+        /// assembly rather than guessed. Below this the player gets a Low medicine warning, so
+        /// below this is where the colony should already be growing more.
+        /// </summary>
+        const int LowMedicinePerColonist = 2;
 
         /// <summary>Cloth for a coat each, roughly, rather than a textile industry.</summary>
         const int TextilePlotCells = 30;
