@@ -715,6 +715,21 @@ namespace AutoColony
                 if (thing == null || !thing.Spawned) continue;
                 if (thing.IsForbidden(Faction.OfPlayer)) continue;
 
+                // Not corpses, and not things still walking around.
+                //
+                // FoodSourceNotPlantOrTree includes both, and a corpse carries an enormous
+                // amount of nutrition — a thrumbo's more than a colony eats in a month. Run 102
+                // killed a thrumbo, read "food 50.7d", and starved two colonists to death while
+                // the game's own alert said "Low food" on the same screen. A corpse is not food
+                // until somebody butchers it, and butchering is a separate job the director
+                // already orders; the meat that comes out is counted then, once.
+                //
+                // This is a fault I introduced tonight. Counting map-wide instead of
+                // stockpile-only was right — a colony eats food it has not tidied away — but
+                // the group I walked to do it contains things that are food only in the sense
+                // that something could eventually eat them.
+                if (thing is Corpse || thing is Pawn) continue;
+
                 var def = thing.def;
                 if (def == null || def.ingestible == null) continue;
                 if (!def.IsNutritionGivingIngestible || !def.ingestible.HumanEdible) continue;
