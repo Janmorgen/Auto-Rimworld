@@ -1370,7 +1370,23 @@ namespace AutoColony.Modules
                 { standing = b; break; }
             }
             catch (Exception) { return; }
-            if (standing == null) return;
+
+            if (standing == null)
+            {
+                // A pen that existed and does not now. Run 92 closed a pen on day 0 and fenced
+                // a second one on day 15, with nothing in between saying why — raiders had been
+                // through twice, and losing a pen means the animals are loose, which is worth a
+                // line of its own rather than being inferred from a rebuild a fortnight later.
+                if (penEnclosedLast.HasValue)
+                {
+                    Chronicle.Record(ChronicleCategory.Build,
+                        "the pen marker is gone — destroyed or deconstructed. Whatever it held is " +
+                        "loose, and the fence around it is now just fence");
+                    penEnclosedLast = null;
+                    penMarkerStandingSince = -1;
+                }
+                return;
+            }
 
             if (penMarkerStandingSince < 0) penMarkerStandingSince = Find.TickManager.TicksGame;
 
