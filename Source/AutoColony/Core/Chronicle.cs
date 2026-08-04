@@ -202,7 +202,11 @@ namespace AutoColony
                         // "8 DRY" reads as a colony falling behind on hauling. "8 DRY, NO FUEL"
                         // reads as what it is: nothing on the map can light them, and no work
                         // priority will change that.
-                        m.fuelOnHand <= 0 ? ", NO FUEL" : "")
+                        // Three states, three words, because they take three different levers:
+                        // logs to carry, timber to cut, or nothing at all.
+                        m.fuelOnHand > 0 ? ""
+                            : m.fuelStanding > 0 ? ", UNCUT"
+                            : ", NO FUEL")
                     : ""));
         }
 

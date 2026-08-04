@@ -69,9 +69,9 @@ namespace AutoColony.Tests
             // Run 110: eight dry hoppers, zero wood anywhere, three idle colonists. Read as a
             // labour shortage it says "the colony cannot keep up"; the truth was that there was
             // nothing to keep up with, and the two want opposite responses.
-            Assert.True(FuelBudget.NoFuelToBeHad(8, 0));
-            Assert.False(FuelBudget.NoFuelToBeHad(8, 250));
-            Assert.False(FuelBudget.NoFuelToBeHad(0, 0));   // nothing dry is not a fuel problem
+            Assert.True(FuelBudget.NoFuelToBeHad(8, 0, 0));
+            Assert.False(FuelBudget.NoFuelToBeHad(8, 250, 0));
+            Assert.False(FuelBudget.NoFuelToBeHad(0, 0, 0));   // nothing dry is not a fuel problem
         }
 
         [Fact]
@@ -79,8 +79,8 @@ namespace AutoColony.Tests
         {
             // The one case where the first of a kind is not allowed. A stove on a map with no
             // wood is a wall with a bill list.
-            Assert.False(FuelBudget.WorthBuildingABurner(8, 0, 0));
-            Assert.False(FuelBudget.WorthBuildingABurner(1, 0, 3));
+            Assert.False(FuelBudget.WorthBuildingABurner(8, 0, 0, 0));
+            Assert.False(FuelBudget.WorthBuildingABurner(1, 0, 0, 3));
         }
 
         [Fact]
@@ -88,13 +88,44 @@ namespace AutoColony.Tests
         {
             // Nothing dry yet means nothing has asked for fuel, so there is no evidence either
             // way — a colony must be able to build its first stove.
-            Assert.True(FuelBudget.WorthBuildingABurner(0, 0, 0));
+            Assert.True(FuelBudget.WorthBuildingABurner(0, 0, 0, 0));
         }
 
         [Fact]
         public void FuelOnHandLetsBurnersThroughAgain()
         {
-            Assert.True(FuelBudget.WorthBuildingABurner(2, 400, 1));
+            Assert.True(FuelBudget.WorthBuildingABurner(2, 400, 0, 1));
+        }
+
+        [Fact]
+        public void TimberStandingIsNotTheSameAsNoFuel()
+        {
+            // Run 110: eight dry hoppers, no logs, and trees still up. A standing tree is two
+            // jobs from being fuel — cut it, then carry the logs — so it is neither a supply
+            // failure nor something Hauling can answer.
+            Assert.True(FuelBudget.FuelUncut(8, 0, 3000));
+            Assert.False(FuelBudget.NoFuelToBeHad(8, 0, 3000));
+        }
+
+        [Fact]
+        public void LogsOnTheGroundAreNotUncut()
+        {
+            // Something to carry means the chopping is done and Hauling is the lever.
+            Assert.False(FuelBudget.FuelUncut(8, 120, 3000));
+        }
+
+        [Fact]
+        public void NothingStandingAndNothingCutIsTheRealSupplyFailure()
+        {
+            Assert.False(FuelBudget.FuelUncut(8, 0, 0));
+            Assert.True(FuelBudget.NoFuelToBeHad(8, 0, 0));
+        }
+
+        [Fact]
+        public void TimberStandingStillAllowsABurner()
+        {
+            // Only the true supply failure refuses the first one; uncut timber is a work problem.
+            Assert.True(FuelBudget.WorthBuildingABurner(8, 0, 3000, 0));
         }
 
         [Fact]

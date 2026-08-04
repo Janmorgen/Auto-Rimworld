@@ -124,6 +124,18 @@ namespace AutoColony.Modules
             float target = ctx.Gene(Genes.WoodTarget);
             if (ctx.plan != null) target = AcMath.Max(target,
                 AcMath.Max(ctx.plan.Needs.For("WoodLog"), ctx.plan.QuantityWanted("WoodLog")));
+
+            // And what the colony's own fires want.
+            //
+            // The target covered the gene and whatever the plan meant to *build* with, and had
+            // nothing to say about the stove, the campfire and the passive coolers already
+            // standing — so a colony could read "wood target met" with eight hoppers empty and
+            // stop chopping. Run 110 did exactly that: PlantCutting sat at its ceiling, the
+            // trees stayed up, and the fires went out.
+            //
+            // fuelWanted is the sum of what every hopper has room for, so this is the colony's
+            // actual demand rather than a number anybody picked.
+            target = AcMath.Max(target, ctx.state.fuelWanted);
             if (ctx.state.wood >= target) return 0;
 
             float aggression = ctx.Gene(Genes.ChopAggression);

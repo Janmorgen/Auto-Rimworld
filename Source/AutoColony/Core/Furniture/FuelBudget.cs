@@ -55,9 +55,22 @@ namespace AutoColony.Furniture
         /// problem: Hauling was at the top of the table, so the reading was "the colony cannot
         /// keep up", when the truth was that there was nothing to keep up with.
         /// </summary>
-        public static bool NoFuelToBeHad(int hoppersWantingFuel, int fuelOnHand)
+        public static bool NoFuelToBeHad(int hoppersWantingFuel, int fuelOnHand, int fuelStanding)
         {
-            return hoppersWantingFuel > 0 && fuelOnHand <= 0;
+            return hoppersWantingFuel > 0 && fuelOnHand <= 0 && fuelStanding <= 0;
+        }
+
+        /// <summary>
+        /// Fires out, no logs to carry, but timber still standing.
+        ///
+        /// The middle state, and the one that was invisible. It looks exactly like a supply
+        /// failure from the hopper's end — nothing to haul — and exactly like a labour failure
+        /// from the work table's end, since Hauling is already at the top and achieving nothing.
+        /// It is neither: it is a *chopping* failure, and the lever is the wood target.
+        /// </summary>
+        public static bool FuelUncut(int hoppersWantingFuel, int fuelOnHand, int fuelStanding)
+        {
+            return hoppersWantingFuel > 0 && fuelOnHand <= 0 && fuelStanding > 0;
         }
 
         /// <summary>
@@ -69,10 +82,10 @@ namespace AutoColony.Furniture
         /// something that will never light.
         /// </summary>
         public static bool WorthBuildingABurner(int hoppersWantingFuel, int fuelOnHand,
-                                                int burnersAlreadyBuilt)
+                                                int fuelStanding, int burnersAlreadyBuilt)
         {
             if (burnersAlreadyBuilt <= 0 && hoppersWantingFuel <= 0) return true;
-            return !NoFuelToBeHad(hoppersWantingFuel, fuelOnHand);
+            return !NoFuelToBeHad(hoppersWantingFuel, fuelOnHand, fuelStanding);
         }
     }
 }

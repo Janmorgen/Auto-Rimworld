@@ -338,6 +338,16 @@ namespace AutoColony
         /// </summary>
         public int burners;
 
+        /// <summary>
+        /// Fuel still standing as a plant. Not fuel yet — it has to be cut, and then the logs
+        /// have to be hauled. Kept apart from <see cref="fuelOnHand"/> so the director can tell
+        /// "nobody is chopping" from "nobody is hauling" from "there is none".
+        /// </summary>
+        public int fuelStanding;
+
+        /// <summary>Wood it would take to fill every hopper the colony owns.</summary>
+        public int fuelWanted;
+
         /// <summary>Whether a growing zone is already raising the fuel back.</summary>
         public bool growingWood;
 
@@ -1316,7 +1326,17 @@ namespace AutoColony
                 // cooked" was to raise *Cooking* — which puts a cook in front of a stove they
                 // cannot light.
                 var refuelable = building.TryGetComp<CompRefuelable>();
-                if (refuelable != null) s.burners++;
+                if (refuelable != null)
+                {
+                    s.burners++;
+
+                    // What it would take to fill every hopper the colony owns. The wood target
+                    // was a gene plus whatever the plan wanted to *build* with; the fires the
+                    // colony had already lit were in no target at all, so a colony could sit at
+                    // "wood target met" with eight of them empty.
+                    if (refuelable.Props != null)
+                        s.fuelWanted += (int)(refuelable.Props.fuelCapacity - refuelable.Fuel);
+                }
                 if (refuelable != null && refuelable.ShouldAutoRefuelNow)
                 {
                     s.buildingsWantingFuel++;
@@ -1334,6 +1354,7 @@ namespace AutoColony
                     // Asked through the hopper's own fuelFilter rather than by naming wood, so a
                     // chemfuel generator or a modded burner answers for itself.
                     s.fuelOnHand += FuelReachableFor(building.Map, refuelable);
+                    s.fuelStanding += StandingFuelFor(building.Map, refuelable);
                 }
 
                 var trader = building.TryGetComp<CompPowerTrader>();
@@ -1399,6 +1420,40 @@ namespace AutoColony
                     //
                     // Asked as plant.harvestedThingDef, so it holds for whatever a mod makes
                     // burnable and for the wood-bearing trees of any biome.
+                    // Counted apart, never added in. A standing tree is not fuel; it is two
+                    // jobs away from fuel — somebody has to cut it, and somebody has to carry
+                    // the logs to the hopper. Folding it into the same number said run 110 had
+                    // three thousand units of fuel while eight of its fires were out.
+                    //
+                    // The distinction is the whole point of the measurement, because the three
+                    // states want three different levers: logs on the ground is a Hauling
+                    // problem, trees standing with no logs is a chopping problem, and neither is
+                    // a supply problem no work priority can answer.
+                }
+            }
+            catch (Exception) { }
+            return total;
+        }
+
+        /// <summary>
+        /// Fuel still standing as a plant — harvestable, not yet harvested.
+        ///
+        /// Yield scaled by growth, because a sapling is not a log. This answers "could the
+        /// colony get more if it went and cut some", which is a different question from "is
+        /// there any to carry right now".
+        /// </summary>
+        static int StandingFuelFor(Map map, CompRefuelable refuelable)
+        {
+            if (map == null || refuelable == null || refuelable.Props == null) return 0;
+            var filter = refuelable.Props.fuelFilter;
+            if (filter == null) return 0;
+
+            int total = 0;
+            try
+            {
+                foreach (var def in filter.AllowedThingDefs)
+                {
+                    if (def == null) continue;
                     var sources = HarvestSourcesOf(def);
                     for (int i = 0; i < sources.Count; i++)
                     {
@@ -1478,6 +1533,7 @@ namespace AutoColony
             m.daysOfMeals = daysOfMeals;
             m.buildingsWantingFuel = buildingsWantingFuel;
             m.fuelOnHand = fuelOnHand;
+            m.fuelStanding = fuelStanding;
             m.medicineCount = medicineCount;
             m.medicineStored = medicineStored;
             m.usableMaterial = usableMaterial;

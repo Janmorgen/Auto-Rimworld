@@ -56,6 +56,9 @@ namespace AutoColony
         /// <summary>Units of fuel available for them. Zero with dry hoppers is a supply failure.</summary>
         public int fuelOnHand;
 
+        /// <summary>Fuel still standing as a plant — cut it and it becomes fuel.</summary>
+        public int fuelStanding;
+
         /// <summary>Medicine of any grade in store. Distinguishes "could not treat" from "did not".</summary>
         public int medicineCount;
 
