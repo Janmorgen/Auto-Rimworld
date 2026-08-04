@@ -620,10 +620,19 @@ namespace AutoColony
                 ? s.foodNutrition / (s.colonists * NutritionPerColonistDay)
                 : s.foodNutrition;
 
-            s.wood = Count(rc, ThingDefOf.WoodLog);
-            s.steel = Count(rc, ThingDefOf.Steel);
-            s.components = Count(rc, ThingDefOf.ComponentIndustrial);
-            s.textiles = Count(rc, AcDefs.Cloth);
+            // Map-wide, like the rest. These decide whether to go and get more — ResourceModule
+            // stops chopping at "wood >= target" and starts mining at "steel < target" — and a
+            // colony that has felled a forest but not tidied it away reads zero and fells
+            // another one. Every count here is spent in the currency these colonies die short
+            // of, which is hands, and a builder fetches material from wherever it is lying.
+            s.wood = CountOnMap(map, ThingDefOf.WoodLog);
+            s.steel = CountOnMap(map, ThingDefOf.Steel);
+            s.components = CountOnMap(map, ThingDefOf.ComponentIndustrial);
+            // Map-wide, for the third time today. Cloth harvested off a cotton field lies where
+            // it dropped until somebody hauls it, and a tailor works from anything reachable —
+            // so counted off the stockpile, a colony with a full field of cut cotton reads zero
+            // cloth, refuses to sew, and sows more cotton it does not need.
+            s.textiles = CountOnMap(map, AcDefs.Cloth);
             s.silver = rc.Silver;
 
             // Map-wide, not stockpile-only.

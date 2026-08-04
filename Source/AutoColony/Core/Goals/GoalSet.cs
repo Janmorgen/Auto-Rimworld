@@ -278,7 +278,7 @@ namespace AutoColony.Goals
             return ctx.state.colonistsUnderdressed + " of " + ctx.state.colonists +
                    " dressed for neither, " + ctx.state.outdoorTemperature.ToString("0") +
                    "C outdoors, worst " + ctx.state.worstClothingGap.ToString("0") +
-                   " degrees past bearing";
+                   " degrees past bearing, " + ctx.state.textiles + " cloth to sew with";
         }
     }
 
