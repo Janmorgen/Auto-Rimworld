@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AutoColony.Plants;
 using RimWorld;
 using Verse;
@@ -117,6 +118,7 @@ namespace AutoColony
                 else if (scenario == "livestock") { Provision(map); SpawnLivestock(map, 4); }
                 else if (scenario == "plants") ClassifyPlants(map);
                 else if (scenario == "seating") ClassifySeating(map);
+                else if (scenario == "walled") WallInAColonist(map);
                 else if (scenario == "research") ClearTheWayToResearch(map);
                 else if (scenario == "strip") Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO: removed " + HarnessSetup.StripMaterials(map) + " building material");
@@ -202,6 +204,119 @@ namespace AutoColony
         /// out matching the set RimWorld itself ships an alert for, and if it does not, the
         /// classifier is wrong.
         /// </summary>
+        /// <summary>
+        /// Wall a colonist in on purpose, and watch whether the colony lets them out.
+        ///
+        /// Solomon died sealed between a Kitchen wall and a rock face, and the fix for it was
+        /// written against a colony that will never reproduce that moment — RimWorld's runtime
+        /// RNG is not reset between runs, so the same map seed gives the same terrain and a
+        /// completely different afternoon. Waiting for the accident to recur is not a test.
+        ///
+        /// So the accident is staged. Four walls around one colonist, the colony's own faction so
+        /// the repair has something it is allowed to deconstruct, and then the harness watches
+        /// the two things that have to be true in order:
+        ///
+        ///   1. the director notices — colonistsCutOff goes to 1
+        ///   2. the colonist gets out — by a wall coming down or rock being mined
+        ///
+        /// Failing (1) means the pathfinder question is wrong. Failing (2) with (1) passing means
+        /// the repair found no edge it was willing to touch, which is a different bug and worth
+        /// telling apart.
+        /// </summary>
+        static void WallInAColonist(Map map)
+        {
+            var colonists = map.mapPawns.FreeColonistsSpawned;
+            if (colonists == null || colonists.Count < 2)
+            {
+                Chronicle.Record(ChronicleCategory.System,
+                    "WALLED cannot run: needs at least two colonists, one to trap and one to dig " +
+                    "them out");
+                return;
+            }
+
+            var victim = colonists[0];
+            var wall = AcDefs.Thing("Wall");
+            var stuff = GenStuff.DefaultStuffFor(wall);
+
+            int built = 0;
+            for (int d = 0; d < 4; d++)
+            {
+                var cell = victim.Position + GenAdj.CardinalDirections[d];
+                if (!cell.InBounds(map)) continue;
+
+                // Clear whatever stands there first, so the wall actually goes in.
+                var here = cell.GetThingList(map).ToList();
+                for (int i = 0; i < here.Count; i++)
+                    if (here[i] is Building) here[i].Destroy(DestroyMode.Vanish);
+
+                var w = ThingMaker.MakeThing(wall, stuff);
+                w.SetFactionDirect(Faction.OfPlayer);
+                GenSpawn.Spawn(w, cell, map);
+                built++;
+            }
+
+            walledVictim = victim;
+            walledSince = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            walledReported = false;
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "WALLED {0} sealed in at {1} behind {2} walls — watching for the director to " +
+                "notice and dig them out",
+                victim.LabelShortCap, victim.Position, built));
+        }
+
+        static Pawn walledVictim;
+        static int walledSince;
+        static bool walledReported;
+
+        /// <summary>
+        /// The verdict, checked as the game runs rather than asserted once at setup.
+        ///
+        /// Escape is measured as the pawn being able to reach food again, which is the same
+        /// question the director asks — not as "a wall was deconstructed", because an order that
+        /// is issued and never worked is not a rescue.
+        /// </summary>
+        public static void TickWalledCheck(ColonyState state)
+        {
+            if (walledVictim == null || walledReported) return;
+            if (state == null) return;
+
+            int now = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            int elapsed = now - walledSince;
+
+            bool noticed = state.colonistsCutOff > 0;
+            bool freed = walledVictim.Spawned && state.colonistsCutOff == 0;
+
+            if (noticed && !walledSeenNoticed)
+            {
+                walledSeenNoticed = true;
+                Chronicle.Record(ChronicleCategory.System, string.Format(
+                    "WALLED the director noticed after {0} ticks — colonistsCutOff = {1}",
+                    elapsed, state.colonistsCutOff));
+            }
+
+            if (walledSeenNoticed && freed)
+            {
+                walledReported = true;
+                Chronicle.Record(ChronicleCategory.System, string.Format(
+                    "WALLED PASS — {0} can reach food again after {1} ticks ({2:0.0} in-game hours)",
+                    walledVictim.LabelShortCap, elapsed, elapsed / 2500f));
+                return;
+            }
+
+            // A day is far longer than this should take and short of the point where the pawn
+            // starts starving, so a failure is reported while the colonist is still alive.
+            if (elapsed > 60000)
+            {
+                walledReported = true;
+                Chronicle.Record(ChronicleCategory.System, string.Format(
+                    "WALLED FAIL — {0} still cut off after a full day. noticed={1}",
+                    walledVictim.LabelShortCap, walledSeenNoticed));
+            }
+        }
+
+        static bool walledSeenNoticed;
+
         static void ClassifySeating(Map map)
         {
             var expected = new Dictionary<string, bool>

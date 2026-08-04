@@ -260,6 +260,11 @@ namespace AutoColony
             {
                 lastStateTick = tick;
                 lastState = ColonyState.Capture(map);
+
+                // The walled-in scenario grades itself off the same snapshot the director acts
+                // on, so a pass means the director's own perception cleared — not a separate
+                // opinion about whether the wall came down.
+                ScenarioHarness.TickWalledCheck(lastState);
                 lastState.AnnotateProximity(
                     layout.established ? layout.origin : map.Center,
                     AutoColonyMod.Settings.masterEnabled && evolution.Active != null

@@ -473,14 +473,24 @@ namespace AutoColony.Modules
             // colonists shared two beds. Nothing was misweighted; building simply had no way to
             // say it was falling behind.
             int backlog = s.pendingBlueprints + s.pendingFrames;
-            Need("Construction", backlog > 0
-                ? 2.2f + AcMath.Clamp01(backlog / 30f) * 1.5f
-                : 0.8f);
+            Need("Construction", s.colonistsCutOff > 0 ? 5f
+                               : backlog > 0
+                                 ? 2.2f + AcMath.Clamp01(backlog / 30f) * 1.5f
+                                 : 0.8f);
 
             // Against the plan's target as well as the genome's, the same way the resource
             // module designates against both. Otherwise the colony digs and chops for what the
             // goal needs while nobody is especially assigned to do it.
-            Need("Mining", 1f + Shortfall(s.steel, Target(ctx, Genes.SteelTarget, "Steel")) * 1.5f
+            // Taking a wall down is Construction work and cutting through rock is Mining, so a
+            // colonist walled in raises both — otherwise the order is issued and nobody goes.
+            //
+            // Measured: in the walled scenario the repair named the right wall within 751 ticks
+            // and the colonist stayed sealed for 23.8 in-game hours, because Construction sat at
+            // 2.3 against Tailoring at 3.5. The order was re-issued four times while somebody
+            // sewed. Freeing a colonist who cannot reach food ranks with tending a casualty; it
+            // is the same kind of clock.
+            Need("Mining", s.colonistsCutOff > 0 ? 5f
+                         : 1f + Shortfall(s.steel, Target(ctx, Genes.SteelTarget, "Steel")) * 1.5f
                               * (0.5f + ctx.Gene(Genes.MiningAggression)));
             Need("PlantCutting", 1f + Shortfall(s.wood, Target(ctx, Genes.WoodTarget, "WoodLog")) * 1.5f
                                    * (0.5f + ctx.Gene(Genes.ChopAggression)));
