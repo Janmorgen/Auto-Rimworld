@@ -32,6 +32,28 @@ namespace AutoColony.Goals
         public string ResearchWanted;
 
         /// <summary>
+        /// How hard the colony as a whole is pulling on each material, summed across every
+        /// unsatisfied goal rather than taken from the focus alone.
+        ///
+        /// Only the focus declared needs before, so the colony's wants were whatever the single
+        /// top-ranked goal happened to be short of, and every other layer exerted no force at
+        /// all. That is not how a colony wants things. Feeding people this afternoon, arming
+        /// them against next month's raid and powering a cooler before summer are all live at
+        /// once, and steel that serves three of them is worth more than steel that serves one.
+        ///
+        /// Weighted by horizon and by urgency, so nearer and more pressing goals pull harder
+        /// without further ones pulling zero. A long-term want is still a want.
+        /// </summary>
+        public readonly Dictionary<string, float> NeedPressure = new Dictionary<string, float>();
+
+        /// <summary>Total pull on a material, 0 when nothing wants it.</summary>
+        public float PressureFor(string thingDefName)
+        {
+            float pressure;
+            return NeedPressure.TryGetValue(thingDefName, out pressure) ? pressure : 0f;
+        }
+
+        /// <summary>
         /// Every room role an unsatisfied goal is still asking for.
         ///
         /// Published so the rest of the director can tell what the colony is *for* right now.
@@ -131,6 +153,12 @@ namespace AutoColony.Goals
                 if (record.blockedSince < 0) record.blockedSince = now;
 
                 if (goal.WantsRoom.HasValue) plan.RolesWanted.Add(goal.WantsRoom.Value);
+
+                // What this goal wants, folded into the colony's total pull. The weight is the
+                // horizon — Immediate 3, ShortTerm 2, LongTerm 1 — times how badly the goal
+                // wants it, so every layer exerts a force proportional to how near and how
+                // pressing it is, and none of them exerts none.
+                AccumulatePressure(plan, goal, ctx, urgency);
 
                 float score = ScoreOf(goal, ctx, now, emergency);
                 if (score > bestScore)
@@ -485,6 +513,34 @@ namespace AutoColony.Goals
                     if (!IsFinished(needs[r])) return true;
             }
             return false;
+        }
+
+        readonly MaterialNeeds scratch = new MaterialNeeds();
+
+        /// <summary>
+        /// Adds one goal's material wants to the plan's total, weighted by horizon and urgency.
+        ///
+        /// Deliberately separate from plan.Needs, which stays exactly what it was: the material
+        /// the *focus* must have before it can proceed. That is a gate and this is a gradient,
+        /// and conflating them would let a long-term want block a short-term build.
+        /// </summary>
+        void AccumulatePressure(ColonyPlan plan, ColonyGoal goal, DirectorContext ctx, float urgency)
+        {
+            scratch.Clear();
+            try { goal.DeclareNeeds(ctx, scratch); }
+            catch (System.Exception) { return; }
+            if (!scratch.Any) return;
+
+            float horizonWeight = 3f - (int)goal.Horizon;          // Immediate 3, Short 2, Long 1
+            float force = horizonWeight * AcMath.Clamp01(urgency);
+            if (force <= 0f) return;
+
+            foreach (var want in scratch.All)
+            {
+                float existing;
+                plan.NeedPressure.TryGetValue(want.Key, out existing);
+                plan.NeedPressure[want.Key] = existing + force;
+            }
         }
 
         float ScoreOf(ColonyGoal goal, DirectorContext ctx, int now, bool emergency)

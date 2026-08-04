@@ -77,7 +77,6 @@ namespace AutoColony.Modules
             // wider reach rather than an unlimited one — a colonist crossing the whole map for
             // one component is an afternoon spent, and the point is to value the walk, not to
             // ignore its cost.
-            int wantedRadiusSq = radius * NeededReach * radius * NeededReach;
             int wanted = 0;
 
             for (int i = 0; i < buffer.Count && done < MaxPerPass; i++)
@@ -85,9 +84,22 @@ namespace AutoColony.Modules
                 var thing = buffer[i];
                 if (!Claimable(thing, map)) continue;
 
-                bool needed = Needed(ctx, thing);
-                int reachSq = needed ? wantedRadiusSq : radiusSq;
+                // How far to walk scales with how hard the colony is pulling on this.
+                //
+                // Pressure is summed across every unsatisfied goal, weighted by horizon and
+                // urgency, so steel wanted by a fire, a build and a turret reaches further than
+                // steel wanted by one of them — and something no layer wants stays at the
+                // ordinary radius. That is the walk being valued against the want rather than
+                // treated as free.
+                //
+                // Capped, because a colonist crossing the map is an afternoon that every one of
+                // those goals also needed. The point is to price the distance, not to ignore it.
+                float pressure = Pressure(ctx, thing);
+                float reach = radius * AcMath.Clamp(1f + pressure * 0.5f, 1f, MaxReachMultiple);
+                int reachSq = (int)(reach * reach);
                 if ((thing.Position - origin).LengthHorizontalSquared > reachSq) continue;
+
+                bool needed = pressure > 0f;
 
                 ForbidUtility.SetForbidden(thing, false, false);
                 done++;
@@ -129,22 +141,22 @@ namespace AutoColony.Modules
             return done;
         }
 
-        /// <summary>How much further the colony will walk for something it actually needs.</summary>
-        const int NeededReach = 2;
+        /// <summary>The furthest the colony will go for anything, as a multiple of the usual radius.</summary>
+        const float MaxReachMultiple = 3f;
 
         /// <summary>
-        /// Whether the plan is currently short of this.
+        /// How hard every layer of the plan is pulling on this, together.
         ///
         /// Asked of the goal layer rather than of a list here, so what counts as valuable
         /// changes as the colony's situation does — steel while it is building, components while
-        /// it wants power, and neither once those are met.
+        /// it wants power, and neither once those are met. Summed across goals rather than
+        /// taken from the focus, because a colony wants several things at once and something
+        /// serving three of them is worth further travel than something serving one.
         /// </summary>
-        static bool Needed(DirectorContext ctx, Thing thing)
+        static float Pressure(DirectorContext ctx, Thing thing)
         {
-            if (ctx.plan == null || thing == null || thing.def == null) return false;
-            if (!ctx.plan.Needs.Any) return false;
-
-            return ctx.plan.Needs.For(thing.def.defName) > 0;
+            if (ctx.plan == null || thing == null || thing.def == null) return 0f;
+            return ctx.plan.PressureFor(thing.def.defName);
         }
 
         static bool Claimable(Thing thing, Map map)
