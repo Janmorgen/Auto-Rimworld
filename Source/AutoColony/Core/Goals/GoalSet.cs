@@ -247,6 +247,29 @@ namespace AutoColony.Goals
         static readonly string[] Research = { "ComplexClothing" };
 
         /// <summary>
+        /// Somewhere to research, because there is no warm garment a colony can make without it.
+        ///
+        /// This was left out on the argument that clothing does not always need research —
+        /// tribalwear is ungated, so surely a bare colony can dress itself. The defs say
+        /// otherwise, and the gate is one hop from where it looks. Apparel_Parka carries no
+        /// research prerequisite at all, and neither does Apparel_TribalA; what needs
+        /// ComplexClothing is the *tailoring bench*, both of them, the hand bench included. So
+        /// the garment is ungated and the only place to make it is not, and a colony without
+        /// that research can produce a war mask at a crafting spot and nothing that keeps
+        /// anybody warm.
+        ///
+        /// Run 104 proved it at -11C: seventy-one cloth in store, two of three colonists
+        /// dressed for neither, and "Clothe the colony" sitting at the top of the plan for days
+        /// with nothing the colony could do about it. Material was never the problem.
+        ///
+        /// Stating the dependency lets the planner walk back to the room, the same way wanting
+        /// a freezer resolves into wanting power. Where a bench already stands
+        /// ResearchCapacityGoal is satisfied and this costs nothing.
+        /// </summary>
+        public override string[] Requires { get { return NeedsBench; } }
+        static readonly string[] NeedsBench = { ResearchCapacityGoal.Id };
+
+        /// <summary>
         /// Whether everyone is dressed for the weather they are actually in.
         ///
         /// Asked of the colonists rather than of the buildings. The first version of this asked
