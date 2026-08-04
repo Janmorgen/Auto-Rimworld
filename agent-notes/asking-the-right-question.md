@@ -22,6 +22,24 @@ This note is the list, because the list is the lesson.
 | Is anyone healthy? | `SummaryHealthPercent` | that, **and** whether anyone is untended |
 | Is the colony fed? | days in the larder | that, **and** whether anyone is starving |
 
+### The gate is never on the thing
+
+Three times in one session, on three unrelated chains, the research that
+*gates making something* was not the research written on the thing:
+
+| looks like | actually |
+|---|---|
+| `Make_Wort` has no research → hops are usable | its only bench is the brewery, which needs Brewing |
+| psychite tea needs a drug lab → expensive | its recipe runs on a **campfire**; only Flake needs the lab |
+| `Apparel_Parka` has no research → anyone can sew one | both tailoring benches need ComplexClothing |
+
+A colony with seventy-one cloth froze at −11C because of the third one. The parka was
+never gated; the only place to make it was.
+
+So to ask "can this colony make X", check the recipe's `researchPrerequisite` **and** whether
+any bench in `RecipeDef.AllRecipeUsers` has its research done. Most recipes are listed on the
+bench rather than the other way round, and `AllRecipeUsers` handles both directions.
+
 Two more of the same family, about time rather than category:
 
 - **Is the pen enclosed?** — asked once and latched. Enclosure is a property of a standing
