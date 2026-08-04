@@ -121,7 +121,16 @@ food 9.1d (1 STARVING, hungriest 0.00)   colonists 3 (down 1)
 food 5.3d (1 STARVING, hungriest 0.00)   colonists 2 (down 1)
 ```
 
-A colonist at food need **0.00** — not low, zero — beside **9.1 days of food**. Before this the
+A colonist at food need **0.00** — not low, zero — beside **9.1 days of food**.
+
+> **Correction, run 102.** This note explained these deaths as a downed colonist being unable to
+> feed itself, and that is wrong for most of them. Of 61 starving readings in run 102 — two
+> Malnutrition deaths beside **50.7 days of food** — **55 had `down 0`**. The colonists were
+> upright. Ruled out since: a drafting leak (StandDown fired), hay counted as phantom food
+> (`foodType` excludes it from `HumanEdible`), a director food policy (none exists), forbidden
+> stock (already excluded from the count), and a miscounted pawn set (`FreeColonists`). Why an
+> upright colonist with reachable food does not eat is open, and it is the single failure that
+> has killed the most colonies in this project. Before this the
 vitals read `food 9.1d` and looked healthy. Final score: `Food security 1.00`, with the
 postmortem naming `NeedFood at 26.0` as the worst unmet complaint in the same breath.
 
