@@ -352,6 +352,17 @@ namespace AutoColony.Modules
             // of getting it there has not happened.
             bool idleGenerator = s.generators > s.workingGenerators;
 
+            // Food in the store and nothing cooked is a mood bill nobody had to pay.
+            //
+            // A colonist with no meal to hand eats raw and takes AteRawFood at -7. Run 107 held
+            // that thought on all four colonists at once, with five days of food and a working
+            // kitchen — nutrition was never short, none of it had been through a stove. The
+            // larder said "fed" and the colony was eating potatoes off the floor.
+            //
+            // Fourth of the same family: the colony owns the thing and the last step of making
+            // it useful has not happened.
+            bool nothingCooked = s.daysOfFood >= 1f && s.daysOfMeals < 1f;
+
             // Emergencies first: fire and untreated casualties outrank everything.
             // Only fires that could reach the colony justify dropping everything; a distant
             // wildfire is not worth a work-hour.
@@ -397,7 +408,9 @@ namespace AutoColony.Modules
             // Preserving the harvest matters more with the cold coming, because what is not
             // cooked and stored before the fields die is not eaten in the months after.
             // Butchering is Cooking work, so this is the same lever for both jobs.
-            Need("Cooking", (starving ? 4.5f : meatWaiting ? 4f : 1f + foodShortfall * 1.5f)
+            Need("Cooking", (starving ? 4.5f
+                           : meatWaiting || nothingCooked ? 4f
+                           : 1f + foodShortfall * 1.5f)
                             * (s.winterComing ? 1.3f : 1f));
 
             // Building scales with the backlog, the way gathering scales with the shortfall.

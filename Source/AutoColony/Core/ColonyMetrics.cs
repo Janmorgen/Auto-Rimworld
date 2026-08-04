@@ -47,6 +47,9 @@ namespace AutoColony
         /// <summary>Days of food that will rot before it is eaten.</summary>
         public float daysOfFoodSpoiling;
 
+        /// <summary>Days of food that is a cooked meal rather than an ingredient.</summary>
+        public float daysOfMeals;
+
         /// <summary>Medicine of any grade in store. Distinguishes "could not treat" from "did not".</summary>
         public int medicineCount;
 

@@ -235,6 +235,19 @@ namespace AutoColony
         /// without this code needing to know what a cooler is.
         /// </summary>
         public float daysOfFoodSpoiling;
+
+        /// <summary>
+        /// Days of food that is actually a cooked meal.
+        ///
+        /// The last step of the food chain, and the one nothing could see. A colonist with no
+        /// meal to hand eats raw and takes AteRawFood at -7 — run 107 carried that thought on
+        /// all four colonists at once while holding five days of food and running a working
+        /// kitchen. Nutrition was never the problem; none of it had been through a stove.
+        ///
+        /// Asked as IngestibleProperties.IsMeal, which is the game's own distinction between
+        /// dinner and an ingredient.
+        /// </summary>
+        public float daysOfMeals;
         public float daysOfFood;
         /// <summary>Medicine the colony can reach, stockpiled or loose. What decides treatment.</summary>
         public int medicineCount;
@@ -774,8 +787,8 @@ namespace AutoColony
             //
             // Colonists eat any reachable unforbidden food, stockpiled or not, so reachable is
             // the honest measure of what the colony has to eat.
-            float spoilingNutrition;
-            s.foodNutrition = ReachableHumanEdibleNutrition(map, out spoilingNutrition);
+            float spoilingNutrition, mealNutrition;
+            s.foodNutrition = ReachableHumanEdibleNutrition(map, out spoilingNutrition, out mealNutrition);
             s.foodStored = rc.TotalHumanEdibleNutrition;
             s.daysOfFood = s.colonists > 0
                 ? s.foodNutrition / (s.colonists * NutritionPerColonistDay)
@@ -784,6 +797,10 @@ namespace AutoColony
             s.daysOfFoodSpoiling = s.colonists > 0
                 ? spoilingNutrition / (s.colonists * NutritionPerColonistDay)
                 : spoilingNutrition;
+
+            s.daysOfMeals = s.colonists > 0
+                ? mealNutrition / (s.colonists * NutritionPerColonistDay)
+                : mealNutrition;
 
             s.unbutcheredNutrition = UnbutcheredNutrition(map);
             s.daysOfFoodUnbutchered = s.colonists > 0
@@ -851,9 +868,10 @@ namespace AutoColony
         /// <summary>Shelf life below which food counts as about to be lost.</summary>
         const float SpoilingSoonDays = 3f;
 
-        static float ReachableHumanEdibleNutrition(Map map, out float spoiling)
+        static float ReachableHumanEdibleNutrition(Map map, out float spoiling, out float meals)
         {
             spoiling = 0f;
+            meals = 0f;
             if (map == null || map.listerThings == null) return 0f;
 
             float total = 0f;
@@ -887,6 +905,7 @@ namespace AutoColony
 
                 float nutrition = def.ingestible.CachedNutrition * thing.stackCount;
                 total += nutrition;
+                if (def.ingestible.IsMeal) meals += nutrition;
 
                 // And how much of it will not last. A stack with days left in it is fine
                 // wherever it is; one about to turn is work the colony is about to lose.
@@ -1292,6 +1311,7 @@ namespace AutoColony
             m.colonistsLosingToDisease = colonistsLosingToDisease;
             m.daysOfFoodUnbutchered = daysOfFoodUnbutchered;
             m.daysOfFoodSpoiling = daysOfFoodSpoiling;
+            m.daysOfMeals = daysOfMeals;
             m.medicineCount = medicineCount;
             m.medicineStored = medicineStored;
             m.usableMaterial = usableMaterial;
