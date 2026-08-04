@@ -18,6 +18,12 @@ namespace AutoColony.Rooms
         /// <summary>Lamps and braziers. Wanted near what people do, not in a corner.</summary>
         Light,
 
+        /// <summary>
+        /// Sat on. Wants to be touching the thing it is sat at, and is worth nothing anywhere
+        /// else — a chair across the room from the table is furniture nobody will ever use.
+        /// </summary>
+        Seat,
+
         /// <summary>Everything else — decoration, oddments.</summary>
         Other
     }
@@ -132,6 +138,7 @@ namespace AutoColony.Rooms
                 case FurnitureKind.Storage: return FurnitureKind.WorkTable;
                 case FurnitureKind.Light: return FurnitureKind.WorkTable;
                 case FurnitureKind.Surface: return FurnitureKind.Light;
+                case FurnitureKind.Seat: return FurnitureKind.Surface;
                 default: return null;
             }
         }
@@ -192,6 +199,20 @@ namespace AutoColony.Rooms
                     w.spacing = 1.5f;
                     w.partnerAffinity = 0.4f;
                     w.purity = 1.0f;
+                    break;
+
+                case FurnitureKind.Seat:
+                    // The strongest affinity of anything here, and deliberately so. For every
+                    // other kind, closeness is a saving; for a seat it is the whole point. The
+                    // game will not let a pawn eat at a table or play chess unless the chair is
+                    // *touching* it, so a seat that scores well on space and badly on partner
+                    // has been placed wrong however open the floor around it looks.
+                    w.doorClearance = 0.4f;
+                    w.access = 0.6f;
+                    w.wallHugging = 0f;
+                    w.spacing = 0f;
+                    w.partnerAffinity = 4.0f;
+                    w.purity = 0.5f;
                     break;
 
                 case FurnitureKind.Light:

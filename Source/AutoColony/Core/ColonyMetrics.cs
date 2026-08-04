@@ -50,6 +50,9 @@ namespace AutoColony
         /// <summary>Days of food that is a cooked meal rather than an ingredient.</summary>
         public float daysOfMeals;
 
+        /// <summary>Buildings whose fuel hopper the game says wants filling.</summary>
+        public int buildingsWantingFuel;
+
         /// <summary>Medicine of any grade in store. Distinguishes "could not treat" from "did not".</summary>
         public int medicineCount;
 

@@ -116,6 +116,7 @@ namespace AutoColony
                 else if (scenario == "showcase") { Provision(map); Showcase(map); }
                 else if (scenario == "livestock") { Provision(map); SpawnLivestock(map, 4); }
                 else if (scenario == "plants") ClassifyPlants(map);
+                else if (scenario == "seating") ClassifySeating(map);
                 else if (scenario == "research") ClearTheWayToResearch(map);
                 else if (scenario == "strip") Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO: removed " + HarnessSetup.StripMaterials(map) + " building material");
@@ -188,6 +189,67 @@ namespace AutoColony
             Chronicle.Record(ChronicleCategory.System, string.Format(
                 "PLANTS {0} sowable plants classified — {1} as predicted, {2} not",
                 sowable.Count, agreed, disagreed));
+        }
+
+        /// <summary>
+        /// Reports which furniture the director believes is useless without a chair beside it.
+        ///
+        /// Predictions written before the answer arrives, as with the plants. This one earns the
+        /// treatment more than most, because the discriminator is a *pair* of def fields and
+        /// either one alone gives a plausible, wrong answer: <c>requireChair</c> defaults to true
+        /// and so catches horseshoes and billiards, which are played standing; the worker class
+        /// alone catches Game-of-Ur, which explicitly needs no chair. The list below should come
+        /// out matching the set RimWorld itself ships an alert for, and if it does not, the
+        /// classifier is wrong.
+        /// </summary>
+        static void ClassifySeating(Map map)
+        {
+            var expected = new Dictionary<string, bool>
+            {
+                { "ChessTable",     true  },   // Alert_ChessTableNoChairs
+                { "PokerTable",     true  },   // Alert_PokerTableNoChairs
+                { "Table1x2c",      true  },   // eaten at
+                { "Table2x2c",      true  },
+                { "TableLong2x2c",  true  },
+                { "GameOfUrBoard",  false },   // requireChair explicitly false
+                { "BilliardsTable", false },   // played standing
+                { "HorseshoesPin",  false },
+                { "HoopstoneRing",  false },
+                { "Telescope",      false },   // interaction cell, not an adjacent seat
+                { "DiningChair",    false },   // is a seat; does not need one
+                { "Stool",          false },
+                { "Bed",            false },
+                { "TableButcher",   false },   // a worktable, not a surface
+            };
+
+            int agreed = 0, disagreed = 0;
+            var all = DefDatabase<ThingDef>.AllDefsListForReading;
+
+            for (int i = 0; i < all.Count; i++)
+            {
+                var def = all[i];
+                bool want;
+                if (!expected.TryGetValue(def.defName, out want)) continue;
+
+                bool needs = Furniture.SeatingRule.NeedsAdjacentSeat(def);
+                string verdict;
+                if (needs == want) { verdict = "as predicted"; agreed++; }
+                else { verdict = "PREDICTED " + want + " — WRONG"; disagreed++; }
+
+                Chronicle.Record(ChronicleCategory.System, string.Format(
+                    "SEATING {0,-16} needsSeat={1,-5} isSeat={2,-5} surface={3,-4} {4}",
+                    def.defName, needs, Furniture.SeatingRule.IsSeat(def), def.surfaceType,
+                    verdict));
+            }
+
+            var seat = Furniture.SeatingRule.CheapestSeat();
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SEATING cheapest buildable seat is {0}",
+                seat != null ? seat.defName : "NONE — nothing to sit on"));
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "SEATING {0} predictions — {1} as predicted, {2} not", agreed + disagreed,
+                agreed, disagreed));
         }
 
         /// <summary>

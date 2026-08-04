@@ -314,6 +314,19 @@ namespace AutoColony
         public int unpoweredBuildings;
 
         /// <summary>
+        /// Buildings whose fuel hopper the game itself says wants filling right now.
+        ///
+        /// Read as <c>CompRefuelable.ShouldAutoRefuelNow</c> — the same test WorkGiver_Refuel
+        /// applies before queueing the job — so this is never a guess about how empty is empty.
+        /// A stove, a generator, a campfire and a smithy are all the same fact: the colony owns
+        /// a thing that cannot run until somebody carries wood to it, and carrying is Hauling.
+        /// </summary>
+        public int buildingsWantingFuel;
+
+        /// <summary>Which ones, so the chronicle can name the thing rather than count it.</summary>
+        public List<Building> fuelStarved;
+
+        /// <summary>
         /// Electrical buildings standing under open sky, conduits included.
         ///
         /// Rain shorts these out — `ShortCircuitUtility.TryShortCircuitInRain` — which starts a
@@ -1262,6 +1275,31 @@ namespace AutoColony
                     }
                 }
 
+                // Anything that burns something, asked with the game's own question.
+                //
+                // ShouldAutoRefuelNow is the condition WorkGiver_Refuel itself tests before it
+                // will queue a job, so a true here means the game wants a colonist to carry fuel
+                // and is waiting for one to be free. It covers the stove, the generator, a
+                // campfire and a torch alike, which is the point: the previous reading was
+                // "generators built minus generators running", and a generator is only the
+                // instance of this that happened to be noticed first.
+                //
+                // Run 108 lost a colony to the version of this that was not being asked. The
+                // fuelled stove ran dry on day 3's wood and sat at 0.85 of a 50-unit hopper for
+                // eighteen days. Nothing cooked; colonists ate raw and carried AteRawFood at -7
+                // apiece; mood fell to 0.15; Aisu broke and slaughtered the livestock the pen and
+                // the fodder plot had been built to hold. Every one of those is a downstream
+                // symptom of a hopper nobody filled, and the director's answer to "nothing is
+                // cooked" was to raise *Cooking* — which puts a cook in front of a stove they
+                // cannot light.
+                var refuelable = building.TryGetComp<CompRefuelable>();
+                if (refuelable != null && refuelable.ShouldAutoRefuelNow)
+                {
+                    s.buildingsWantingFuel++;
+                    if (s.fuelStarved == null) s.fuelStarved = new List<Building>();
+                    s.fuelStarved.Add(building);
+                }
+
                 var trader = building.TryGetComp<CompPowerTrader>();
                 if (trader == null) continue;
 
@@ -1312,6 +1350,7 @@ namespace AutoColony
             m.daysOfFoodUnbutchered = daysOfFoodUnbutchered;
             m.daysOfFoodSpoiling = daysOfFoodSpoiling;
             m.daysOfMeals = daysOfMeals;
+            m.buildingsWantingFuel = buildingsWantingFuel;
             m.medicineCount = medicineCount;
             m.medicineStored = medicineStored;
             m.usableMaterial = usableMaterial;

@@ -69,6 +69,11 @@ namespace AutoColony.Modules
             // an infection is a death on a timer, and every other remedy here is furniture.
             QueueLifesavingSurgery(ctx);
 
+            // Before asking what the colony lacks, finish what it already owns. A chair against a
+            // table it already paid for is the cheapest thing the director can buy, and until it
+            // is there the survey below will keep asking for a second table.
+            if (!crisis) SeatWhatNeedsSeating(ctx);
+
             unhandled.Clear();
             var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled,
                                               ctx.Gene(Genes.RoomEssentialWeight),
@@ -660,6 +665,90 @@ namespace AutoColony.Modules
         static bool AddSeating(DirectorContext ctx)
         {
             return PlaceInBase(ctx, AcDefs.Stool, ctx.state.colonists);
+        }
+
+        /// <summary>
+        /// Put a seat against everything that cannot be used without one.
+        ///
+        /// This is not a defect remedy and deliberately sits outside the survey, because the
+        /// survey reads colonist thoughts and this fault produces none. A colonist who wants to
+        /// play chess, finds no chair, and walks away is not unhappy about it in any way the game
+        /// records — they simply take their joy somewhere worse, or take none. The only party
+        /// that ever complains is RimWorld's own alert bar, which is where this was finally
+        /// spotted: `Chess table needs chairs`, on screen, beside a colony at mood 0.15.
+        ///
+        /// On the eating side it is worse than a blind spot, because there the survey *does* see
+        /// something and its remedy cannot work. `AteWithoutTable` raises `NoTable`, `AddTable`
+        /// puts down a table, the pawn still cannot reach it — a pawn reaches a table only by
+        /// finding a chair — and the thought recurs unchanged. Run 107 built eight tables that
+        /// way. A remedy that does not clear its own complaint will run for ever, and the loop
+        /// closes not because either rule is wrong but because neither knows what the other
+        /// requires.
+        ///
+        /// Runs every pass rather than once at placement, because the requirement is a property
+        /// of a standing arrangement and not of the moment something was built: chairs burn, get
+        /// deconstructed, and arrive on the map inside ruins the colony claims. Same reasoning as
+        /// asking every pass whether the pen is still enclosed.
+        /// </summary>
+        static void SeatWhatNeedsSeating(DirectorContext ctx)
+        {
+            var map = ctx.map;
+            if (map == null) return;
+
+            var seat = Furniture.SeatingRule.CheapestSeat();
+            if (seat == null) return;
+
+            var stuff = PlacementUtil.ChooseStuff(map, seat,
+                FireRisk.StonePreference(ctx, FireRisk.Assess(map, ctx.state)));
+            if (seat.MadeFromStuff && stuff == null) return;
+
+            var things = map.listerThings.AllThings;
+            for (int i = 0; i < things.Count; i++)
+            {
+                var thing = things[i];
+                if (thing == null || thing.Faction != Faction.OfPlayer) continue;
+                if (!Furniture.SeatingRule.NeedsAdjacentSeat(thing.def)) continue;
+
+                // How many people could be sitting here at once. A dining table is for the
+                // colony, so it is asked of the colony; a joy building only has to be *usable*,
+                // and one seat is what usable means. Neither number is a guess about this
+                // particular building.
+                int wanted = thing.def.surfaceType == SurfaceType.Eat
+                    ? Math.Max(1, ctx.state.colonists)
+                    : 1;
+
+                int have = 0;
+                var free = new List<IntVec3>();
+                foreach (var cell in Furniture.SeatingRule.Adjacent(thing))
+                {
+                    if (!cell.InBounds(map)) continue;
+
+                    bool occupied = false;
+                    var here = cell.GetThingList(map);
+                    for (int t = 0; t < here.Count; t++)
+                    {
+                        // A seat already there or on its way counts. Treating a blueprint as
+                        // absent is exactly how the colony ended up with eight tables.
+                        if (Furniture.SeatingRule.IsSeat(here[t].def) ||
+                            Furniture.SeatingRule.IsSeat(PlacementUtil.BuildTargetOf(here[t])))
+                        { have++; occupied = true; break; }
+
+                        if (here[t].def.passability != Traversability.Standable ||
+                            PlacementUtil.HasAnyConstructionAt(map, cell))
+                        { occupied = true; break; }
+                    }
+                    if (!occupied) free.Add(cell);
+                }
+
+                for (int f = 0; f < free.Count && have < wanted; f++)
+                    if (PlacementUtil.TryPlace(map, seat, free[f], Rot4.North, stuff))
+                    {
+                        have++;
+                        Chronicle.Record(ChronicleCategory.Build, string.Format(
+                            "seating: a {0} beside the {1} — it cannot be used without one",
+                            seat.label ?? seat.defName, thing.def.label ?? thing.def.defName));
+                    }
+            }
         }
 
         /// <summary>Somewhere to play. Horseshoes needs no research and barely any material.</summary>

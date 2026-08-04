@@ -3745,6 +3745,7 @@ namespace AutoColony.Modules
             if (typeof(Building_Bed).IsAssignableFrom(def.thingClass)) return Rooms.FurnitureKind.Bed;
             if (typeof(Building_WorkTable).IsAssignableFrom(def.thingClass))
                 return Rooms.FurnitureKind.WorkTable;
+            if (Furniture.SeatingRule.IsSeat(def)) return Rooms.FurnitureKind.Seat;
             if (def.surfaceType == SurfaceType.Eat) return Rooms.FurnitureKind.Surface;
             if (typeof(Building_Storage).IsAssignableFrom(def.thingClass))
                 return Rooms.FurnitureKind.Storage;

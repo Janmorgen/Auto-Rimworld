@@ -369,7 +369,14 @@ namespace AutoColony.Modules
             //
             // Same shape as the two above: the colony owns the thing it needs and the last step
             // of getting it there has not happened.
-            bool idleGenerator = s.generators > s.workingGenerators;
+            //
+            // Generalised after run 108, where the same emptiness in a *stove* cost the colony
+            // its livestock. "Generators built minus generators running" was only ever a proxy
+            // for a hopper needing wood, and it could see the one building the power chain had
+            // taught the director to watch. buildingsWantingFuel asks the game directly, of
+            // everything that burns anything — so the stove, the campfire and the smithy are
+            // covered by the rule that was written for the generator.
+            bool idleGenerator = s.generators > s.workingGenerators || s.buildingsWantingFuel > 0;
 
             // Food in the store and nothing cooked is a mood bill nobody had to pay.
             //
@@ -380,7 +387,20 @@ namespace AutoColony.Modules
             //
             // Fourth of the same family: the colony owns the thing and the last step of making
             // it useful has not happened.
-            bool nothingCooked = s.daysOfFood >= 1f && s.daysOfMeals < 1f;
+            //
+            // But only when a cook is what is missing. Run 108 held Cooking at 4.0 for eighteen
+            // days over a stove with 0.85 of its 50-unit hopper left, and a cook standing in
+            // front of an unlit stove is not cooking however high the number is. Worse, Cooking
+            // at 4.0 outranks Hauling, so the rule was actively holding back the one job that
+            // would have fixed it — the two rules were each right and closed into a loop, and
+            // the colony ate raw food until somebody broke and started killing the animals.
+            //
+            // When the hopper is the problem, this stands down and lets Hauling above have the
+            // colonists. Nothing here decides which is which: buildingsWantingFuel is the game's
+            // own ShouldAutoRefuelNow, and it is true exactly when carrying wood is the next
+            // thing that has to happen.
+            bool nothingCooked = s.daysOfFood >= 1f && s.daysOfMeals < 1f &&
+                                 s.buildingsWantingFuel == 0;
 
             // Emergencies first: fire and untreated casualties outrank everything.
             // Only fires that could reach the colony justify dropping everything; a distant
