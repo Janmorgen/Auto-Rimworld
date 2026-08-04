@@ -395,9 +395,10 @@ namespace AutoColony.Modules
 
             Chronicle.Record(ChronicleCategory.Build, string.Format(
                 "not opening another room — {0} unfinished and only {1} allowed for {2} able " +
-                "colonists; waiting on the {3} room{4}",
+                "colonists and {5} material; waiting on the {3} room{4}",
                 unfinished, allowed, ctx.state.ableColonists.Count, first,
-                wanted.HasValue ? ", while the plan is asking for a " + wanted.Value : ""));
+                wanted.HasValue ? ", while the plan is asking for a " + wanted.Value : "",
+                ctx.state.usableMaterial));
         }
 
         protected override void Act(DirectorContext ctx)
@@ -713,7 +714,8 @@ namespace AutoColony.Modules
             // none finished, with the colonists sleeping on wet ground the whole time and a
             // bedroom among the things they never got round to.
             int unfinished = UnfinishedRooms(ctx);
-            int allowed = Upkeep.BuildingMeans.ConcurrentRooms(ctx.state.ableColonists.Count);
+            int allowed = Upkeep.BuildingMeans.ConcurrentRooms(
+                ctx.state.ableColonists.Count, ctx.state.usableMaterial);
 
             // One slot is kept for the room the plan is actually asking for.
             //

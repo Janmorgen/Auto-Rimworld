@@ -403,3 +403,43 @@ namespace AutoColony.Tests
         }
     }
 }
+
+namespace AutoColony.Tests
+{
+    /// <summary>
+    /// How much building may be in flight at once.
+    ///
+    /// Two constraints bind it and only one used to be modelled. Run 107 reached day nineteen
+    /// with four colonists, two hundred material, three shells open and one room finished — the
+    /// labour gate satisfied, the colony spread across sites it could afford one of.
+    /// </summary>
+    public class ConcurrentRoomTests
+    {
+        [Xunit.Fact]
+        public void MaterialCanBindTighterThanHands()
+        {
+            // Plenty of hands, barely enough for one shell.
+            Xunit.Assert.Equal(1, AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(9, 200));
+        }
+
+        [Xunit.Fact]
+        public void HandsStillBindWhenMaterialIsPlentiful()
+        {
+            // A warehouse of steel does not give two colonists more arms.
+            Xunit.Assert.Equal(1, AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(2, 100000));
+        }
+
+        [Xunit.Fact]
+        public void OneRoomIsAlwaysAllowedSoWorkNeverStops()
+        {
+            // Destitute and mid-build: the room already going up must not be forbidden.
+            Xunit.Assert.Equal(1, AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(6, 0));
+        }
+
+        [Xunit.Fact]
+        public void BothPlentifulGivesTheLabourLimit()
+        {
+            Xunit.Assert.Equal(3, AutoColony.Upkeep.BuildingMeans.ConcurrentRooms(6, 100000));
+        }
+    }
+}

@@ -66,6 +66,33 @@ namespace AutoColony.Upkeep
         }
 
         /// <summary>
+        /// Roughly what one room's shell costs. A nine-by-seven has twenty-eight edge cells at
+        /// five stuff a wall, plus a door at twenty-five — call it a hundred and sixty-five.
+        /// Approximate on purpose: this decides how many rooms to have open, not what to spend.
+        /// </summary>
+        public const int ShellCost = 165;
+
+        /// <summary>
+        /// How many rooms may be open at once, given both hands and material.
+        ///
+        /// The limit counted builders and said nothing about what the colony could pay for.
+        /// Run 107 reached day nineteen with four colonists, no deaths, two hundred material,
+        /// three shells open and exactly one room finished — the labour gate was satisfied and
+        /// the colony was still spread across three sites it could afford one of.
+        ///
+        /// Two constraints bound how much building can be in flight, and only one was modelled.
+        /// A colony with ten builders and no steel can no more finish six rooms than a colony
+        /// with six builders and no hands, and the answer to both is the same: open fewer.
+        /// </summary>
+        public static int ConcurrentRooms(int builders, int usableMaterial)
+        {
+            int byHands = ConcurrentRooms(builders);
+            int byMaterial = usableMaterial / ShellCost;
+            if (byMaterial < 1) byMaterial = 1;      // always allow the one in progress
+            return byHands < byMaterial ? byHands : byMaterial;
+        }
+
+        /// <summary>
         /// How many beds to put in one room.
         ///
         /// A comfortable colony honours the strategy's own preference, which is usually one or
