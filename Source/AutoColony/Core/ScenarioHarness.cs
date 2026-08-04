@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AutoColony.Plants;
 using RimWorld;
 using Verse;
 
@@ -114,6 +115,7 @@ namespace AutoColony
                 else if (scenario == "provision") Provision(map);
                 else if (scenario == "showcase") { Provision(map); Showcase(map); }
                 else if (scenario == "livestock") { Provision(map); SpawnLivestock(map, 4); }
+                else if (scenario == "plants") ClassifyPlants(map);
                 else if (scenario == "research") ClearTheWayToResearch(map);
                 else if (scenario == "strip") Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO: removed " + HarnessSetup.StripMaterials(map) + " building material");
@@ -127,6 +129,65 @@ namespace AutoColony
                 Chronicle.Record(ChronicleCategory.System,
                     "SCENARIO failed: " + e.GetType().Name + " — " + e.Message + " @ " + where);
             }
+        }
+
+        /// <summary>
+        /// Reports what the director thinks every sowable plant is for, against what it was
+        /// expected to be.
+        ///
+        /// Same method as the room showcase, for the same reason: an understanding of rules that
+        /// cannot be read is only worth something if it is written down before the answer
+        /// arrives. The expectations below are the author's; where the game disagrees, the game
+        /// is right and the classifier is wrong.
+        /// </summary>
+        static void ClassifyPlants(Map map)
+        {
+            var expected = new Dictionary<string, PlantRole>
+            {
+                { "Plant_Rice",        PlantRole.Food },
+                { "Plant_Corn",        PlantRole.Food },
+                { "Plant_Potato",      PlantRole.Food },
+                { "Plant_Strawberry",  PlantRole.Food },
+                { "Plant_Cotton",      PlantRole.Textile },
+                { "Plant_Devilstrand", PlantRole.Textile },
+                { "Plant_Healroot",    PlantRole.Medicine },
+                { "Plant_Haygrass",    PlantRole.Fodder },
+                { "Plant_Psychoid",    PlantRole.Social },
+                { "Plant_Smokeleaf",   PlantRole.Social },
+                { "Plant_Hops",        PlantRole.Social },
+                { "Plant_Tinctoria",   PlantRole.Utility },
+                { "Plant_Daylily",     PlantRole.Decorative },
+                { "Plant_Rose",        PlantRole.Decorative },
+                { "Plant_TreeCocoa",   PlantRole.Wood },
+            };
+
+            var sowable = PlantTaxonomy.Sowable();
+            int agreed = 0, disagreed = 0;
+
+            for (int i = 0; i < sowable.Count; i++)
+            {
+                var plant = sowable[i];
+                var purpose = PlantTaxonomy.RoleOf(plant);
+                var harvest = plant.plant.harvestedThingDef;
+
+                PlantRole want;
+                bool predicted = expected.TryGetValue(plant.defName, out want);
+
+                string verdict;
+                if (!predicted) verdict = "(no prediction)";
+                else if (want == purpose) { verdict = "as predicted"; agreed++; }
+                else { verdict = "PREDICTED " + want + " — WRONG"; disagreed++; }
+
+                Chronicle.Record(ChronicleCategory.System, string.Format(
+                    "PLANTS {0,-20} -> {1,-11} harvest={2,-18} {3}",
+                    plant.defName, purpose,
+                    harvest != null ? harvest.defName : "nothing",
+                    verdict));
+            }
+
+            Chronicle.Record(ChronicleCategory.System, string.Format(
+                "PLANTS {0} sowable plants classified — {1} as predicted, {2} not",
+                sowable.Count, agreed, disagreed));
         }
 
         /// <summary>
