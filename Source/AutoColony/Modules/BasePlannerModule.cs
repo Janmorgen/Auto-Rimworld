@@ -2557,6 +2557,42 @@ namespace AutoColony.Modules
                         map.designationManager.AddDesignation(
                             new Designation(cell, DesignationDefOf.Mine));
                         ordered++;
+                        continue;
+                    }
+
+                    // Ruins. The map arrives with walls on it, and they are neither natural rock
+                    // nor anything the colony built — so they fell through both branches above
+                    // and were left standing inside the finished room. A cell under an edifice
+                    // belongs to no region and therefore to no room, so the room came out
+                    // smaller than it was drawn, and its space rating was measured against a
+                    // floor it did not have.
+                    //
+                    // Not ours is the test, and the rule protecting the colony's own walls
+                    // stays exactly as it was: a shared wall between two rooms is still never
+                    // torn down. A ruin inside the room is an obstruction like any boulder, and
+                    // worth the salvage on the way out.
+                    //
+                    // It is also the difference between a small room and no room at all.
+                    // ShellComplete requires Enclosed, which requires every interior cell to be
+                    // in one region — and a cell under an edifice is in no region. So a ruin
+                    // standing inside the footprint does not merely cost floor space, it splits
+                    // the interior and the room can never be reported finished, holding a
+                    // concurrency slot for the rest of the colony's life.
+                    // Interior and the door cell only. A ruin wall standing on the wall *line*
+                    // is doing the job a wall does — ShellComplete accepts any edifice there,
+                    // and no blueprint is placed on it — so tearing it down to rebuild it in
+                    // our own stone spends the one thing every colony here has died short of.
+                    // On the door cell it has to go, or the room seals with no way in.
+                    bool inTheWay = room.Rect.ContractedBy(1).Contains(cell) ||
+                                    (cell.x == room.Door.x && cell.z == room.Door.z);
+
+                    if (inTheWay && edifice.Faction != Faction.OfPlayer &&
+                        edifice.def.building != null && edifice.def.building.IsDeconstructible &&
+                        map.designationManager.DesignationOn(edifice, DesignationDefOf.Deconstruct) == null)
+                    {
+                        map.designationManager.AddDesignation(
+                            new Designation(edifice, DesignationDefOf.Deconstruct));
+                        ordered++;
                     }
                     continue;
                 }
