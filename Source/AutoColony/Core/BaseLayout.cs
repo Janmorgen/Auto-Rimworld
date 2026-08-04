@@ -143,11 +143,62 @@ namespace AutoColony
     /// Persisted with the save so construction resumes exactly where it left off rather than
     /// re-deriving a different layout every time the game is loaded.
     /// </summary>
+    /// <summary>
+    /// Ground the colony has committed to something that is not a room.
+    ///
+    /// A pen is the case this exists for. It is not a room and never will be — no walls, no
+    /// roof, no role — so none of the room machinery applies to it, and consequently nothing
+    /// stopped a room being sited straight across one. That does not read as a collision when
+    /// it happens: ClearFootprint mines natural rock only and leaves colony buildings alone, so
+    /// the fence stays standing and the wall blueprints simply cannot be placed on those cells.
+    /// The room then never closes, and the planner counts it as outstanding work for the rest
+    /// of the colony's life, holding a concurrency slot that never comes back.
+    /// </summary>
+    public class ReservedGround : IExposable
+    {
+        public CellRect rect;
+        public string what;
+
+        public ReservedGround() { }
+
+        public ReservedGround(CellRect rect, string what)
+        {
+            this.rect = rect;
+            this.what = what;
+        }
+
+        public void ExposeData()
+        {
+            Scribe_Values.Look(ref rect, "rect");
+            Scribe_Values.Look(ref what, "what");
+        }
+    }
+
     public class BaseLayout : IExposable
     {
         public bool established;
         public IntVec3 origin = IntVec3.Invalid;
         public List<PlannedRoom> rooms = new List<PlannedRoom>();
+
+        /// <summary>Ground claimed by something that is not a room — see <see cref="ReservedGround"/>.</summary>
+        public List<ReservedGround> reserved = new List<ReservedGround>();
+
+        /// <summary>Whether a rectangle runs across ground already claimed for something else.</summary>
+        public bool IsReserved(CellRect rect)
+        {
+            if (reserved == null) return false;
+            for (int i = 0; i < reserved.Count; i++)
+                if (reserved[i] != null && rect.Overlaps(reserved[i].rect)) return true;
+            return false;
+        }
+
+        /// <summary>Whether a rectangle runs across the interior of a room already planned.</summary>
+        public bool OverlapsAnyRoom(CellRect rect)
+        {
+            for (int i = 0; i < rooms.Count; i++)
+                if (rect.Overlaps(rooms[i].Rect)) return true;
+            return false;
+        }
 
         /// <summary>Next unused slot index along the corridor, used when reserving a new room.</summary>
         public int nextSlot;
@@ -173,6 +224,8 @@ namespace AutoColony
             Scribe_Values.Look(ref origin, "origin", IntVec3.Invalid);
             Scribe_Values.Look(ref nextSlot, "nextSlot", 0);
             Scribe_Collections.Look(ref rooms, "rooms", LookMode.Deep);
+            Scribe_Collections.Look(ref reserved, "reserved", LookMode.Deep);
+            if (reserved == null) reserved = new List<ReservedGround>();
             if (Scribe.mode == LoadSaveMode.PostLoadInit && rooms == null)
                 rooms = new List<PlannedRoom>();
         }

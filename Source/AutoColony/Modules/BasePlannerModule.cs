@@ -1317,6 +1317,18 @@ namespace AutoColony.Modules
                 markerCell.IsValid ? "a pen marker" : "NO MARKER — the game will not treat it as a pen",
                 gaps > 0 ? string.Format(", {0} perimeter cells refused", gaps) : ""));
 
+            // Claim the ground, plus a cell all round. The margin is for the gate: a room wall
+            // flush against it would leave the pen sealed in exactly the way the gate exists to
+            // prevent, and neither side would report anything wrong.
+            if (ctx.layout != null)
+            {
+                ctx.layout.reserved.Add(new ReservedGround(rect.ExpandedBy(1), "animal pen"));
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "reserved the {0}x{0} of the pen and a cell around it — no room gets sited " +
+                    "across it, because a wall line along a fence line is a wall that cannot be " +
+                    "placed and a room that never closes", size));
+            }
+
             if (markerCell.IsValid) ReportPenForage(ctx, markerCell, size, rect);
             Note("fenced an animal pen");
         }
@@ -1644,6 +1656,14 @@ namespace AutoColony.Modules
                 if (!candidate.InBounds(map)) continue;
 
                 var gateCell = GateCellOf(candidate);
+
+                // Not across a room that is planned but not yet standing. A built room is
+                // already refused below — its walls are edifices and its interior is roofed —
+                // but a room the planner has merely reserved has neither, so nothing here could
+                // see it, and fencing across it stalls that room permanently once it starts.
+                var layout = ctx.layout;
+                if (layout != null && (layout.OverlapsAnyRoom(candidate) || layout.IsReserved(candidate)))
+                    continue;
 
                 // The perimeter has to take a fence all the way round or the pen leaks, but the
                 // inside only has to be walkable grazing. A boulder in the middle of a paddock
@@ -2198,7 +2218,11 @@ namespace AutoColony.Modules
                 // Shared walls are fine; genuine interior overlap is not.
                 if (rect.ContractedBy(1).Overlaps(other.ContractedBy(1))) return true;
             }
-            return false;
+
+            // Reserved ground is refused whole, not contracted. Two rooms may share a wall
+            // because a wall serves both; a room and a pen share nothing, and a wall line
+            // running along a fence line is a wall that cannot be placed.
+            return layout.IsReserved(rect);
         }
 
         // ------------------------------------------------------------ construction
