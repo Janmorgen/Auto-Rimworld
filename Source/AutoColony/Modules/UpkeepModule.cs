@@ -69,7 +69,8 @@ namespace AutoColony.Modules
             var defects = DefectSurvey.Survey(ctx.map, ctx.state, ctx.layout, unhandled,
                                               ctx.Gene(Genes.RoomEssentialWeight),
                                               ctx.Gene(Genes.RoomOccupancyWeight),
-                                              UpkeepWeights(ctx));
+                                              UpkeepWeights(ctx),
+                                              ctx.plan != null ? ctx.plan.RolesWanted : null);
 
             Report(ctx, BuildingMeans.Assess(ctx.state.usableMaterial, ctx.state.colonists),
                    defects.Count);

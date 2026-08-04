@@ -31,6 +31,16 @@ namespace AutoColony.Goals
         /// </summary>
         public string ResearchWanted;
 
+        /// <summary>
+        /// Every room role an unsatisfied goal is still asking for.
+        ///
+        /// Published so the rest of the director can tell what the colony is *for* right now.
+        /// The upkeep survey needs it: a room the plan is still asking for is not surplus,
+        /// however short of material the colony is, and tearing one down to recover its walls
+        /// buys material with the very thing the material was going to build.
+        /// </summary>
+        public readonly HashSet<RoomRole> RolesWanted = new HashSet<RoomRole>();
+
         public string Describe()
         {
             if (Focus == null) return "nothing outstanding";
@@ -119,6 +129,8 @@ namespace AutoColony.Goals
 
                 float urgency = Urgency(goal, ctx);
                 if (record.blockedSince < 0) record.blockedSince = now;
+
+                if (goal.WantsRoom.HasValue) plan.RolesWanted.Add(goal.WantsRoom.Value);
 
                 float score = ScoreOf(goal, ctx, now, emergency);
                 if (score > bestScore)

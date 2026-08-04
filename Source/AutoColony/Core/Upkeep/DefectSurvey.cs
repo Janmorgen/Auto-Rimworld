@@ -83,7 +83,8 @@ namespace AutoColony.Upkeep
         public static List<ColonyDefect> Survey(Map map, ColonyState state, BaseLayout layout,
                                                 List<UnmetComplaint> unhandled,
                                                 float essentialWeight, float occupancyWeight,
-                                                float[] kindWeights)
+                                                float[] kindWeights,
+                                                HashSet<RoomRole> rolesWanted = null)
         {
             var defects = new List<ColonyDefect>();
             if (map == null || state == null) return defects;
@@ -106,7 +107,7 @@ namespace AutoColony.Upkeep
                     if (k >= 0 && k < kindWeights.Length) defects[i].kindWeight = kindWeights[k];
                 }
             }
-            SurveyOverbuilding(map, state, layout, means, defects);
+            SurveyOverbuilding(map, state, layout, means, defects, rolesWanted);
 
             defects.Sort(delegate(ColonyDefect a, ColonyDefect b)
             {
@@ -426,7 +427,7 @@ namespace AutoColony.Upkeep
         /// kitchen, the store and one bedroom stay whatever happens.
         /// </summary>
         static void SurveyOverbuilding(Map map, ColonyState state, BaseLayout layout, float means,
-                                       List<ColonyDefect> defects)
+                                       List<ColonyDefect> defects, HashSet<RoomRole> rolesWanted)
         {
             if (layout == null || !BuildingMeans.Destitute(means)) return;
 
@@ -452,7 +453,7 @@ namespace AutoColony.Upkeep
                 // every wall standing. That path loses nothing. This one was destroying work.
                 if (!planned.furnitureQueued) continue;
 
-                if (!Expendable(map, layout, planned)) continue;
+                if (!Expendable(map, layout, planned, rolesWanted)) continue;
                 surplus.Add(planned);
             }
 
@@ -485,7 +486,30 @@ namespace AutoColony.Upkeep
         /// </summary>
         public static bool Expendable(Map map, BaseLayout layout, PlannedRoom planned)
         {
-            // Never the last of a role. One kitchen, one store and one bedroom are the floor.
+            return Expendable(map, layout, planned, null);
+        }
+
+        public static bool Expendable(Map map, BaseLayout layout, PlannedRoom planned,
+                                      HashSet<RoomRole> rolesWanted)
+        {
+            // Never the last of a role the plan is still asking for.
+            //
+            // Run 96 built a Research room, finished it, and then reclaimed it for material
+            // while the plan read "no research bench, so nothing the colony studies can ever
+            // finish" — and immediately sited another one. That is the loop the furnitureQueued
+            // rule above was written to stop, one step later: it protects a room still going up
+            // and had nothing to say about a finished room the colony still needs.
+            //
+            // Asking the plan generalises the hardcoded floor rather than extending it. Kitchen,
+            // Storage, Bedroom and Power are on that list because goals want them — Feed the
+            // colony, Roofed storage, Shelter everyone, Power — so a rule that protects "the
+            // last room any unsatisfied goal is asking for" covers all four and Research too,
+            // and covers whatever is added next without anybody remembering to update a list.
+            if (layout.CountRooms(planned.role) <= 1 &&
+                rolesWanted != null && rolesWanted.Contains(planned.role))
+                return false;
+
+            // The original floor, kept for callers with no plan to consult.
             if (layout.CountRooms(planned.role) <= 1 &&
                 (planned.role == RoomRole.Kitchen || planned.role == RoomRole.Storage ||
                  planned.role == RoomRole.Bedroom || planned.role == RoomRole.Power))
