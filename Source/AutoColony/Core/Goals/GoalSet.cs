@@ -413,6 +413,76 @@ namespace AutoColony.Goals
         }
     }
 
+    /// <summary>
+    /// Wood that grows back, on the maps where it does not.
+    ///
+    /// Everything this colony burns runs on wood — the stove it cooks at, the campfire it warms
+    /// by, the passive cooler that is a pre-electric colony's only answer to heat — and the
+    /// director had no concept of where wood comes from. It read a woodpile, chopped when the
+    /// pile was low, and on a map with almost no trees that is a plan with no second step.
+    ///
+    /// Run 110 was that map. Eight hoppers stood dry with the woodpile at zero, the colony
+    /// idle rather than busy, and every remedy the director had reached for — another cooler,
+    /// another torch — made it worse. Nothing in sixteen goals was about the supply.
+    ///
+    /// TreeSowing is 1000 points, Neolithic, and needs no prerequisite, which puts it inside
+    /// what a surviving colony reaches. It is the only renewable answer in the game before
+    /// electricity.
+    ///
+    /// Satisfied wherever wood is not the constraint, so on an ordinary forested map this never
+    /// surfaces and costs nothing. It pulls only where the map is actually poor in it.
+    /// </summary>
+    public class WoodSupplyGoal : ColonyGoal
+    {
+        public const string Id = "Wood that grows back";
+        public override string Name { get { return Id; } }
+        public override GoalHorizon Horizon { get { return GoalHorizon.LongTerm; } }
+        public override string[] RequiresResearch { get { return Research; } }
+        static readonly string[] Research = { "TreeSowing" };
+
+        /// <summary>
+        /// Standing wood below which the colony is living off a finite pile.
+        ///
+        /// Set against what the colony's own fires would consume rather than against a flat
+        /// number: a fuelled stove holds fifty, so a few hundred units of standing timber is the
+        /// difference between a forest and a handful of trees.
+        /// </summary>
+        const int ComfortableStandingWood = 400;
+
+        public override bool Satisfied(DirectorContext ctx)
+        {
+            var s = ctx.state;
+
+            // Nothing burns anything: this colony has no wood problem to solve.
+            if (s.burners <= 0) return true;
+
+            // Plenty standing, or already growing more.
+            return s.fuelOnHand >= ComfortableStandingWood || s.growingWood;
+        }
+
+        public override float Urgency(DirectorContext ctx)
+        {
+            var s = ctx.state;
+            if (s.burners <= 0) return 0f;
+
+            // Sharpest when the fires are already going out. A colony with a dry stove and no
+            // tree to cut is not short of hands, and no work priority answers it.
+            float scarcity = 1f - AcMath.Clamp01(s.fuelOnHand / (float)ComfortableStandingWood);
+            float goingOut = s.buildingsWantingFuel > 0 ? 1f : 0.5f;
+            return AcMath.Clamp01(scarcity * goingOut);
+        }
+
+        public override string Explain(DirectorContext ctx)
+        {
+            var s = ctx.state;
+            return string.Format(
+                "{0} wood standing or stacked for {1} things that burn it{2} — tree sowing is " +
+                "1000 points and the only wood that grows back before electricity",
+                s.fuelOnHand, s.burners,
+                s.buildingsWantingFuel > 0 ? ", " + s.buildingsWantingFuel + " already dry" : "");
+        }
+    }
+
     /// <summary>Electricity, which everything mechanical downstream depends on.</summary>
     public class PowerGoal : ColonyGoal
     {

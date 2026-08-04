@@ -161,6 +161,7 @@ namespace AutoColony.Goals
             new ResearchCapacityGoal(),
 
             new MasonryGoal(),
+            new WoodSupplyGoal(),
             new PowerGoal(),
             new GrowColonyGoal(),
             new ComfortGoal(),

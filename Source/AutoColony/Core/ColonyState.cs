@@ -334,6 +334,14 @@ namespace AutoColony
         public int fuelOnHand;
 
         /// <summary>
+        /// Buildings that burn something. Nothing to burn is only a problem if something burns.
+        /// </summary>
+        public int burners;
+
+        /// <summary>Whether a growing zone is already raising the fuel back.</summary>
+        public bool growingWood;
+
+        /// <summary>
         /// Electrical buildings standing under open sky, conduits included.
         ///
         /// Rain shorts these out — `ShortCircuitUtility.TryShortCircuitInRain` — which starts a
@@ -1166,6 +1174,14 @@ namespace AutoColony
                     s.growingCells++;
                 }
 
+                // A tree plot is the answer to a wood-poor map, and WoodSupplyGoal stands down
+                // once one exists — asked as "does its harvest yield what the fires burn"
+                // rather than by naming a tree.
+                if (growing.plant != null && growing.plant.harvestedThingDef != null &&
+                    growing.plant.harvestedThingDef.IsStuff &&
+                    growing.plant.IsTree)
+                    s.growingWood = true;
+
                 crops.Add(growing.defName);
             }
             s.distinctCrops = crops.Count;
@@ -1300,6 +1316,7 @@ namespace AutoColony
                 // cooked" was to raise *Cooking* — which puts a cook in front of a stove they
                 // cannot light.
                 var refuelable = building.TryGetComp<CompRefuelable>();
+                if (refuelable != null) s.burners++;
                 if (refuelable != null && refuelable.ShouldAutoRefuelNow)
                 {
                     s.buildingsWantingFuel++;
@@ -1361,19 +1378,73 @@ namespace AutoColony
                 foreach (var def in filter.AllowedThingDefs)
                 {
                     if (def == null) continue;
+
                     var things = map.listerThings.ThingsOfDef(def);
-                    if (things == null) continue;
-                    for (int i = 0; i < things.Count; i++)
+                    if (things != null)
+                        for (int i = 0; i < things.Count; i++)
+                        {
+                            var thing = things[i];
+                            if (thing == null || !thing.Spawned) continue;
+                            if (thing.IsForbidden(Faction.OfPlayer)) continue;
+                            total += thing.stackCount;
+                        }
+
+                    // And what is still standing.
+                    //
+                    // Counting only the cut logs was a straightforward regression: every colony
+                    // begins with a forest and no woodpile, so a wood-fired map read as NO FUEL
+                    // on day one and the rule would have refused the colony its first stove. A
+                    // tree is fuel that has not been chopped yet, which is a labour question
+                    // again — the thing this measurement exists to separate out.
+                    //
+                    // Asked as plant.harvestedThingDef, so it holds for whatever a mod makes
+                    // burnable and for the wood-bearing trees of any biome.
+                    var sources = HarvestSourcesOf(def);
+                    for (int i = 0; i < sources.Count; i++)
                     {
-                        var thing = things[i];
-                        if (thing == null || !thing.Spawned) continue;
-                        if (thing.IsForbidden(Faction.OfPlayer)) continue;
-                        total += thing.stackCount;
+                        var standing = map.listerThings.ThingsOfDef(sources[i]);
+                        if (standing == null) continue;
+                        for (int j = 0; j < standing.Count; j++)
+                        {
+                            var plant = standing[j] as Plant;
+                            if (plant == null || !plant.Spawned) continue;
+                            if (plant.IsForbidden(Faction.OfPlayer)) continue;
+                            total += (int)(plant.def.plant.harvestYield * plant.Growth);
+                        }
                     }
                 }
             }
             catch (Exception) { }
             return total;
+        }
+
+        static readonly Dictionary<ushort, List<ThingDef>> harvestSourceCache =
+            new Dictionary<ushort, List<ThingDef>>();
+
+        /// <summary>
+        /// Every plant def whose harvest yields this thing — the trees, for wood.
+        ///
+        /// Built once per fuel def and kept, because it is a scan of the whole def database and
+        /// the answer cannot change during a game.
+        /// </summary>
+        static List<ThingDef> HarvestSourcesOf(ThingDef yield)
+        {
+            List<ThingDef> known;
+            if (harvestSourceCache.TryGetValue(yield.shortHash, out known)) return known;
+
+            known = new List<ThingDef>();
+            var all = DefDatabase<ThingDef>.AllDefsListForReading;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var def = all[i];
+                if (def == null || def.plant == null) continue;
+                if (def.plant.harvestedThingDef != yield) continue;
+                if (def.plant.harvestYield <= 0f) continue;
+                known.Add(def);
+            }
+
+            harvestSourceCache[yield.shortHash] = known;
+            return known;
         }
 
         static void CaptureResearch(ColonyState s)

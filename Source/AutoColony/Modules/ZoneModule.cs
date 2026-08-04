@@ -33,6 +33,7 @@ namespace AutoColony.Modules
             EnsureMedicinePlot(ctx);
             EnsureTextilePlot(ctx);
             EnsureFodderPlot(ctx);
+            EnsureWoodPlot(ctx);
             EnsureSocialPlot(ctx);
             EnsureStockpile(ctx);
         }
@@ -180,6 +181,99 @@ namespace AutoColony.Modules
                 "healroot plot sown across " + cells.Count + " cells — herbal medicine without " +
                 "research or a trader, so wounds stop being treated with nothing");
         }
+
+        /// <summary>
+        /// Trees, where the map has too few of them.
+        ///
+        /// The other half of WoodSupplyGoal: the goal carries the research, this plants the
+        /// thing. Wood is the only fuel a pre-electric colony has, and on a map that starts
+        /// with a handful of trees the woodpile is a countdown rather than a stock — run 110
+        /// reached day 20 with eight dry hoppers and nothing left standing to cut.
+        ///
+        /// Only once the research is done and the map is actually poor in wood. On a forested
+        /// map this never fires, because chopping what is already there is faster than growing
+        /// it and the colony has better uses for the ground.
+        ///
+        /// The tree is chosen by what it yields rather than by name, so whatever the biome and
+        /// the mods offer, the one that grows fastest for the wood wins.
+        /// </summary>
+        void EnsureWoodPlot(DirectorContext ctx)
+        {
+            var s = ctx.state;
+            if (s.burners <= 0) return;               // nothing burns; no reason to farm fuel
+            if (s.growingWood) return;                // already raising it
+            if (s.fuelOnHand >= WoodComfortable) return;
+            if (s.growingCells <= 0) return;          // dinner before timber
+
+            var tree = FastestWoodTree(ctx);
+            if (tree == null)
+            {
+                if (!woodReported)
+                {
+                    woodReported = true;
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "wood is short ({0} standing for {1} fires) and no tree can be sown yet — " +
+                        "tree sowing is 1000 points, Neolithic, and needs nothing before it",
+                        s.fuelOnHand, s.burners));
+                }
+                return;
+            }
+            woodReported = false;
+
+            var cells = FindFertileCells(ctx, WoodPlotCells);
+            if (cells.Count == 0) return;
+
+            var plot = new Zone_Growing(ctx.map.zoneManager);
+            ctx.map.zoneManager.RegisterZone(plot);
+            plot.SetPlantDefToGrow(tree);
+            for (int i = 0; i < cells.Count; i++) plot.AddCell(cells[i]);
+
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "{0} plot sown across {1} cells — {2} wood standing for {3} things that burn it, " +
+                "and a map this bare does not grow it back on its own",
+                tree.label ?? tree.defName, cells.Count, s.fuelOnHand, s.burners));
+        }
+
+        /// <summary>
+        /// The sowable tree that yields fuel soonest, by wood per growing day.
+        ///
+        /// Asked of the defs rather than picked: harvestedThingDef says what it gives,
+        /// sowMinSkill and sowResearchPrerequisites say whether the colony may sow it, and
+        /// harvestYield over growDays says how fast it pays. Poplar wins in vanilla; nothing
+        /// here needs to know that.
+        /// </summary>
+        ThingDef FastestWoodTree(DirectorContext ctx)
+        {
+            ThingDef best = null;
+            float bestRate = 0f;
+            int skill = BestGrowingSkill(ctx);
+
+            var all = DefDatabase<ThingDef>.AllDefsListForReading;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var def = all[i];
+                if (def == null || def.plant == null) continue;
+                if (!def.plant.Sowable || !def.plant.IsTree) continue;
+                if (def.plant.harvestedThingDef == null) continue;
+                if (def.plant.harvestYield <= 0f || def.plant.growDays <= 0f) continue;
+                if (skill < def.plant.sowMinSkill) continue;
+                if (!PlacementUtil.ResearchDone(def)) continue;
+
+                float rate = def.plant.harvestYield / def.plant.growDays;
+                if (rate <= bestRate) continue;
+                bestRate = rate;
+                best = def;
+            }
+            return best;
+        }
+
+        /// <summary>Standing wood above which growing more is not worth the ground.</summary>
+        const int WoodComfortable = 400;
+
+        /// <summary>A woodlot, not a forestry industry.</summary>
+        const int WoodPlotCells = 40;
+
+        bool woodReported;
 
         /// <summary>Enough healroot to keep a small colony in herbal medicine, not a cash crop.</summary>
         const int MedicinePlotCells = 24;
