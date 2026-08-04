@@ -177,7 +177,10 @@ namespace AutoColony
                     ? string.Format(CultureInfo.InvariantCulture, " ({0} STARVING, hungriest {1:0.00})",
                         m.colonistsStarving, m.minFood)
                     : "",
-                m.medicineCount));
+                m.medicineCount > m.medicineStored
+                    ? string.Format(CultureInfo.InvariantCulture, "{0} ({1} stored)",
+                        m.medicineCount, m.medicineStored)
+                    : m.medicineCount.ToString()));
         }
 
         /// <summary>Real seconds between heartbeats.</summary>

@@ -91,9 +91,23 @@ namespace AutoColony
         }
 
         // --- food and medicine ---
+        /// <summary>Human-edible nutrition the colony can reach — stockpiled or lying about.</summary>
         public float foodNutrition;
+
+        /// <summary>
+        /// Of that, how much has been hauled into storage. Only interesting as a gap against
+        /// <see cref="foodNutrition"/>, which is a hauling backlog rather than a shortage.
+        /// </summary>
+        public float foodStored;
         public float daysOfFood;
+        /// <summary>Medicine the colony can reach, stockpiled or loose. What decides treatment.</summary>
         public int medicineCount;
+
+        /// <summary>
+        /// Medicine actually in storage. Only interesting against <see cref="medicineCount"/>:
+        /// a gap between them is a hauling backlog, not a shortage.
+        /// </summary>
+        public int medicineStored;
 
         // --- raw materials ---
         public int wood;
@@ -583,7 +597,25 @@ namespace AutoColony
             var rc = map.resourceCounter;
             if (rc == null) return;
 
-            s.foodNutrition = rc.TotalHumanEdibleNutrition;
+            // Reachable food, not stockpiled food.
+            //
+            // ResourceCounter.TotalHumanEdibleNutrition only sees what has been hauled into
+            // storage, and a colony's starting supplies lie on the ground until somebody moves
+            // them. So every run opened on "food 0.0d" for its first half-day — run 82 for
+            // seven readings, run 84 for four — and then jumped straight to 0.9 and 1.9 days.
+            // A colony does not acquire two days of food from nowhere on the morning of day
+            // zero. That was hauling catching up, and the number had been wrong until it did.
+            //
+            // It is wrong in the direction that does the most damage. daysOfFood drives the
+            // Immediate "Feed the colony" goal, which halts discretionary building, and the
+            // starvation work weights, which throw everybody at hunting and cooking. Every
+            // colony therefore began its most formative hours in a food emergency it was not
+            // in, with the food lying in front of it.
+            //
+            // Colonists eat any reachable unforbidden food, stockpiled or not, so reachable is
+            // the honest measure of what the colony has to eat.
+            s.foodNutrition = ReachableHumanEdibleNutrition(map);
+            s.foodStored = rc.TotalHumanEdibleNutrition;
             s.daysOfFood = s.colonists > 0
                 ? s.foodNutrition / (s.colonists * NutritionPerColonistDay)
                 : s.foodNutrition;
@@ -594,9 +626,23 @@ namespace AutoColony
             s.textiles = Count(rc, AcDefs.Cloth);
             s.silver = rc.Silver;
 
-            s.medicineCount = Count(rc, ThingDefOf.MedicineHerbal)
-                            + Count(rc, ThingDefOf.MedicineIndustrial)
-                            + Count(rc, ThingDefOf.MedicineUltratech);
+            // Map-wide, not stockpile-only.
+            //
+            // ResourceCounter sees what has been tidied away, and a colony's starting medicine
+            // sits in a drop pod or on the ground until somebody hauls it. Counted off the
+            // counter, a fully-supplied colony reads "med 0" — which is what run 84 reported on
+            // day 0 with medicine plainly on the map. A doctor will fetch medicine from
+            // anywhere reachable, so the stockpile is irrelevant to whether a wound gets
+            // treated, and it is the treatable question this number is for.
+            //
+            // The same trap usableMaterial was written to avoid, in a different costume.
+            s.medicineStored = Count(rc, ThingDefOf.MedicineHerbal)
+                             + Count(rc, ThingDefOf.MedicineIndustrial)
+                             + Count(rc, ThingDefOf.MedicineUltratech);
+
+            s.medicineCount = CountOnMap(map, ThingDefOf.MedicineHerbal)
+                            + CountOnMap(map, ThingDefOf.MedicineIndustrial)
+                            + CountOnMap(map, ThingDefOf.MedicineUltratech);
 
             s.usableMaterial = PlacementUtil.AvailableCount(map, ThingDefOf.WoodLog)
                              + PlacementUtil.AvailableCount(map, ThingDefOf.Steel);
@@ -607,6 +653,56 @@ namespace AutoColony
         static int Count(ResourceCounter rc, ThingDef def)
         {
             return def == null ? 0 : rc.GetCount(def);
+        }
+
+        /// <summary>
+        /// Everything of this def the colony could actually reach — stockpiled and loose alike,
+        /// forbidden items excluded. Deliberately not <c>ResourceCounter</c>, which only sees
+        /// what has been hauled into storage.
+        /// </summary>
+        /// <summary>
+        /// Human-edible nutrition lying anywhere the colony can get at it. Mirrors what
+        /// ResourceCounter reports, minus its restriction to storage.
+        /// </summary>
+        static float ReachableHumanEdibleNutrition(Map map)
+        {
+            if (map == null || map.listerThings == null) return 0f;
+
+            float total = 0f;
+            var things = map.listerThings.ThingsInGroup(ThingRequestGroup.FoodSourceNotPlantOrTree);
+            if (things == null) return 0f;
+
+            for (int i = 0; i < things.Count; i++)
+            {
+                var thing = things[i];
+                if (thing == null || !thing.Spawned) continue;
+                if (thing.IsForbidden(Faction.OfPlayer)) continue;
+
+                var def = thing.def;
+                if (def == null || def.ingestible == null) continue;
+                if (!def.IsNutritionGivingIngestible || !def.ingestible.HumanEdible) continue;
+
+                total += def.ingestible.CachedNutrition * thing.stackCount;
+            }
+            return total;
+        }
+
+        static int CountOnMap(Map map, ThingDef def)
+        {
+            if (map == null || def == null) return 0;
+
+            int total = 0;
+            var things = map.listerThings != null ? map.listerThings.ThingsOfDef(def) : null;
+            if (things == null) return 0;
+
+            for (int i = 0; i < things.Count; i++)
+            {
+                var thing = things[i];
+                if (thing == null || !thing.Spawned) continue;
+                if (thing.IsForbidden(Faction.OfPlayer)) continue;
+                total += thing.stackCount;
+            }
+            return total;
         }
 
         static void CaptureBuildings(ColonyState s, Map map)
@@ -875,6 +971,7 @@ namespace AutoColony
             m.minFood = minFood;
             m.colonistsStarving = colonistsStarving;
             m.medicineCount = medicineCount;
+            m.medicineStored = medicineStored;
             m.avgHealth = avgHealth;
             m.daysOfFood = daysOfFood;
             m.outdoorTemperature = outdoorTemperature;

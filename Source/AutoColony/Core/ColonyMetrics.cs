@@ -34,6 +34,9 @@ namespace AutoColony
 
         /// <summary>Medicine of any grade in store. Distinguishes "could not treat" from "did not".</summary>
         public int medicineCount;
+
+        /// <summary>Of that, how much has been hauled into storage.</summary>
+        public int medicineStored;
         public float avgHealth;
 
         // sustenance and economy
