@@ -564,6 +564,14 @@ namespace AutoColony.Modules
 
             if (ctx.state.workingGenerators > 0 &&
                 PlaceInBase(ctx, AcDefs.Heater, 1, RoomPreference.Coldest)) return true;
+
+            // A campfire the colony cannot keep fed heats nothing and eats the wood the stove
+            // needs. See FuelUpkeep — the first one always passes; this stops the fourth.
+            if (!Furniture.FuelUpkeep.CanKeepAnotherFed(ctx.state, ctx.map, AcDefs.Campfire))
+            {
+                NoteFuelRefusal(ctx, AcDefs.Campfire);
+                return false;
+            }
             return PlaceInBase(ctx, AcDefs.Campfire, 1, RoomPreference.Coldest);
         }
 
@@ -608,6 +616,15 @@ namespace AutoColony.Modules
 
             var passive = AcDefs.Thing("PassiveCooler");
             if (passive == null || !PlacementUtil.ResearchDone(passive)) return false;
+
+            // The one that cost run 110 its day 12. Seven hoppers stood dry in a heatstroke, the
+            // passive coolers among them, while this remedy kept adding more of them — each new
+            // cooler drawing on the same woodpile and the same hauling hours as the last.
+            if (!Furniture.FuelUpkeep.CanKeepAnotherFed(ctx.state, ctx.map, passive))
+            {
+                NoteFuelRefusal(ctx, passive);
+                return false;
+            }
             if (!PlaceInBase(ctx, passive, 1, RoomPreference.Hottest)) return false;
 
             Chronicle.Record(ChronicleCategory.Build,
@@ -670,6 +687,26 @@ namespace AutoColony.Modules
         static bool AddSeating(DirectorContext ctx)
         {
             return PlaceInBase(ctx, AcDefs.Stool, ctx.state.colonists);
+        }
+
+        /// <summary>What the colony last refused to build for want of hands, so it says it once.</summary>
+        static string fuelRefusalNoted = "";
+
+        /// <summary>
+        /// Speak the refusal, once per kind.
+        ///
+        /// A remedy that quietly declines looks exactly like one that was never reached, and
+        /// this project has already lost days to that difference — an unexplained absence sends
+        /// the next reader looking at the wrong subsystem. Every other gate here says why.
+        /// </summary>
+        static void NoteFuelRefusal(DirectorContext ctx, ThingDef def)
+        {
+            string key = def != null ? def.defName : "?";
+            if (fuelRefusalNoted == key) return;
+            fuelRefusalNoted = key;
+
+            Chronicle.Record(ChronicleCategory.Build,
+                "upkeep — " + Furniture.FuelUpkeep.Refusal(ctx.state, def));
         }
 
         /// <summary>
@@ -1176,6 +1213,14 @@ namespace AutoColony.Modules
         {
             var lamp = AcDefs.Torch;
             if (lamp == null || defect.room == null) return false;
+
+            // A torch is the cheapest thing here and the easiest to over-place, and it burns the
+            // same wood as everything else.
+            if (!Furniture.FuelUpkeep.CanKeepAnotherFed(ctx.state, ctx.map, lamp))
+            {
+                NoteFuelRefusal(ctx, lamp);
+                return false;
+            }
 
             var stuff = PlacementUtil.ChooseStuff(ctx.map, lamp,
                 FireRisk.StonePreference(ctx, FireRisk.Assess(ctx.map, ctx.state)));

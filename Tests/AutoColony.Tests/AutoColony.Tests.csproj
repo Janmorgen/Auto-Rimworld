@@ -23,6 +23,7 @@
   -->
   <ItemGroup>
     <Compile Include="../../Source/AutoColony/Core/Furniture/SeatingGeometry.cs" Link="Production/SeatingGeometry.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Furniture/FuelBudget.cs" Link="Production/FuelBudget.cs" />
     <Compile Include="../../Source/AutoColony/Learning/Genes.cs" Link="Production/Genes.cs" />
     <Compile Include="../../Source/AutoColony/Learning/AcRandom.cs" Link="Production/AcRandom.cs" />
     <Compile Include="../../Source/AutoColony/Learning/StrategyGenome.cs" Link="Production/StrategyGenome.cs" />
