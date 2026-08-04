@@ -1018,12 +1018,17 @@ namespace AutoColony.Modules
                     if (bed == null || !bed.Spawned) continue;
                     if (bed.OwnersForReading != null && bed.OwnersForReading.Count > 0) continue;
 
-                    if (bed.def.Minifiable)
-                        ctx.map.designationManager.AddDesignation(
-                            new Designation(bed, DesignationDefOf.Uninstall));
-                    else
-                        ctx.map.designationManager.AddDesignation(
-                            new Designation(bed, DesignationDefOf.Deconstruct));
+                    // Once. This ran every pass and re-ordered the same bed each time, which
+                    // the game answers with "Tried to double-add designation on Thing" in the
+                    // warning log rather than as an exception — so nothing watching this
+                    // session ever counted it, which is the second time today a designation
+                    // added without checking has hidden in that log.
+                    var how = bed.def.Minifiable
+                        ? DesignationDefOf.Uninstall
+                        : DesignationDefOf.Deconstruct;
+
+                    if (ctx.map.designationManager.DesignationOn(bed, how) != null) continue;
+                    ctx.map.designationManager.AddDesignation(new Designation(bed, how));
                 }
             }
         }

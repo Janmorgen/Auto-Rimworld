@@ -376,10 +376,23 @@ namespace AutoColony.Modules
             var map = ctx.map;
             if (map.zoneManager == null || map.glowGrid == null) return;
 
+            // Snapshot the zone list before touching any of it.
+            //
+            // Removing a growing zone's last cell makes the game deregister the zone, which
+            // mutates AllZones underneath the loop that is walking it — "Collection was
+            // modified", and the Zones module dies for that pass. The inner loop already
+            // defers cell removal for the same reason one level down; the outer one did not,
+            // because until this evening a colony rarely had more than two growing zones and
+            // never lost a whole one to a roof.
+            //
+            // Adding cotton, haygrass, healroot and social plots made a fully-darkened zone
+            // several times likelier. The bug was always there; the new plots bought the ticket.
+            var zones = new List<Zone>(map.zoneManager.AllZones);
+
             int released = 0;
-            foreach (var zone in map.zoneManager.AllZones)
+            for (int z = 0; z < zones.Count; z++)
             {
-                var g = zone as Zone_Growing;
+                var g = zones[z] as Zone_Growing;
                 if (g == null) continue;
 
                 var doomed = new List<IntVec3>();

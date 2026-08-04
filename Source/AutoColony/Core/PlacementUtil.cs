@@ -431,6 +431,9 @@ namespace AutoColony
             var def = DesignationDefOf.Uninstall;
             if (def == null) return false;
             if (MarkedForDeconstruction(map, thing)) return false;
+            // And not already ordered to move. TryDeconstruct has always checked this for its
+            // own designation; this one checked for the other kind and not for itself.
+            if (map.designationManager.DesignationOn(thing, def) != null) return false;
 
             map.designationManager.AddDesignation(new Designation(thing, def));
             return true;
