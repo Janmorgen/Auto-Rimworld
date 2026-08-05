@@ -576,6 +576,24 @@ namespace AutoColony
         public int hostilePawns;
 
         /// <summary>
+        /// Wild animals currently hunting a colonist, asked as the game's own
+        /// <c>JobDefOf.PredatorHunt</c> with a colonist as prey.
+        ///
+        /// A hunting predator is not hostile to the player faction — it is a neutral wild animal
+        /// running a job — so <c>HostileTo</c> is false and hostilePawns stays at zero. The
+        /// defense module therefore never engaged, never drafted, and never noticed: two colonies
+        /// tonight lost a colonist to a lynx with no THREAT line in the record for days either
+        /// side of the death.
+        ///
+        /// The colonist is not merely attacked. Predators stalk, down, and then eat, which is why
+        /// these show up as "Bite (lynx teeth)" on someone who was alone and unarmed.
+        /// </summary>
+        public int predatorsHunting;
+
+        /// <summary>Which colonists are being hunted, so the response can go to them.</summary>
+        public List<Pawn> huntedColonists;
+
+        /// <summary>
         /// Raids the colony has seen. Used as the signal that prisoners are a live prospect: a
         /// prison has to be standing *before* anyone can be captured, so waiting until the colony
         /// holds prisoners to build one is a deadlock with no way in.
@@ -920,6 +938,24 @@ namespace AutoColony
                 // Downed hostiles are excluded here too: a raider on the ground is a decision
                 // to be made about them, not a fight still in progress.
                 if (p.HostileTo(Faction.OfPlayer) && !p.Downed) s.hostilePawns++;
+
+                // And anything stalking one of ours, which HostileTo does not cover.
+                try
+                {
+                    if (!p.Downed && p.RaceProps != null && p.RaceProps.Animal &&
+                        p.CurJob != null && p.CurJob.def == JobDefOf.PredatorHunt)
+                    {
+                        var prey = p.CurJob.targetA.Thing as Pawn;
+                        if (prey != null && prey.Faction == Faction.OfPlayer && prey.RaceProps != null &&
+                            prey.RaceProps.Humanlike)
+                        {
+                            s.predatorsHunting++;
+                            if (s.huntedColonists == null) s.huntedColonists = new List<Pawn>();
+                            if (!s.huntedColonists.Contains(prey)) s.huntedColonists.Add(prey);
+                        }
+                    }
+                }
+                catch (Exception) { }
 
                 if (p.Downed && p.RaceProps.Humanlike && p.Faction != Faction.OfPlayer)
                     s.downedStrangers++;

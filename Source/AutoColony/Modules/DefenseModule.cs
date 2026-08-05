@@ -26,6 +26,9 @@ namespace AutoColony.Modules
         /// <summary>True once a response has begun, until the threat is genuinely over.</summary>
         bool engaged;
 
+        /// <summary>Said once per hunt rather than every pass.</summary>
+        bool predatorNoted;
+
         /// <summary>
         /// Module passes since anything hostile was last within reach. At a 600-tick interval
         /// six passes is roughly an in-game hour and a half of quiet before standing down.
@@ -100,6 +103,33 @@ namespace AutoColony.Modules
         /// </summary>
         bool ThreatActive(DirectorContext ctx)
         {
+            // A predator stalking a colonist is a threat with a name on it.
+            //
+            // It is not hostile to the player faction, so it never reached hostilePawns and this
+            // method returned false while a lynx ran a colonist down. Two colonies lost somebody
+            // that way in one night, both with no THREAT line in the record for days around the
+            // death — the director was not deciding badly, it could not see the animal.
+            //
+            // Answered before the strength arithmetic below, because that compares faction raid
+            // points and a lone animal scores near zero on it — which would read as "not worth
+            // meeting" for the exact case where meeting it is the whole job.
+            if (ctx.state.predatorsHunting > 0)
+            {
+                if (!predatorNoted)
+                {
+                    predatorNoted = true;
+                    var prey = ctx.state.huntedColonists;
+                    Chronicle.Record(ChronicleCategory.Threat, string.Format(
+                        "{0} predator(s) hunting {1} — drafting, because a stalked colonist alone " +
+                        "is how this colony has lost people without a single threat line in the log",
+                        ctx.state.predatorsHunting,
+                        prey != null && prey.Count > 0 ? prey[0].LabelShortCap : "somebody"));
+                }
+                engaged = true;
+                return true;
+            }
+            predatorNoted = false;
+
             if (ctx.state.hostilePawns <= 0) { engaged = false; return false; }
 
             float willingness = ctx.Gene(Genes.DefenseDraftDanger);
