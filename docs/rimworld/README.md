@@ -1,6 +1,6 @@
 # RimWorld reference
 
-A linked set of notes on RimWorld's core systems, supplied for this project's use. Base game
+Twenty-one linked notes on RimWorld's core systems, supplied for this project's use. Base game
 only — nothing here covers Royalty, Ideology, Biotech, Anomaly or Odyssey, which matches the
 install the director runs against (1.6.4871, no DLC).
 
@@ -47,11 +47,23 @@ would be a bug:
   ([research.md](research.md)) — supports scoring research by points banked rather than
   projects finished, which is what the evaluator now does.
 
+## Where they expose a gap
+
+- **Cover** ([combat-and-weapons.md](combat-and-weapons.md)): "fighting from behind cover while
+  the enemy is in the open is one of the most reliable defensive advantages in the game."
+  `CombatAssessment.FightingValue` is offence x toughness, where toughness is health, working
+  limbs and armour. **There is no positional term at all.** The colony decides whether a fight
+  is winnable from the two sides' bodies and equipment, and cannot express the advantage the
+  notes call the most reliable one available. `FiringPosition` knows about cover; the strength
+  model it feeds does not. Recorded as a task rather than patched, because a positional term
+  changes every engagement decision and wants a run to measure against.
+- **Ranged weapons cannot fire at an adjacent enemy** (same file). `Offence` takes the ranged
+  profile whenever a pawn carries a ranged weapon, so a bow-armed colonist in melee is scored
+  at a value they cannot actually deliver. Smaller, and it cuts both ways since raiders are
+  scored the same, but it is a known inaccuracy rather than a simplification.
+
 ## Not included
 
-`index.md` links to five files that were not supplied, so those links dangle:
+One file `index.md` links to has not been supplied, so that link dangles: `trading.md`.
 
-`combat-and-weapons.md` · `factions.md` · `storyteller-and-events.md` · `trading.md`
-
-The index's own reading order references them too. Left as-is rather than edited, so that if
-they arrive later they simply drop in.
+Left as-is rather than edited, so it drops straight in if it arrives.
