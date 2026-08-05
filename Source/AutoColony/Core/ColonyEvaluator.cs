@@ -540,25 +540,39 @@ namespace AutoColony
             breakdown.Add(new ScoreTerm("Infrastructure", infra, WInfrastructure));
 
             // --- defense readiness, scaled by the threat wealth actually attracts ---
+            // Defense is what the fighting cost, and only secondarily what was built for it.
+            //
+            // It used to be turret readiness against wealth and nothing else:
+            //
+            //   expectedTurrets = wealth / 25000, capped 0..8
+            //   defense = expectedTurrets < 0.5 ? 1 : poweredTurrets / expectedTurrets
+            //
+            // which never read a raid, an injury or a death in either direction. Run 118 was
+            // wiped out by one raider and scored 0.00; run 117 lost nobody to combat and also
+            // scored 0.00; run 116 lost two colonists and scored 1.00. The term moved with the
+            // woodpile, not with the casualties — and it had a cliff at 12,500 wealth where a
+            // colony flipped from a free 1.0 to a flat 0.0 for getting slightly richer.
+            //
+            // Readiness still counts, because building toward turrets is the part the director
+            // controls. But it is now the smaller half and it is smooth, and the larger half is
+            // whether anybody spent the epoch on the floor. A colony with no turrets that came
+            // through unhurt was defended; a rich one behind three turrets whose colonists bled
+            // out was not, and the old term said the opposite of both.
             float expectedTurrets = AcMath.Clamp(end.wealthTotal / 25000f, 0f, 8f);
-            float defense = expectedTurrets < 0.5f ? 1f : AcMath.Clamp01(end.poweredTurrets / expectedTurrets);
+            float readiness = expectedTurrets <= 0f
+                ? 1f
+                : AcMath.Clamp01(end.poweredTurrets / expectedTurrets);
 
-            // And whether anybody was actually hurt, which is the part that was missing.
-            //
-            // Run 118 was wiped out by a single Low-danger raider — four colonists bled to death
-            // over eighteen hours — and scored Defense 1.00. Below 12,500 wealth expectedTurrets
-            // falls under 0.5 and the term returns 1.0 unconditionally, and these colonies live
-            // at 12-20k while turrets sit behind Electricity at 1600 research they never reach.
-            // So Defense has been a constant 1.0 in every run this project has ever scored: a
-            // term that cannot vary teaches nothing, and this one was reporting perfection to a
-            // colony being buried.
-            //
-            // Turret readiness is still worth something — it is the part the director can build
-            // toward — but it is preparation, and preparation that ends with everyone on the
-            // floor was not enough. The outcome now caps it: time spent with somebody downed is
-            // already measured for Survival, and it is the closest thing to "how badly did the
-            // fighting go" the accumulator holds.
-            defense *= AcMath.Clamp01(1f - acc.DownedFraction * 1.5f);
+            // Poverty is an excuse for having no turrets, not a defence. Blended rather than
+            // switched, so there is no cliff to sit under.
+            float excused = AcMath.Clamp01(1f - end.wealthTotal / 25000f);
+            readiness = AcMath.Clamp01(readiness + excused * (1f - readiness));
+
+            // Time with somebody down, already measured for Survival — the closest thing the
+            // accumulator holds to how badly the fighting went.
+            float unhurt = AcMath.Clamp01(1f - acc.DownedFraction * 1.5f);
+
+            float defense = 0.35f * readiness + 0.65f * unhurt;
             breakdown.Add(new ScoreTerm("Defense", defense, WDefense));
 
             // --- conduct: time spent in crisis, and misery with no answer ---
