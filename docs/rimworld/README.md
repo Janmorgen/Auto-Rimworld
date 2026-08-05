@@ -6,27 +6,28 @@ install the director runs against (1.6.4871, no DLC).
 
 Start at [index.md](index.md).
 
-## What this is for, and what it is not
+## How these are used
 
-**Orientation, not ground truth.** These notes say so themselves in several places — "exact
-numbers can drift slightly between patches", "relative comparisons rather than fixed values".
-The director must not encode a number read from here as though it were a fact about the game.
+**Consulted every run, and never modified.** See goal.md §9. Any question about how RimWorld
+works comes here first — before assuming, before inferring it from a chronicle, and before
+writing the change. They are researched truth and they stand as supplied: not corrected, not
+annotated, not reorganised.
 
-The project already has the tool for that distinction: the API metadata probe under
-`$JD/tmp/apiprobe/`, which loads the real `RimWorldLinux_Data/Managed` assemblies and the defs
-in `Data/Core/Defs`. Every mechanical constant this director relies on was read that way —
-`TreeBase.harvestedThingDef`, `FueledStove` fuel capacity, `Alert_LowMedicine`'s threshold of
-2 per colonist, `JoyGiverDef.requireChair`.
+That has one consequence worth stating plainly, because the alternative would be to quietly
+edit: **if the running game ever appears to disagree with a note, the disagreement is recorded
+outside these files** — in the task list, in `docs/`, or in the code comment where it bites.
+Never by touching the note. A reference rewritten whenever it is inconvenient stops being a
+reference.
 
-So the working rule, which is just goal.md §2's ladder applied to a document:
+Separately, the API metadata probe under `$JD/tmp/apiprobe/` is how the code reads a *literal
+value* out of the running install — `TreeBase.harvestedThingDef`, `FueledStove` fuel capacity,
+`Alert_LowMedicine`'s threshold of 2 per colonist, `JoyGiverDef.requireChair`. That is a
+mechanism for getting exact numbers at runtime, not a second opinion on what these notes say.
 
-- Use these notes to **know a mechanism exists** and to know what to go and look for.
-- Read the **defs or the IL** for the number before any code depends on it.
-- If a note and the game disagree, the game is right and the note gets a correction here.
-
-They are genuinely useful for the first of those. Several systems in this director were built
-without knowing a mechanism existed at all — seating adjacency, fuel as a haulable good, the
-tree-sowing research gate — and each cost a colony before it was found.
+Their largest value is telling this director that a mechanism exists at all. Several systems
+here were built without knowing one did — seating adjacency, fuel as a haulable good rather
+than a property of a stove, the tree-sowing research gate — and each cost a colony before it
+was found.
 
 ## Where these corroborate decisions already made
 

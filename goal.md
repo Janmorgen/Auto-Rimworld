@@ -138,10 +138,12 @@ Accepted cost: run length is not a clean measurement. Do not quote it as though 
 5. **Trace it before touching it.** Read the module's declared reads and affects, confirm they
    are still true, and follow the chain out from them — the fault is usually one link further
    along than the symptom.
-6. Make one change, on the highest rung of the ladder that reaches.
-7. Update the declarations I invalidated, and add any new edge to the map, labelled
+6. **Consult `docs/rimworld/` on any question about how the game works** — before assuming,
+   before deriving it from a chronicle, and before writing the change. See §9.
+7. Make one change, on the highest rung of the ladder that reaches.
+8. Update the declarations I invalidated, and add any new edge to the map, labelled
    **observed** or **suspected**.
-8. Build, run the tests, restart, commit **and push**.
+9. Build, run the tests, restart, commit **and push**.
 
 ---
 
@@ -153,9 +155,7 @@ Accepted cost: run length is not a clean measurement. Do not quote it as though 
 - Temporary files go in `$CLAUDE_JOB_DIR/tmp`, never `/tmp` — parallel jobs clobber it.
 - Build: `export PATH="$PATH:$HOME/.dotnet"; dotnet build Source/AutoColony/AutoColony.csproj`
 - Tests: `dotnet test Tests/AutoColony.Tests`
-- **Game reference:** `docs/rimworld/` — base-game notes on every core system. Use it to learn
-  that a mechanism *exists*; read the defs or the IL through the API probe for the number
-  before any code depends on it. A figure taken from prose is rung 3 done badly.
+- **Game reference:** `docs/rimworld/` — see §9. Consulted every run. Never edited.
 
 ---
 
@@ -169,3 +169,44 @@ Accepted cost: run length is not a clean measurement. Do not quote it as though 
 The last clause is the design brief. Not "make the director do good things" — **make bad
 outcomes cost it something it can measure.** A director that cannot be punished by its own
 score for hurting the colony will eventually hurt the colony.
+
+---
+
+## 9. The game reference — `docs/rimworld/`
+
+Twenty-one linked notes covering every core system: colonists, mood, work, health, plants,
+animals, food, crafting, research, base building, room attributes and types, biomes,
+recruiting, questing, combat, factions, the storyteller, and trading. Base game only, matching
+the install the director runs against.
+
+**Consult it every run.** Any question about how RimWorld actually works goes here first —
+before assuming, before inferring it from a chronicle, and before writing the change. This
+director has repeatedly built systems without knowing the mechanism existed at all: seating
+adjacency, fuel as a haulable good rather than a property of a stove, the tree-sowing research
+gate. Each cost a colony before it was found.
+
+**It is researched truth, and it is never modified.** Not corrected, not annotated, not
+reorganised, not "brought up to date". It stands as supplied.
+
+That has one consequence worth stating, because the alternative would be to quietly edit:
+**if the running game ever appears to disagree with a note, the disagreement is recorded
+outside these files** — in the task list, in `docs/`, or in the code comment where it bites.
+Never by touching the note. A reference that gets rewritten whenever it is inconvenient stops
+being a reference, which is the same failure §4 guards the connection map against.
+
+The API probe under `$JD/tmp/apiprobe/` remains how the code reads a literal value at runtime
+— `TreeBase.harvestedThingDef`, a fuel capacity, an alert threshold. That is a mechanism for
+getting exact numbers out of the running install, not a second opinion on what these notes
+say.
+
+### What it has already been worth
+
+Three findings in its first sitting, which is the case for step 6 existing at all:
+
+- Corroborated the fix that broke a three-run wipe streak — untreated bleeding, not the hit,
+  is what kills in most combat deaths.
+- Exposed a missing term in the strength model: cover is called the most reliable defensive
+  advantage in the game, and `FightingValue` has no positional term at all (#43).
+- Revealed an entire absent system: there is no trade capability anywhere in the director,
+  and medicine — the thing that stops the bleeding deaths — is what these colonies run out of
+  (#44). Only findable by reading about a system and finding nothing on the other side.
