@@ -177,6 +177,17 @@ namespace AutoColony.Connections
 
             new Consequence
             {
+                from = "world.blueprints",
+                to = "fuelOnHand",
+                confidence = Confidence.Observed,
+                evidence = "run 143 day 10 — four passive coolers at fifty wood each while " +
+                           "AddCooler stayed at severity 0.80 and roomsEver was 0, on a map " +
+                           "with no tree standing anywhere. Whether the planner has enclosed a " +
+                           "room decides whether temperature work is spending or wasting"
+            },
+
+            new Consequence
+            {
                 from = "world.drafted",
                 to = "colonistsBleedingOut",
                 confidence = Confidence.Observed,

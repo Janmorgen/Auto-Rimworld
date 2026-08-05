@@ -1419,6 +1419,27 @@ namespace AutoColony.Modules
                 // complaint. The same discipline as not repurposing the room the plan wants.
                 if (BasePlannerModule.KeyFurnitureMissing(ctx, rooms[i])) continue;
 
+                // Temperature work needs a room that actually holds air.
+                //
+                // Heaters, campfires and coolers move a room's temperature, and a room open to
+                // the sky has none to move — walls and a roof are the whole mechanism. This
+                // placed them by which planned room read hottest or coldest and never asked
+                // whether that room was sealed, so on an unenclosed base the remedy fires, the
+                // complaint does not clear, and it fires again.
+                //
+                // Run 143, on sand, at 45C: four passive coolers at fifty wood apiece while
+                // AddCooler stayed pinned at severity 0.80 and roomsEver stood at 0. Two hundred
+                // units of wood on a map with no tree standing anywhere, spent on coolers that
+                // could not cool. The answer there was walls, and nothing could say so.
+                //
+                // Only the temperature-preferring path is gated: a table or a stool in an
+                // unfinished shell is merely early, but a cooler in one is a category error.
+                if (prefer != RoomPreference.Any)
+                {
+                    var air = rooms[i].Center.GetRoom(ctx.map);
+                    if (air == null || air.TouchesMapEdge || air.PsychologicallyOutdoors) continue;
+                }
+
                 // A room that already has one does not need a second.
                 //
                 // This placed into the first workable cell of the coldest room and never asked
