@@ -118,6 +118,24 @@ namespace AutoColony
         /// </summary>
         public int colonistsIdle;
 
+        /// <summary>
+        /// Colonists the game says will die of blood loss within a day if nobody tends them.
+        ///
+        /// Read as <c>HealthUtility.TicksUntilDeathDueToBloodLoss</c>, which is the number
+        /// RimWorld puts on the health tab — not "is downed" and not "is untended", both of
+        /// which are true of people who will be fine.
+        ///
+        /// The distinction is a deadline. Run 116 lost Chen and Jane to blood loss with medicine
+        /// in the cupboard and Doctor correctly raised to 4.0, because a food crisis had Cooking
+        /// at 5.9 and Hunting at 5.0 and both outrank it. Jane carried Chen to a bed and then
+        /// went to cook. Chen bled out six hours later.
+        ///
+        /// Both emergencies were real. They are not the same clock: a colony at 0.4 days of food
+        /// has a day to find a meal, and a colonist bleeding out has hours, and no amount of
+        /// cooking answers the second.
+        /// </summary>
+        public int colonistsBleedingOut;
+
         /// <summary>Which ones, so something can go and let them out.</summary>
         public List<Pawn> cutOff;
 
@@ -787,6 +805,20 @@ namespace AutoColony
                 if (p.Spawned && !p.Downed && !p.InBed() && p.mindState != null &&
                     p.mindState.IsIdle && (p.drafter == null || !p.drafter.Drafted))
                     s.colonistsIdle++;
+
+                // A day, because that is the horizon everything else here is scored against —
+                // days of food, days of medicine. Anything sooner than that is not "unwell", it
+                // is a death with a time on it.
+                try
+                {
+                    if (p.health != null && p.health.hediffSet != null &&
+                        p.health.hediffSet.BleedRateTotal > 0.001f)
+                    {
+                        int ticks = HealthUtility.TicksUntilDeathDueToBloodLoss(p);
+                        if (ticks < 60000) s.colonistsBleedingOut++;
+                    }
+                }
+                catch (Exception) { }
 
                 if (p.Spawned && !CanReachFood(p))
                 {
@@ -1642,6 +1674,7 @@ namespace AutoColony
             m.colonistsStarving = colonistsStarving;
             m.colonistsCutOff = colonistsCutOff;
             m.colonistsIdle = colonistsIdle;
+            m.colonistsBleedingOut = colonistsBleedingOut;
             m.colonistsUntended = colonistsUntended;
             m.colonistsUntendedLethal = colonistsUntendedLethal;
             m.colonistsLosingToDisease = colonistsLosingToDisease;

@@ -38,6 +38,9 @@ namespace AutoColony
         /// <summary>Colonists with nothing to do.</summary>
         public int colonistsIdle;
 
+        /// <summary>Colonists who will bleed to death within a day if untended.</summary>
+        public int colonistsBleedingOut;
+
         /// <summary>Colonists with an untended condition the game says needs tending.</summary>
         public int colonistsUntended;
 

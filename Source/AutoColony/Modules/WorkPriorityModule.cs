@@ -435,7 +435,24 @@ namespace AutoColony.Modules
             //
             // Ordinary untended stays where it was. A grazed knuckle is not an emergency, and
             // treating every scratch as one would hold Doctor at the top for ever.
-            Need("Doctor", notReachingThem ? 5f
+            // Bleeding out sits above everything, because it is the shortest clock on the map.
+            //
+            // Doctor topped out at 4.0 and the food emergency reaches higher: Cooking goes to
+            // 4.5, and 5.9 with winter coming, and Hunting to 5.0. Run 116 lost Chen and Jane to
+            // blood loss with eighteen medicine in the cupboard and Doctor correctly at 4.0 —
+            // Jane carried Chen to a bed, then went to cook, because cooking outranked tending.
+            // Chen bled out six hours later; Jane bled out four days after that.
+            //
+            // Both emergencies were real, and that is the point. The ladder was comparing them
+            // on how bad they are instead of on how long they give you. A colony at 0.4 days of
+            // food has a day to find a meal. A colonist the game says will bleed to death in
+            // four hours has four hours, and no amount of cooking answers it.
+            //
+            // 7 rather than 6 so it clears Firefighter's 6.0 as well. A fire that is spreading
+            // and a colonist who is bleeding both want everybody, and the one with a name on it
+            // goes first — the fire will still be there in the ten minutes tending takes.
+            Need("Doctor", s.colonistsBleedingOut > 0 ? 7f
+                         : notReachingThem ? 5f
                          : (s.colonistsDowned > 0 || s.colonistsUntendedLethal > 0
                             || s.colonistsLosingToDisease > 0) ? 4f
                          : s.colonistsUntended > 0 ? 3f

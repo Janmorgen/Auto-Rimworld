@@ -186,11 +186,12 @@ namespace AutoColony
                         : m.colonistsIdle > 0
                             ? string.Format(CultureInfo.InvariantCulture, " ({0} IDLE)", m.colonistsIdle)
                             : "",
-                m.colonistsUntended > 0 || m.colonistsLosingToDisease > 0
+                m.colonistsUntended > 0 || m.colonistsLosingToDisease > 0 || m.colonistsBleedingOut > 0
                     ? string.Format(CultureInfo.InvariantCulture, " ({0} UNTENDED{1}{2})",
                         m.colonistsUntended,
                         m.colonistsUntendedLethal > 0 ? ", " + m.colonistsUntendedLethal + " LETHAL" : "",
                         m.colonistsLosingToDisease > 0 ? ", " + m.colonistsLosingToDisease + " LOSING" : "")
+                      + (m.colonistsBleedingOut > 0 ? " (" + m.colonistsBleedingOut + " BLEEDING OUT)" : "")
                     : "",
                 m.daysOfFoodUnbutchered >= 0.1f
                     ? string.Format(CultureInfo.InvariantCulture, " (+{0:0.0}d unbutchered)", m.daysOfFoodUnbutchered)
