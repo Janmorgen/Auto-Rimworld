@@ -418,6 +418,9 @@ namespace AutoColony
         /// <summary>Wood it would take to fill every hopper the colony owns.</summary>
         public int fuelWanted;
 
+        /// <summary>Dry hoppers awaiting a single fuel reading, cleared once taken.</summary>
+        List<CompRefuelable> fuelKinds;
+
         /// <summary>Whether a growing zone is already raising the fuel back.</summary>
         public bool growingWood;
 
@@ -969,6 +972,24 @@ namespace AutoColony
                 ? mealNutrition / (s.colonists * NutritionPerColonistDay)
                 : mealNutrition;
 
+            // One reading per distinct fuel, now that every dry hopper has been seen.
+            if (s.fuelKinds != null && s.fuelKinds.Count > 0)
+            {
+                var counted = new HashSet<ushort>();
+                for (int i = 0; i < s.fuelKinds.Count; i++)
+                {
+                    var comp = s.fuelKinds[i];
+                    if (comp == null || comp.Props == null || comp.Props.fuelFilter == null) continue;
+
+                    var any = comp.Props.fuelFilter.AnyAllowedDef;
+                    if (any == null || !counted.Add(any.shortHash)) continue;
+
+                    s.fuelOnHand += FuelReachableFor(map, comp);
+                    s.fuelStanding += StandingFuelFor(map, comp);
+                }
+                s.fuelKinds = null;
+            }
+
             // Cut off is a statement about this colonist against the rest of the colony, so it
             // means nothing when nobody can reach food.
             //
@@ -1515,8 +1536,13 @@ namespace AutoColony
                     //
                     // Asked through the hopper's own fuelFilter rather than by naming wood, so a
                     // chemfuel generator or a modded burner answers for itself.
-                    s.fuelOnHand += FuelReachableFor(building.Map, refuelable);
-                    s.fuelStanding += StandingFuelFor(building.Map, refuelable);
+                    // Measured once per kind of fuel, after this loop. Summing per hopper
+                    // counted the same woodpile once for every dry building — ten dry hoppers
+                    // reported 84,690 units of standing timber inside a 55-cell circle, which
+                    // is roughly ten times the truth and wrong in the direction of "there is
+                    // plenty", against a WoodSupplyGoal that stands down at 400.
+                    if (s.fuelKinds == null) s.fuelKinds = new List<CompRefuelable>();
+                    s.fuelKinds.Add(refuelable);
                 }
 
                 var trader = building.TryGetComp<CompPowerTrader>();
