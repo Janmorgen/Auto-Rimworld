@@ -64,6 +64,30 @@ namespace AutoColony.Tests
         }
 
         [Fact]
+        public void AnEmptyColonyReadsAsFullyArmed()
+        {
+            // The trap this function sets for its callers, pinned so it stays visible.
+            //
+            // Readiness is strength over the raid a colony's own wealth and headcount invite.
+            // A colony with nobody left invites nothing, so the answer is a perfect 1.0. That is
+            // right for the question asked and ruinous for a score that reads it at the instant
+            // a colony ended: run 132 was wiped out with all four colonists bled out and banked
+            // 0.35 of its Defense term on this reading.
+            float wipedOut = ThreatForecast.Readiness(
+                0f, ThreatForecast.ExpectedRaidPoints(11198f, 0));
+            Assert.Equal(1f, wipedOut, 3);
+
+            // Nor is it only the wipe. Below the wealth floor, wealth invites nothing at all, so
+            // headcount is the only thing keeping the figure honest for a poor colony — which is
+            // every colony for its first several days.
+            Assert.Equal(0f, ThreatForecast.ExpectedRaidPoints(11198f, 0), 3);
+            Assert.True(ThreatForecast.ExpectedRaidPoints(11198f, 4) > 0f);
+
+            // Hence: anything *scoring* readiness must average it across the epoch, where
+            // samples exist only while somebody is alive. See Accumulator.AvgReadiness.
+        }
+
+        [Fact]
         public void BuildingWithoutArmingLosesReadiness()
         {
             // The situation the forecast exists to notice: strength flat, wealth climbing.
