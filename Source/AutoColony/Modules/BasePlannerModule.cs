@@ -409,7 +409,13 @@ namespace AutoColony.Modules
             if (!layout.established && !TryEstablish(ctx)) return;
 
             var s = ctx.state;
-            if (s.pendingBlueprints + s.pendingFrames > MaxPendingConstruction) return;
+            if (s.pendingBlueprints + s.pendingFrames > MaxPendingConstruction)
+            {
+                NoteBacklogStandDown(ctx);
+                return;
+            }
+            backlogStandDowns = 0;
+            lastBacklogSeen = -1;
 
             placedThisPass = 0;
             placementFailures.Clear();
@@ -3880,6 +3886,54 @@ namespace AutoColony.Modules
                 }
             }
             return found;
+        }
+
+
+        /// <summary>Backlog at the last stand-down, and how many passes it has held.</summary>
+        int lastBacklogSeen = -1;
+        int backlogStandDowns;
+
+        /// <summary>
+        /// Say when the planner has stood itself down, and say when it is stuck.
+        ///
+        /// The gate above returned silently, which made it invisible and therefore permanent.
+        /// Run 136 sited a room, its walls came to more blueprints than the cap allows, nobody
+        /// built them, and the planner switched itself off for eleven game days without one
+        /// line in the chronicle. Its own long-term goal restated "no research bench, so
+        /// nothing the colony studies can ever finish" every hour of those eleven days, while
+        /// the module that would have sited the research room was refusing to run and not
+        /// saying so.
+        ///
+        /// This module already knows the rule it was breaking; UpkeepModule states it beside
+        /// the fuel refusal: a remedy that quietly declines looks exactly like one that was
+        /// never reached, and this project has lost days to that difference.
+        ///
+        /// A backlog that falls is the system working — construction is queued and being done.
+        /// A backlog that does not move is a deadlock, because the one thing that clears it is
+        /// the building nobody is doing. So the two are reported differently, and the second
+        /// says so plainly.
+        /// </summary>
+        void NoteBacklogStandDown(DirectorContext ctx)
+        {
+            var s = ctx.state;
+            int backlog = s.pendingBlueprints + s.pendingFrames;
+
+            bool stalled = backlog >= lastBacklogSeen && lastBacklogSeen >= 0;
+            backlogStandDowns = stalled ? backlogStandDowns + 1 : 1;
+            lastBacklogSeen = backlog;
+
+            // Once when it starts, then only as the diagnosis hardens, so a permanent stall
+            // does not become a permanent wall of text.
+            if (backlogStandDowns != 1 && backlogStandDowns != 8 && backlogStandDowns != 40) return;
+
+            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                "planner standing down — {0} construction outstanding against a cap of {1}{2}",
+                backlog, MaxPendingConstruction,
+                backlogStandDowns == 1
+                    ? ", so no new room is opened until it comes down"
+                    : ", and it has not come down in " + backlogStandDowns + " passes — nobody " +
+                      "is building what is already queued, so nothing here will open a room " +
+                      "again until that is answered"));
         }
 
     }
