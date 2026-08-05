@@ -161,6 +161,20 @@ namespace AutoColony.Connections
                            "finished decides whether withdrawing is a real option"
             },
 
+            // The loop run 142 was inside at day 21. Every link observed in one chronicle.
+            new Consequence
+            {
+                from = "world.blueprints",
+                to = "world.labourAvailable",
+                confidence = Confidence.Observed,
+                evidence = "run 142 days 0-21 — no enclosed bedroom means SleptOutside and " +
+                           "SleptOnGround at -4 each, mood falls to 0.04 at worst, a colonist " +
+                           "breaks, able hands drop 3 to 2, and the planner's throttle tightens " +
+                           "on the very room that would end it: \"only 1 allowed for 2 able " +
+                           "colonists\". The shortage of shelter causes the shortage of hands " +
+                           "that prevents the shelter"
+            },
+
             new Consequence
             {
                 from = "world.drafted",
