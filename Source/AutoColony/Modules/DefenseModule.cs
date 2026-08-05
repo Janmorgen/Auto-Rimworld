@@ -177,6 +177,44 @@ namespace AutoColony.Modules
         /// the base, which is what makes a doorway worth holding against them and not against
         /// this one.
         /// </summary>
+        /// <summary>
+        /// What kind of fight this is, because they do not cost the same and the colony learns
+        /// them separately.
+        ///
+        /// Read off what the attackers are and what they are doing rather than off a points
+        /// number: a siege is defined by its lord job, a predator by the job it is running, a
+        /// manhunter pack by being animals that are hostile. The points say how big; this says
+        /// what, and the two are different questions.
+        /// </summary>
+        static Learning.ThreatKind KindOfThreat(DirectorContext ctx)
+        {
+            if (ctx.state.predatorsHunting > 0) return Learning.ThreatKind.Predator;
+            if (Besieged(ctx)) return Learning.ThreatKind.Siege;
+
+            try
+            {
+                bool anyAnimal = false, anyHumanlike = false, anyInsect = false;
+                var pawns = ctx.map.mapPawns.AllPawnsSpawned;
+                for (int i = 0; i < pawns.Count; i++)
+                {
+                    var p = pawns[i];
+                    if (p == null || p.Downed || !p.HostileTo(Faction.OfPlayer)) continue;
+                    if (p.RaceProps == null) continue;
+
+                    if (p.RaceProps.Insect) anyInsect = true;
+                    else if (p.RaceProps.Humanlike) anyHumanlike = true;
+                    else if (p.RaceProps.Animal) anyAnimal = true;
+                }
+
+                if (anyInsect) return Learning.ThreatKind.Infestation;
+                if (anyHumanlike) return Learning.ThreatKind.Raid;
+                if (anyAnimal) return Learning.ThreatKind.Manhunter;
+            }
+            catch (Exception) { }
+
+            return Learning.ThreatKind.Other;
+        }
+
         static bool Besieged(DirectorContext ctx)
         {
             try
@@ -858,8 +896,19 @@ namespace AutoColony.Modules
             // stays down, so the fight has to be worth more before it is taken.
             bool canRecover = ctx.state.colonistBeds > 0;
 
+            // How much advantage this *kind* of fight has been shown to want.
+            //
+            // The gene is the prior; the memory is what this colony has actually paid. A flat
+            // ratio could only ever be right for one of the things it was applied to — a lone
+            // tribal, an arctic wolf and a manhunter pack of twelve are not one problem, and the
+            // colony that has just lost two of three people to one of them has learned something
+            // a constant cannot hold.
+            var kind = KindOfThreat(ctx);
+            float learned = Learning.ThreatMemory.ForceFor(kind, ctx.Gene(Genes.DefenseEngageRatio));
+            OpenEncounter(ctx, kind, fighters);
+
             float required = CasualtyPolicy.RequiredAdvantage(
-                ctx.Gene(Genes.DefenseEngageRatio), fighters.Count,
+                learned, fighters.Count,
                 ctx.state.colonistsDowned, hasRefuge, canRecover);
 
             bool winnable = threat <= 0f || strength / threat >= required;
@@ -884,6 +933,7 @@ namespace AutoColony.Modules
             var rally = winnable ? RallyPoint(ctx) : refuge;
             float retreatAt = ctx.Gene(Genes.DefenseRetreatHealth);
             int mobilised = 0;
+            float committedStrength = 0f;
 
             // Somebody has to still be standing afterwards to tend whoever is not.
             var medic = ChooseReservedMedic(ctx, fighters);
@@ -915,12 +965,33 @@ namespace AutoColony.Modules
                     continue;
                 }
 
+                // Enough, rather than everyone.
+                //
+                // This drafted every able colonist for a lone tribal and for a manhunter pack
+                // alike. Sending one person means that one takes all of the damage; sending
+                // three spreads it and ends the fight sooner, and both of those are why more is
+                // usually better. But every colonist drafted is one not hauling, cooking or
+                // building, and in a colony of three that is the entire workforce standing in a
+                // field — so more is not free, and "all of them" is only right when the fight
+                // actually needs all of them.
+                //
+                // Committed down the ranked list until the force the memory asks for is met.
+                // The ranking is by fitness, so the people best able to survive it go first.
+                // Anyone past that point stays on the work that keeps the colony fed.
+                if (winnable && committedStrength >= threat * required && mobilised > 0)
+                {
+                    if (pawn.drafter.Drafted) pawn.drafter.Drafted = false;
+                    drafted.Remove(pawn);
+                    continue;
+                }
+
                 if (!pawn.drafter.Drafted)
                 {
                     pawn.drafter.Drafted = true;
                     if (!drafted.Contains(pawn)) drafted.Add(pawn);
                     mobilised++;
                 }
+                committedStrength += CombatAssessment.ColonistValue(pawn);
 
                 SendToPosition(ctx, pawn, rally, NearestHostileCell(ctx));
 
@@ -1238,6 +1309,94 @@ namespace AutoColony.Modules
             return f;
         }
 
+        /// <summary>Health each committed colonist had when the fight was joined.</summary>
+        readonly Dictionary<int, float> healthAtEngage = new Dictionary<int, float>();
+        readonly List<Pawn> committedThisFight = new List<Pawn>();
+        Learning.ThreatKind fightKind = Learning.ThreatKind.Other;
+        bool encounterOpen;
+
+        /// <summary>
+        /// Note who is in this fight and how healthy they are, so the cost can be read afterwards.
+        ///
+        /// Opened once and left alone until the threat is over — a fight that ebbs and flows is
+        /// still one fight, and re-snapshotting mid-way would quietly forget the damage already
+        /// taken, which is exactly the damage worth learning from.
+        /// </summary>
+        void OpenEncounter(DirectorContext ctx, Learning.ThreatKind kind, List<Pawn> fighters)
+        {
+            if (encounterOpen) return;
+
+            encounterOpen = true;
+            fightKind = kind;
+            healthAtEngage.Clear();
+            committedThisFight.Clear();
+
+            for (int i = 0; i < fighters.Count; i++)
+            {
+                var pawn = fighters[i];
+                if (pawn == null || pawn.health == null) continue;
+                healthAtEngage[pawn.thingIDNumber] = Health(pawn);
+                committedThisFight.Add(pawn);
+            }
+        }
+
+        /// <summary>
+        /// Read what the fight cost and hand it to the memory.
+        ///
+        /// Damage is summed across everyone committed rather than averaged here, because the
+        /// memory divides by how many were sent — that ratio is the whole question. Sending one
+        /// colonist against a wolf and sending three are both survivable; only one of them leaves
+        /// somebody able to work afterwards.
+        /// </summary>
+        void CloseEncounter(DirectorContext ctx)
+        {
+            if (!encounterOpen) return;
+            encounterOpen = false;
+
+            if (committedThisFight.Count == 0) return;
+
+            float damage = 0f;
+            int casualties = 0;
+
+            for (int i = 0; i < committedThisFight.Count; i++)
+            {
+                var pawn = committedThisFight[i];
+                if (pawn == null) continue;
+
+                float before;
+                if (!healthAtEngage.TryGetValue(pawn.thingIDNumber, out before)) continue;
+
+                if (pawn.Dead) { damage += before; casualties++; continue; }
+                if (pawn.Downed) casualties++;
+
+                float now = Health(pawn);
+                if (now < before) damage += before - now;
+            }
+
+            int committed = committedThisFight.Count;
+            Learning.ThreatMemory.RecordOutcome(fightKind, committed, damage, casualties);
+            Learning.ThreatMemory.Save();
+
+            Chronicle.Record(ChronicleCategory.Threat, string.Format(
+                "{0} cost {1:0.00} health across {2} sent{3} — {4}",
+                fightKind, damage, committed,
+                casualties > 0 ? ", " + casualties + " down" : " and nobody went down",
+                Learning.ThreatMemory.Explain(fightKind)));
+
+            healthAtEngage.Clear();
+            committedThisFight.Clear();
+        }
+
+        static float Health(Pawn pawn)
+        {
+            try
+            {
+                return pawn.health != null && pawn.health.summaryHealth != null
+                    ? pawn.health.summaryHealth.SummaryHealthPercent : 1f;
+            }
+            catch (Exception) { return 1f; }
+        }
+
         void StandDown(DirectorContext ctx)
         {
             reservedMedic = null;
@@ -1253,6 +1412,8 @@ namespace AutoColony.Modules
             Note("stood down " + drafted.Count + " colonists");
             Chronicle.Record(ChronicleCategory.Threat, "threat over; stood down " + drafted.Count + " colonists");
             drafted.Clear();
+
+            CloseEncounter(ctx);
         }
 
         /// <summary>Colonists fall back to the base entrance rather than meeting raiders in the open.</summary>
