@@ -688,8 +688,15 @@ namespace AutoColony.Modules
             // remedy stands down and lets the planner do it properly.
             if (ctx.layout != null && ctx.layout.HasRoom(RoomRole.Dining)) return false;
 
-            if (PlaceInBase(ctx, AcDefs.Thing("Table2x2c"), 1)) return true;
-            return PlaceInBase(ctx, AcDefs.SmallTable, 1);
+            // Any table answers the complaint, so a second *kind* of table is still a second
+            // table. Asked per-def, the colony takes the big one, finds it already has that,
+            // and goes on to place a small one beside it.
+            var big = AcDefs.Thing("Table2x2c");
+            var small = AcDefs.SmallTable;
+            if (CountInBase(ctx, big) + CountInBase(ctx, small) >= 1) return false;
+
+            if (PlaceInBase(ctx, big, 1)) return true;
+            return PlaceInBase(ctx, small, 1);
         }
 
         /// <summary>
@@ -1295,9 +1302,42 @@ namespace AutoColony.Modules
         /// Some complaints belong to no particular room — nobody has anywhere to eat, nobody has
         /// anything to do — so the remedy chooses rather than the survey.
         /// </summary>
+        /// <summary>
+        /// Place one, up to a total the whole colony is meant to have.
+        ///
+        /// Colony-scoped, unlike the temperature-preferring overload below. Every caller of this
+        /// one — a table, a stool each, a joy building — answers a complaint the colony makes
+        /// rather than one a room makes, and a want the colony has must be tallied against what
+        /// the colony has.
+        /// </summary>
         static bool PlaceInBase(DirectorContext ctx, ThingDef def, int count)
         {
+            if (CountInBase(ctx, def) >= count) return false;
             return PlaceInBase(ctx, def, count, RoomPreference.Any);
+        }
+
+        /// <summary>
+        /// How many of this thing the whole base already has, built or on its way.
+        ///
+        /// The per-room tally under <see cref="CountIn"/> answers a per-room want — one heater
+        /// for the room that is cold — and is exactly wrong for a want the colony holds as a
+        /// whole. "Nowhere to eat off a table" is a fact about the colony, not about a room, so
+        /// asking it room by room hands every planned room a table of its own: run 134 had three
+        /// by day 3, and SeatWhatNeedsSeating then gave each of them one stool per colonist.
+        /// Nine stools and three tables, queued while three of the four colonists lay bleeding
+        /// and the base had no walls at all.
+        ///
+        /// Same family as the eleven campfires described below, one level up: that was the same
+        /// room asked twice, this is the same colony asked once per room.
+        /// </summary>
+        static int CountInBase(DirectorContext ctx, ThingDef def)
+        {
+            if (ctx == null || ctx.layout == null || def == null) return 0;
+
+            int found = 0;
+            for (int i = 0; i < ctx.layout.rooms.Count; i++)
+                found += CountIn(ctx.map, ctx.layout.rooms[i], def);
+            return found;
         }
 
         /// <summary>
