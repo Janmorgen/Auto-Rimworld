@@ -44,6 +44,7 @@ repeats=$(awk -v from="$from" '
     match($0, /^day ([0-9]+) /, m) { if (m[1]+0 >= from) { sub(/^day [0-9]+ [0-9]+h[ ]*/,""); print } }
   ' "$CH" 2>/dev/null \
           | grep -E "^(BUILD|ECONOMY|HEALTH)" \
+          | grep -vE "working towards|work is leaning|VITALS" \
           | sort | uniq -c | sort -rn | awk '$1>=4{printf "%dx %s; ", $1, substr($0, index($0,$2))}' \
           | cut -c1-200)
 [ -z "$repeats" ] && repeats="none"
