@@ -206,6 +206,15 @@ namespace AutoColony.Modules
             if (s.growingCells <= 0) return;          // dinner before timber
 
             var tree = FastestWoodTree(ctx);
+
+            // Belt and braces against the runaway that just happened.
+            //
+            // growingWood is a state flag computed elsewhere, and when it silently stopped being
+            // set this sowed twenty-eight forty-cell plots in a single run. Asking the map
+            // directly whether this plant already has a zone cannot go wrong the same way — it
+            // is the same check EnsureFodderPlot has always used, and the reason that one has
+            // never duplicated.
+            if (tree != null && FindZoneGrowing(ctx, tree) != null) return;
             if (tree == null)
             {
                 if (!woodReported)

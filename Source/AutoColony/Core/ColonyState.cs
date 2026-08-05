@@ -1315,6 +1315,26 @@ namespace AutoColony
                 // zones and the question was about dinner.
                 var growing = grow.GetPlantDefToGrow();
                 if (growing == null) continue;
+
+                // Trees before the food filter, because a woodlot is not food and the filter
+                // below skips everything that is not.
+                //
+                // This detection sat *under* that continue. A saguaro is PlantRole.Wood, so the
+                // loop skipped it, growingWood could never become true, and EnsureWoodPlot sowed
+                // a fresh forty-cell plot every single pass — one every six in-game hours for
+                // days. Both rules were right on their own: the food filter has its own note
+                // above about why it exists, and the tree check is correct. Only the order was
+                // wrong, and the order is what made one silently switch off the other.
+                //
+                // The tell was in the chronicle from the first day and I read past it: the same
+                // line, over and over, which is the exact signature this project has a note
+                // about.
+                if (growing.plant != null && growing.plant.harvestedThingDef != null &&
+                    growing.plant.harvestedThingDef.IsStuff &&
+                    growing.plant.IsTree &&
+                    grow.CellCount >= MeaningfulWoodPlot)
+                    s.growingWood = true;
+
                 if (Plants.PlantTaxonomy.RoleOf(growing) != Plants.PlantRole.Food) continue;
 
                 // Only the cells that can actually grow something.
@@ -1334,15 +1354,6 @@ namespace AutoColony
                 // A tree plot is the answer to a wood-poor map, and WoodSupplyGoal stands down
                 // once one exists — asked as "does its harvest yield what the fires burn"
                 // rather than by naming a tree.
-                // Big enough to be a supply, not just big enough to exist. A one-cell plot on
-                // sand satisfied this and switched off the goal that was watching for the
-                // problem.
-                if (growing.plant != null && growing.plant.harvestedThingDef != null &&
-                    growing.plant.harvestedThingDef.IsStuff &&
-                    growing.plant.IsTree &&
-                    grow.CellCount >= MeaningfulWoodPlot)
-                    s.growingWood = true;
-
                 crops.Add(growing.defName);
             }
             s.distinctCrops = crops.Count;
