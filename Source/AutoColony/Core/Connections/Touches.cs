@@ -186,6 +186,18 @@ namespace AutoColony.Connections
                            "room decides whether temperature work is spending or wasting"
             },
 
+            // The dominant death mode of runs 132-144, stated as an edge.
+            new Consequence
+            {
+                from = "world.blueprints",
+                to = "colonistsDowned",
+                confidence = Confidence.Observed,
+                evidence = "run 144 day 3 — a manhunter pack put 3 of 4 down in one engagement " +
+                           "with roomsEver at 0. Animals cannot open doors, so whether the " +
+                           "planner has closed one room before the first pack decides whether " +
+                           "the fight is survivable at all — and no score says so"
+            },
+
             new Consequence
             {
                 from = "world.drafted",
