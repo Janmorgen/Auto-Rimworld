@@ -864,6 +864,23 @@ namespace AutoColony.Modules
 
             bool winnable = threat <= 0f || strength / threat >= required;
 
+            // A predator eating a colonist is not a fight you get to decline.
+            //
+            // ThreatActive already answers yes for a hunt, ahead of this arithmetic and for this
+            // exact reason — and then this ran its own comparison and withdrew anyway. Run 129:
+            //
+            //   day 47 14h  1 predator(s) hunting Trofim — drafting
+            //   day 47 14h  WITHDRAWING 1 — strength 95 vs threat 75 (1.26x), needed 3.00x
+            //   day 47 14h  died of Bite (arctic wolf teeth)
+            //
+            // Detected, drafted, and then walked away from in the same hour. The bar was 3.00x
+            // because somebody was already down, which is the raid rule working correctly and
+            // being exactly wrong here: with a raid, a colonist on the floor is a reason to hold
+            // the base; with a predator, the colonist on the floor *is* what the animal is eating.
+            //
+            // Withdrawing does not save them either. The wolf does not lose interest.
+            if (ctx.state.predatorsHunting > 0) winnable = true;
+
             var rally = winnable ? RallyPoint(ctx) : refuge;
             float retreatAt = ctx.Gene(Genes.DefenseRetreatHealth);
             int mobilised = 0;
