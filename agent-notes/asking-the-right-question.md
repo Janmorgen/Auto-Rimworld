@@ -132,8 +132,20 @@ rule believes about the same fact.
 
 ---
 
+## The one after this
+
+Everything above is about measuring the wrong thing. There is a second fault that begins where
+this one ends — the measurement is right, the diagnosis is right, and the remedy is aimed
+through a channel that cannot deliver: raising Cooking at a stove with no fuel, ordering a
+deconstruct that ranks below sewing, planning a bed while a colonist burns. Four instances in
+the same session as these. See [[acting-through-the-wrong-channel]].
+
+The two share a tell — a remedy that fires over and over while nothing changes — and the repeat
+count does not say which of the two it is. It only says to look.
+
 ## Related
 
+- [[acting-through-the-wrong-channel]] — the same failure one step later, in the remedy
 - [[rimworld-defs-and-chains]] — where each gate actually sits
 - [[rimworld-plants]] — the three attempts it took to classify a psychoid plant
 - [[rimworld-pens]] — "nothing is standing here" is not "a fence can be built here"
