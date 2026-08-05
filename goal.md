@@ -101,7 +101,8 @@ edge is a thing to go looking for, not a finding, and must never be reported as 
 
 ### The fault classes this map exists to catch
 
-Four have bitten so far, and all four are connection faults rather than logic errors:
+Seven have bitten so far. Not one is a logic error — every one is a connection, a scope, or a
+measurement standing in for the thing it was supposed to track:
 
 | class | what it is | seen in |
 |---|---|---|
