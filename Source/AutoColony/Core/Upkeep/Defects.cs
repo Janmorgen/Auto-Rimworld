@@ -172,6 +172,12 @@ namespace AutoColony.Upkeep
             // a colony carried this one for eleven days before it died of the accumulation.
             { "ColonistLeftUnburied", DefectKind.UnburiedDead },
             { "ObservedLayingCorpse", DefectKind.UnburiedDead },
+            // And the same corpse once it has begun to rot, which is a different thought def and
+            // the worse one — -9 against the fresh corpse's smaller hit. Only the fresh name was
+            // mapped, so a body the colony failed to bury in time stopped raising a defect at
+            // exactly the point it started costing the most mood. Run 129 carried two of them at
+            // day 43 with mood at 0.09 and burial sitting in the "cannot fix yet" column.
+            { "ObservedLayingRottingCorpse", DefectKind.UnburiedDead },
 
             { "EnvironmentCold", DefectKind.ColdRoom },
             { "SleptInCold", DefectKind.ColdRoom },
