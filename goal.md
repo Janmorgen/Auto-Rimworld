@@ -111,6 +111,7 @@ Four have bitten so far, and all four are connection faults rather than logic er
 | **lagging signal** | a remedy driven by a symptom that cannot clear until the remedy lands | AteWithoutTable ordering tables for days |
 | **history read as state** | a tally of events reported where the current answer was wanted | `check30.sh` counting every "pen is closed" ever printed, while the game showed *Pen not enclosed* |
 | **proxy for the real thing** | a measurable stand-in that stops tracking what it stood for | beds counted as shelter, roofing counted as cover, a gather circle counted as the world |
+| **present read as future** | a snapshot used where a forecast was needed | `growingSeasonNow` from today's temperature, so a colony farms through summer and starves in fall |
 
 When a fault doesn't fit these, name the new class and add a row. The table is a record of
 what this director actually gets wrong, which is worth more than a list of what might go wrong.
