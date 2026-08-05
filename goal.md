@@ -65,14 +65,60 @@ cannot perceive is structural, and no amount of learning will find it, because t
 nothing in the loss signal that varies with it. Blind spots first, then structure, then the
 specific fault that killed this colony.
 
-Corollary worth remembering: **two names for the same quantity is a blind spot.** Four bugs so
-far have been one number computed twice and disagreeing (fuel radius, dry-hopper accumulation,
-readiness, and now fieldable strength). Before adding a measurement, search for one that
-already exists.
+Corollary worth remembering: **two names for the same quantity is a blind spot.** Before adding
+a measurement, search for one that already exists — see the fault table in §4, where every
+class so far is a connection nobody had drawn.
 
 ---
 
-## 4. Restart policy
+## 4. Connections between systems
+
+Hunt for these constantly and record as many as can be found. Every fault that has cost a
+colony here has been a connection nobody had written down.
+
+**Each module declares what it reads and what it changes, in the code, beside the module.**
+The map is *rendered from those declarations*, never drawn by hand. A diagram maintained
+separately goes stale in silence, and a stale map of the thing I use to reason about faults is
+worse than no map — it answers confidently and wrongly.
+
+**Trace consequences as far as they go**, however long the chain. Run 134's, in full:
+
+```
+DefenseModule drafts       →  hands leave construction
+  →  the table stays a blueprint
+  →  AteWithoutTable keeps firing (it is a mood thought, not a survey)
+  →  AddTable fires again  →  another table
+  →  SeatWhatNeedsSeating gives every table one stool per colonist
+  →  ten stool orders, queued while three of four colonists lay bleeding
+```
+
+No single link there is surprising. The chain is — and no module could see past its own end
+of it.
+
+Long chains are conjecture until a run confirms them, so label every edge **observed** (seen
+in a chronicle, with the line quoted) or **suspected** (reasoned but unwitnessed). A suspected
+edge is a thing to go looking for, not a finding, and must never be reported as one.
+
+### The fault classes this map exists to catch
+
+Four have bitten so far, and all four are connection faults rather than logic errors:
+
+| class | what it is | seen in |
+|---|---|---|
+| **duplicated quantity** | one fact computed in two places, disagreeing | fuel radius; dry-hopper accumulation; readiness; fieldable strength |
+| **wrong scope** | the right question asked at the wrong level | a colony's want tallied once per room |
+| **contested ownership** | two systems acting on one thing | upkeep placing a table the planner also furnishes |
+| **lagging signal** | a remedy driven by a symptom that cannot clear until the remedy lands | AteWithoutTable ordering tables for days |
+
+When a fault doesn't fit these, name the new class and add a row. The table is a record of
+what this director actually gets wrong, which is worth more than a list of what might go wrong.
+
+**Ask when a connection is unclear.** Guessing at what a system affects and then writing the
+guess down as fact is how a map starts lying, and the map is supposed to be the honest part.
+
+---
+
+## 5. Restart policy
 
 **Restart freely.** A running colony is worth less than a fix in hand. Ship the change,
 restart, move on.
@@ -81,7 +127,7 @@ Accepted cost: run length is not a clean measurement. Do not quote it as though 
 
 ---
 
-## 5. Every-loop checklist
+## 6. Every-loop checklist
 
 1. **Screenshot — capture *and read it*.** Not optional. The picture has caught four faults
    the logs could not, including one where the process was dead and the text still read fine.
@@ -89,12 +135,17 @@ Accepted cost: run length is not a clean measurement. Do not quote it as though 
 3. **If colonists died:** preserve the chronicle to `$JD/wipe-<run>-chronicle.log` *before*
    restarting — restarting deletes it — then read it for the sequence, not just the cause.
 4. Ask: what did the colony fail to *see*? Prefer that over what it failed to do.
-5. Make one change, on the highest rung of the ladder that reaches.
-6. Build, run the tests, restart, commit **and push**.
+5. **Trace it before touching it.** Read the module's declared reads and affects, confirm they
+   are still true, and follow the chain out from them — the fault is usually one link further
+   along than the symptom.
+6. Make one change, on the highest rung of the ladder that reaches.
+7. Update the declarations I invalidated, and add any new edge to the map, labelled
+   **observed** or **suspected**.
+8. Build, run the tests, restart, commit **and push**.
 
 ---
 
-## 6. Standing constraints
+## 7. Standing constraints
 
 - **`rm -rf` has already cost this project 36 epochs of learning and the mod config.** Restart
   inputs live outside anything a restart deletes. Copy before destroying, always.
@@ -105,7 +156,7 @@ Accepted cost: run length is not a clean measurement. Do not quote it as though 
 
 ---
 
-## 7. Standing user instruction, verbatim
+## 8. Standing user instruction, verbatim
 
 > check every 30 mins, take a screenshot, restart if colonists die, observe the colony for
 > ways you can improve the control and perception surface of the director, do not hard code
