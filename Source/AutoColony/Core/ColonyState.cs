@@ -421,6 +421,9 @@ namespace AutoColony
         /// <summary>Whether a growing zone is already raising the fuel back.</summary>
         public bool growingWood;
 
+        /// <summary>Cells below which a tree plot is a gesture rather than a wood supply.</summary>
+        public const int MeaningfulWoodPlot = 10;
+
         /// <summary>
         /// Electrical buildings standing under open sky, conduits included.
         ///
@@ -1317,9 +1320,13 @@ namespace AutoColony
                 // A tree plot is the answer to a wood-poor map, and WoodSupplyGoal stands down
                 // once one exists — asked as "does its harvest yield what the fires burn"
                 // rather than by naming a tree.
+                // Big enough to be a supply, not just big enough to exist. A one-cell plot on
+                // sand satisfied this and switched off the goal that was watching for the
+                // problem.
                 if (growing.plant != null && growing.plant.harvestedThingDef != null &&
                     growing.plant.harvestedThingDef.IsStuff &&
-                    growing.plant.IsTree)
+                    growing.plant.IsTree &&
+                    grow.CellCount >= MeaningfulWoodPlot)
                     s.growingWood = true;
 
                 crops.Add(growing.defName);

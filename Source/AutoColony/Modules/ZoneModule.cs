@@ -221,7 +221,31 @@ namespace AutoColony.Modules
             woodReported = false;
 
             var cells = FindFertileCells(ctx, WoodPlotCells);
-            if (cells.Count == 0) return;
+
+            // A one-cell woodlot is not a wood supply, and worse, it answers the goal.
+            //
+            // Run 118 sowed "saguaro cactus plot across 1 cells" on sand — forty cells asked
+            // for, one fertile cell found — and WoodSupplyGoal then read growingWood and stood
+            // down satisfied. A token gesture that switches off the thing watching for the
+            // problem is worse than doing nothing, because the colony stops looking.
+            //
+            // So a plot is either big enough to matter or it is not sown, and the reason is said
+            // out loud: on a map with no fertile ground the honest answer is that wood cannot be
+            // grown here, which is information rather than a failure to report.
+            if (cells.Count < MinWoodPlotCells)
+            {
+                if (!woodGroundReported)
+                {
+                    woodGroundReported = true;
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "wood cannot be grown here — {0} fertile cells found of {1} wanted, and a " +
+                        "plot that small feeds nothing; the fires run on what is standing and " +
+                        "what can be traded for",
+                        cells.Count, WoodPlotCells));
+                }
+                return;
+            }
+            woodGroundReported = false;
 
             var plot = new Zone_Growing(ctx.map.zoneManager);
             ctx.map.zoneManager.RegisterZone(plot);
@@ -273,7 +297,14 @@ namespace AutoColony.Modules
         /// <summary>A woodlot, not a forestry industry.</summary>
         const int WoodPlotCells = 40;
 
+        /// <summary>
+        /// Below this a plot is a gesture rather than a supply — and a gesture that satisfies
+        /// WoodSupplyGoal, which is the harm. A quarter of what was asked for.
+        /// </summary>
+        const int MinWoodPlotCells = 10;
+
         bool woodReported;
+        bool woodGroundReported;
 
         /// <summary>Enough healroot to keep a small colony in herbal medicine, not a cash crop.</summary>
         const int MedicinePlotCells = 24;
