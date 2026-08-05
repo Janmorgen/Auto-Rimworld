@@ -53,6 +53,7 @@
     <Compile Include="../../Source/AutoColony/Core/Upkeep/Defects.cs" Link="Production/Defects.cs" />
     <Compile Include="../../Source/AutoColony/Core/Upkeep/BuildingMeans.cs" Link="Production/BuildingMeans.cs" />
     <Compile Include="../../Source/AutoColony/Core/Prisoners/PrisonerPolicy.cs" Link="Production/PrisonerPolicy.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Connections/Touches.cs" Link="Production/Touches.cs" />
   </ItemGroup>
 
 </Project>
