@@ -1088,7 +1088,8 @@ namespace AutoColony.Modules
 
         Pawn ChooseReservedMedic(DirectorContext ctx, List<Pawn> fighters)
         {
-            if (!CasualtyPolicy.ShouldReserveMedic(fighters.Count, ctx.state.colonistsDowned))
+            if (!CasualtyPolicy.ShouldReserveMedic(fighters.Count, ctx.state.colonistsDowned,
+                                                   ctx.state.colonistsBleedingOut))
             {
                 if (reservedMedic != null)
                 {

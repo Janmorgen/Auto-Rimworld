@@ -163,21 +163,36 @@ namespace AutoColony.Tests
         [Fact]
         public void NobodyIsHeldBackWhileNobodyIsDown()
         {
-            Assert.False(CasualtyPolicy.ShouldReserveMedic(4, 0));
+            Assert.False(CasualtyPolicy.ShouldReserveMedic(4, 0, 0));
         }
 
         [Fact]
         public void OneIsHeldBackOnceSomeoneIsDown()
         {
-            Assert.True(CasualtyPolicy.ShouldReserveMedic(2, 1));
-            Assert.True(CasualtyPolicy.ShouldReserveMedic(5, 1));
+            Assert.True(CasualtyPolicy.ShouldReserveMedic(2, 1, 0));
+            Assert.True(CasualtyPolicy.ShouldReserveMedic(5, 1, 0));
         }
 
         [Fact]
         public void TheLastColonistStandingStillHasToAnswerTheRaid()
         {
-            Assert.False(CasualtyPolicy.ShouldReserveMedic(1, 2));
-            Assert.False(CasualtyPolicy.ShouldReserveMedic(0, 1));
+            Assert.False(CasualtyPolicy.ShouldReserveMedic(1, 2, 0));
+            Assert.False(CasualtyPolicy.ShouldReserveMedic(0, 1, 0));
+        }
+
+        [Fact]
+        public void TheLastColonistStandingTendsInsteadWhenSomeoneIsBleedingOut()
+        {
+            // Runs 132, 134 and 135 all ended here: three on the floor, one upright, and the
+            // rule keeping that one in a line the colony had already decided to withdraw from.
+            // Run 135 spent four hours of it standing in a refuge with twenty-five medicine in
+            // store, and lost all four.
+            Assert.True(CasualtyPolicy.ShouldReserveMedic(1, 3, 3));
+            Assert.True(CasualtyPolicy.ShouldReserveMedic(1, 1, 1));
+
+            // Down but not bleeding can wait for the fight to end — that is the original rule,
+            // and it is still right. Only the clock overrides it.
+            Assert.False(CasualtyPolicy.ShouldReserveMedic(1, 2, 0));
         }
 
         [Fact]

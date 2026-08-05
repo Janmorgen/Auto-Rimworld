@@ -22,11 +22,31 @@ namespace AutoColony
         /// for is the jumpiness the draft genes exist to avoid. It also refuses to empty the
         /// line entirely — a lone colonist facing a raid does not get to opt out of it, because
         /// losing the fight and losing the colony are the same outcome at that point.
+        ///
+        /// That last clause is right about a fight and wrong about a clock. Runs 132, 134 and
+        /// 135 all ended the same way: three colonists on the floor, one still upright, and the
+        /// rule refusing to release them because releasing them would empty the line. Run 135,
+        /// day 4, with twenty-five medicine in store and four beds standing empty:
+        ///
+        ///   06h  nobody down any more; Radya rejoins the line
+        ///   06h  3 down and no bed would go up — laid a sleeping spot
+        ///   06h  WITHDRAWING 1 — strength 96 vs threat 180 (0.54x), needed 4.50x
+        ///   09h  died of Blood loss (extreme) — Celia
+        ///   10h  died of Blood loss (extreme) — Keng
+        ///
+        /// The line it was kept in was a withdrawal it had already decided on. It stood in a
+        /// refuge for four hours while the people it could have saved bled to death.
+        ///
+        /// So bleeding is the thing that overrides it, rather than merely being down. Somebody
+        /// down can wait; somebody bleeding out dies on a clock measured in hours whatever the
+        /// fight does, and one colonist is not turning a fight the colony has already priced at
+        /// half the advantage it wanted.
         /// </summary>
-        public static bool ShouldReserveMedic(int ableFighters, int downedColonists)
+        public static bool ShouldReserveMedic(int ableFighters, int downedColonists, int bleedingOut)
         {
             if (downedColonists <= 0) return false;
-            return ableFighters >= 2;
+            if (ableFighters >= 2) return true;
+            return bleedingOut > 0;
         }
 
         /// <summary>
