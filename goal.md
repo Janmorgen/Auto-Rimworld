@@ -153,6 +153,9 @@ Accepted cost: run length is not a clean measurement. Do not quote it as though 
 - Temporary files go in `$CLAUDE_JOB_DIR/tmp`, never `/tmp` — parallel jobs clobber it.
 - Build: `export PATH="$PATH:$HOME/.dotnet"; dotnet build Source/AutoColony/AutoColony.csproj`
 - Tests: `dotnet test Tests/AutoColony.Tests`
+- **Game reference:** `docs/rimworld/` — base-game notes on every core system. Use it to learn
+  that a mechanism *exists*; read the defs or the IL through the API probe for the number
+  before any code depends on it. A figure taken from prose is rung 3 done badly.
 
 ---
 
