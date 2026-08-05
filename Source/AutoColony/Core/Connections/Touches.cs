@@ -198,6 +198,19 @@ namespace AutoColony.Connections
                            "the fight is survivable at all — and no score says so"
             },
 
+            // Why no colony this session ever reached four colonists.
+            new Consequence
+            {
+                from = "world.blueprints",
+                to = "colonists",
+                confidence = Confidence.Observed,
+                evidence = "runs 132-146 — \"left Ben where they fell — no capture: bed NONE\" " +
+                           "on every downed raider. Capture needs a prisoner bed, a prisoner bed " +
+                           "is never built without a prisoner, so recruitment fired zero times " +
+                           "across fifteen colonies and all 23 arrivals were wanderers the game " +
+                           "handed over. The precondition nothing creates"
+            },
+
             new Consequence
             {
                 from = "world.drafted",
