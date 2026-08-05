@@ -799,6 +799,8 @@ namespace AutoColony.Modules
             // which is nearly always.
             if (ctx.state.colonistsIdle > 0) assignCount = scored.Count;
 
+            NoteIdleBesideWork(ctx);
+
             if (assignCount > scored.Count) assignCount = scored.Count;
 
             for (int r = 0; r < scored.Count; r++)
@@ -851,5 +853,65 @@ namespace AutoColony.Modules
         {
             return (int)(f + 0.5f);
         }
+
+        /// <summary>What the colony last said about idle hands, so it says it once per change.</summary>
+        string idleBesideWorkNoted = "";
+
+        /// <summary>
+        /// Somebody idle while construction waits, said out loud.
+        ///
+        /// Both halves were already measured and nothing ever compared them. This module reads
+        /// colonistsIdle to widen the assignment and reads the blueprint backlog to weight
+        /// Construction, three hundred lines apart, and never once noticed that the two being
+        /// true together is a contradiction: there is work, there are hands, and the hands are
+        /// doing nothing. Run 136 sat at one of two idle from day 10 with eight hundred wood in
+        /// store, a half-built wall on the ground, and its own long-term goal restating every
+        /// hour that it had no research bench.
+        ///
+        /// Idleness in RimWorld means every job the colonist could take was refused, and the
+        /// refusals are the interesting part: unreachable, unaffordable, or nobody able. This
+        /// says which of those the colony can rule out, so the next reader starts from the
+        /// short list rather than from the whole director.
+        ///
+        /// It changes no behaviour. The assignment above already widens on idleness; this only
+        /// makes the widening explicable when it does not work.
+        /// </summary>
+        void NoteIdleBesideWork(DirectorContext ctx)
+        {
+            var s = ctx.state;
+            int backlog = s.pendingBlueprints + s.pendingFrames;
+
+            if (s.colonistsIdle <= 0 || backlog <= 0)
+            {
+                idleBesideWorkNoted = "";
+                return;
+            }
+
+            // Whether anybody could take the work at all, as distinct from choosing not to.
+            int builders = 0;
+            for (int i = 0; i < s.ableColonists.Count; i++)
+            {
+                var pawn = s.ableColonists[i];
+                if (pawn == null || pawn.workSettings == null) continue;
+                if (!pawn.WorkTypeIsDisabled(WorkTypeDefOf.Construction)) builders++;
+            }
+
+            string reason = builders == 0
+                ? "nobody here can build at all"
+                : s.usableMaterial <= 0
+                    ? "no material to build with"
+                    : "material and builders both present, so the blueprints are refused for " +
+                      "reach or for stuff — the next place to look is which";
+
+            // Once per distinct situation. A line that repeats every hour is a line nobody reads.
+            string key = s.colonistsIdle + "/" + backlog + "/" + builders;
+            if (idleBesideWorkNoted == key) return;
+            idleBesideWorkNoted = key;
+
+            Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                "{0} idle while {1} construction waits and {2} of {3} can build — {4}",
+                s.colonistsIdle, backlog, builders, s.ableColonists.Count, reason));
+        }
+
     }
 }
