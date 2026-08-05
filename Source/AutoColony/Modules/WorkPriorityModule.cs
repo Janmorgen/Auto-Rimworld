@@ -415,7 +415,23 @@ namespace AutoColony.Modules
             // wildfire is not worth a work-hour.
             Need("Firefighter", s.firesNearBase > 0 ? 6f : 1f);
             Need("Patient", 1f);
-            Need("PatientBedRest", 1f);
+
+            // Lying down is the treatment when there is nothing to cut out.
+            //
+            // Run 126 lost two colonists to Plague (extreme) at health 1.00 — no wounds, no part
+            // to amputate, so the surgery path correctly did nothing. For a whole-body disease
+            // the race is immunity against severity, and the colony's levers are medicine,
+            // tending, and rest. Beds carry ImmunityGainSpeedFactor 1.05 to 1.11 and resting
+            // gains immunity faster than working does, so a sick colonist who keeps hauling is
+            // losing a race they could win in bed.
+            //
+            // This sat at a flat 1.0 and never moved, which put bed rest below hauling for a
+            // colonist the game had already told us was dying. SkillFit scales it per pawn by
+            // how hurt they are, so raising the colony-wide need reaches the sick and leaves
+            // everybody else where they were.
+            Need("PatientBedRest", s.colonistsLosingToDisease > 0 ? 5f
+                                 : s.colonistsUntendedLethal > 0 ? 3f
+                                 : 1f);
             // Untended is the sharper signal, and avgHealth is the blind one.
             //
             // avgHealth is SummaryHealthPercent, which counts damaged body parts and cannot see
