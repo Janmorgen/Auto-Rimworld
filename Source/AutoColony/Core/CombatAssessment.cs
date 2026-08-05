@@ -38,31 +38,104 @@ namespace AutoColony
         {
             if (pawn == null || pawn.Dead || pawn.Downed) return 0f;
             if (pawn.WorkTagIsDisabled(WorkTags.Violent)) return 0f;
+            return FightingValue(pawn);
+        }
 
-            int shooting = SkillLevel(pawn, SkillDefOf.Shooting);
-            int melee = SkillLevel(pawn, SkillDefOf.Melee);
+        /// <summary>
+        /// What a pawn is worth in a fight — the same question for a colonist and a raider.
+        ///
+        /// The old version read (10 + skill x 5) x a flat weapon factor, which knew whether a
+        /// weapon was ranged or melee and nothing else. A pawn with a bolt-action rifle and one
+        /// with a revolver scored identically; so did a pawn in plate armour and one in a shirt.
+        /// On the other side of the fight it was worse: raiders were scored on kindDef.combatPower
+        /// alone, an average for their *type*, so what they were actually carrying and wearing
+        /// never entered the comparison the colony used to decide whether to fight them.
+        ///
+        /// Now both sides are read the same way, from what they are holding and wearing:
+        ///
+        ///   offence      what the weapon in their hands actually does per second
+        ///   accuracy     how often they land it, from the skill that matches the weapon
+        ///   toughness    health, working limbs, and armour
+        ///
+        /// Passion is deliberately absent. It governs how fast a skill grows, not how well the
+        /// pawn shoots today, so it belongs to the question of who to train rather than to what
+        /// this fight is worth — see ColonistPotential.
+        /// </summary>
+        public static float FightingValue(Pawn pawn)
+        {
+            if (pawn == null || pawn.Dead) return 0f;
 
+            float offence = Offence(pawn);
+            float toughness = Toughness(pawn);
+            float value = offence * toughness;
+            return value > 0f ? value : 0f;
+        }
+
+        /// <summary>
+        /// Damage per second with the weapon actually held, times the chance of landing it.
+        ///
+        /// Melee reads the game's own MeleeDPS stat, which already folds in the weapon, its
+        /// quality, the pawn's skill and their manipulation. Ranged has no equivalent stat, so it
+        /// is computed the way the game computes it: projectile damage over the full shot cycle,
+        /// scaled by the pawn's shooting accuracy.
+        /// </summary>
+        static float Offence(Pawn pawn)
+        {
             var weapon = pawn.equipment != null ? pawn.equipment.Primary : null;
 
-            float skill;
-            float weaponFactor;
             if (weapon != null && weapon.def.IsRangedWeapon)
             {
-                skill = shooting;
-                weaponFactor = 1.35f;
-            }
-            else if (weapon != null && weapon.def.IsMeleeWeapon)
-            {
-                skill = melee;
-                weaponFactor = 1.0f;
-            }
-            else
-            {
-                // Bare hands. Still counts for something, but not much.
-                skill = melee;
-                weaponFactor = 0.55f;
+                float dps = RangedDps(weapon);
+                float accuracy = Stat(pawn, StatDefOf.ShootingAccuracyPawn, 0.6f);
+                // Accuracy is per-cell and compounds over distance; a straight multiply is the
+                // honest simplification, and it is the same one on both sides of the fight.
+                return dps * AcMath.Clamp(accuracy, 0.05f, 1f) * 10f;
             }
 
+            // Melee, or bare hands — MeleeDPS answers both, and answers unarmed correctly rather
+            // than with a guessed penalty.
+            float melee = Stat(pawn, StatDefOf.MeleeDPS, 2f);
+            return melee * 10f;
+        }
+
+        /// <summary>
+        /// Projectile damage across the whole shot cycle: burst size over warmup plus cooldown.
+        ///
+        /// A weapon that fires three rounds a burst and takes two seconds to cycle is not the
+        /// same as one that fires once and cycles in one, and the old ranged/melee flag could not
+        /// tell them apart.
+        /// </summary>
+        static float RangedDps(Thing weapon)
+        {
+            try
+            {
+                var verbs = weapon.def.Verbs;
+                if (verbs == null || verbs.Count == 0) return 3f;
+
+                var v = verbs[0];
+                var projectile = v.defaultProjectile;
+                if (projectile == null || projectile.projectile == null) return 3f;
+
+                float damage = projectile.projectile.GetDamageAmount(weapon);
+                float shots = v.burstShotCount > 0 ? v.burstShotCount : 1;
+                float cycle = v.warmupTime + v.defaultCooldownTime;
+                if (cycle <= 0.01f) cycle = 1f;
+
+                return damage * shots / cycle;
+            }
+            catch (System.Exception) { return 3f; }
+        }
+
+        /// <summary>
+        /// How much punishment they can take: health, working limbs, and what they are wearing.
+        ///
+        /// Armour is the piece that was missing entirely. Sharp and blunt ratings run 0 to about
+        /// 1 for the best gear a pre-industrial colony sees, and each point roughly halves what
+        /// gets through — so it is worth as much as a second colonist and was worth nothing at
+        /// all in the old number.
+        /// </summary>
+        static float Toughness(Pawn pawn)
+        {
             float health = 1f;
             if (pawn.health != null && pawn.health.summaryHealth != null)
                 health = pawn.health.summaryHealth.SummaryHealthPercent;
@@ -70,8 +143,48 @@ namespace AutoColony
             float able = (Capacity(pawn, PawnCapacityDefOf.Manipulation)
                         + Capacity(pawn, PawnCapacityDefOf.Moving)) * 0.5f;
 
-            float value = (10f + skill * 5f) * weaponFactor * health * able;
-            return value > 0f ? value : 0f;
+            float sharp = Stat(pawn, StatDefOf.ArmorRating_Sharp, 0f);
+            float blunt = Stat(pawn, StatDefOf.ArmorRating_Blunt, 0f);
+            float armour = 1f + AcMath.Clamp(sharp + blunt, 0f, 2f) * 0.75f;
+
+            return AcMath.Clamp(health, 0.1f, 1f) * AcMath.Clamp(able, 0.1f, 1f) * armour;
+        }
+
+        static float Stat(Pawn pawn, StatDef def, float fallback)
+        {
+            try { return def != null ? pawn.GetStatValue(def) : fallback; }
+            catch (System.Exception) { return fallback; }
+        }
+
+        /// <summary>
+        /// How much better this colonist could get at fighting, which is where passion belongs.
+        ///
+        /// Passion does not make a pawn shoot straighter today — it multiplies the experience
+        /// they gain, so it says who is worth training when the colony is under-matched. A Major
+        /// passion at skill 4 will overtake a None passion at skill 8, and that is a fact about
+        /// next month rather than about this raid.
+        /// </summary>
+        public static float ColonistPotential(Pawn pawn)
+        {
+            if (pawn == null || pawn.Dead) return 0f;
+            if (pawn.WorkTagIsDisabled(WorkTags.Violent)) return 0f;
+
+            var weapon = pawn.equipment != null ? pawn.equipment.Primary : null;
+            var def = weapon != null && weapon.def.IsRangedWeapon
+                ? SkillDefOf.Shooting : SkillDefOf.Melee;
+
+            try
+            {
+                var skill = pawn.skills != null ? pawn.skills.GetSkill(def) : null;
+                if (skill == null || skill.TotallyDisabled) return 0f;
+
+                float passion = skill.passion == Passion.Major ? 2f
+                              : skill.passion == Passion.Minor ? 1.5f : 1f;
+                // Room left to grow matters as much as the rate of growing.
+                float headroom = AcMath.Clamp((20 - skill.Level) / 20f, 0f, 1f);
+                return passion * headroom;
+            }
+            catch (System.Exception) { return 0f; }
         }
 
         /// <summary>Combined fighting value of everyone able to take the field.</summary>
@@ -92,6 +205,18 @@ namespace AutoColony
         {
             if (pawn == null || pawn.Dead) return 0f;
 
+            // A humanlike attacker is read exactly as a colonist is, because they are the same
+            // kind of thing: a body with a weapon and some armour on it. kindDef.combatPower is
+            // an average for their *type*, so a tribal with a bolt-action and a tribal with a
+            // club scored the same, and the colony compared its real strength against their
+            // notional one.
+            if (pawn.RaceProps != null && pawn.RaceProps.Humanlike)
+            {
+                float measured = FightingValue(pawn);
+                if (measured > 0f) return measured;
+            }
+
+            // Animals carry nothing, so the game's own estimate for the kind is the right number.
             float power = pawn.kindDef != null ? pawn.kindDef.combatPower : 50f;
             if (power <= 0f) power = 50f;
 

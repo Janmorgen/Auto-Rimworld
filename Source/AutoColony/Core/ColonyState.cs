@@ -590,6 +590,26 @@ namespace AutoColony
         /// </summary>
         public int predatorsHunting;
 
+        /// <summary>
+        /// Fighting strength of everyone able to take the field, from weapons, armour and skill.
+        /// </summary>
+        public float colonyStrength;
+
+        /// <summary>
+        /// What the game expects to send at this colony — StorytellerUtility's own points figure,
+        /// which scales with wealth and population and is the number raids are generated from.
+        ///
+        /// Measured so the colony can ask whether it is armed for what is coming rather than only
+        /// for what has arrived. A colony whose wealth has outrun its weapons is in danger it has
+        /// no way to see, because nothing hostile is on the map yet.
+        /// </summary>
+        public float expectedThreat;
+
+        /// <summary>
+        /// Strength over expected threat. Below 1 the colony is under-armed for its own wealth.
+        /// </summary>
+        public float readiness = 1f;
+
         /// <summary>Which colonists are being hunted, so the response can go to them.</summary>
         public List<Pawn> huntedColonists;
 
@@ -781,6 +801,7 @@ namespace AutoColony
                 CaptureResources(s, map);
                 CaptureBuildings(s, map);
                 CaptureResearch(s);
+                CaptureReadiness(s, map);
 
                 if (map.dangerWatcher != null) s.danger = map.dangerWatcher.DangerRating;
 
@@ -1824,6 +1845,30 @@ namespace AutoColony
             return false;
         }
 
+        /// <summary>
+        /// How the colony would fare against what it is inviting.
+        ///
+        /// ThreatForecast already owns this arithmetic — it reconstructs RimWorld's raid-points
+        /// curve from the published anchors and FortifyGoal has been reading it all along. I
+        /// nearly added a second readiness here computed a different way, which is the fault this
+        /// codebase has hit three times tonight: two places holding the same quantity and
+        /// disagreeing. It reads the existing one.
+        ///
+        /// Measured every pass so the number is available to the score and the vitals, not only
+        /// to the goal that happened to want it. A colony whose wealth has outrun its weapons is
+        /// in danger it cannot see, because nothing hostile is on the map yet.
+        /// </summary>
+        static void CaptureReadiness(ColonyState s, Map map)
+        {
+            try
+            {
+                s.colonyStrength = CombatAssessment.ColonyStrength(s);
+                s.expectedThreat = ThreatForecast.ExpectedRaidPoints(s.wealthTotal, s.colonists);
+                s.readiness = ThreatForecast.Readiness(s.colonyStrength, s.expectedThreat);
+            }
+            catch (Exception) { s.readiness = 1f; }
+        }
+
         static void CaptureResearch(ColonyState s)
         {
             var all = DefDatabase<ResearchProjectDef>.AllDefsListForReading;
@@ -1859,6 +1904,7 @@ namespace AutoColony
             m.colonistsStarving = colonistsStarving;
             m.colonistsCutOff = colonistsCutOff;
             m.colonistsIdle = colonistsIdle;
+            m.readiness = readiness;
             m.colonistsBleedingOut = colonistsBleedingOut;
             m.colonistsLosingInADirtyRoom = colonistsLosingInADirtyRoom;
             m.colonistsUntended = colonistsUntended;

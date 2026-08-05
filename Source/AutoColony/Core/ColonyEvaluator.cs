@@ -583,20 +583,32 @@ namespace AutoColony
             // through unhurt was defended; a rich one behind three turrets whose colonists bled
             // out was not, and the old term said the opposite of both.
             float expectedTurrets = AcMath.Clamp(end.wealthTotal / 25000f, 0f, 8f);
-            float readiness = expectedTurrets <= 0f
+            float turretReadiness = expectedTurrets <= 0f
                 ? 1f
                 : AcMath.Clamp01(end.poweredTurrets / expectedTurrets);
 
             // Poverty is an excuse for having no turrets, not a defence. Blended rather than
             // switched, so there is no cliff to sit under.
             float excused = AcMath.Clamp01(1f - end.wealthTotal / 25000f);
-            readiness = AcMath.Clamp01(readiness + excused * (1f - readiness));
+            turretReadiness = AcMath.Clamp01(turretReadiness + excused * (1f - turretReadiness));
 
             // Time with somebody down, already measured for Survival — the closest thing the
             // accumulator holds to how badly the fighting went.
             float unhurt = AcMath.Clamp01(1f - acc.DownedFraction * 1.5f);
 
-            float defense = 0.35f * readiness + 0.65f * unhurt;
+            // And whether the colony is armed for what is coming, not only for what came.
+            //
+            // Turrets and casualties are both backward-looking: one is what was built, the other
+            // is what already happened. A colony whose wealth has outrun its weapons is in danger
+            // that has not arrived yet, and nothing in the score could see it — which is exactly
+            // the position every colony here reaches around day 20, when wealth passes 15,000 and
+            // three people are still carrying whatever they landed with.
+            //
+            // end.readiness is colony fighting strength over the storyteller's own points figure
+            // for this map, so it rises by arming and falls by getting richer without arming.
+            float armed = AcMath.Clamp01(end.readiness);
+
+            float defense = 0.25f * turretReadiness + 0.40f * unhurt + 0.35f * armed;
             breakdown.Add(new ScoreTerm("Defense", defense, WDefense));
 
             // --- conduct: time spent in crisis, and misery with no answer ---

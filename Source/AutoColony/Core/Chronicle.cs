@@ -169,7 +169,7 @@ namespace AutoColony
             Record(ChronicleCategory.Vitals, string.Format(
                 CultureInfo.InvariantCulture,
                 "colonists {0} (down {1}, breaking {2})  mood {3:0.00} (worst {10:0.00})  health {4:0.00}{12}  " +
-                "food {5:0.0}d ({16:0.0}d cooked){11}{13}{15}{17}  med {14}  wealth {6:N0}  beds {7}  fires {8}  {9:0}C",
+                "food {5:0.0}d ({16:0.0}d cooked){11}{13}{15}{18}{17}  med {14}  wealth {6:N0}  beds {7}  fires {8}  {9:0}C",
                 m.colonists, m.colonistsDowned, m.colonistsInMentalState, m.avgMood, m.avgHealth,
                 m.daysOfFood, m.wealthTotal, m.colonistBeds, m.fires, m.outdoorTemperature,
                 m.minMood,
@@ -206,6 +206,9 @@ namespace AutoColony
                 m.daysOfMeals,
                 // Said out loud, because eighteen days of "0.0d cooked" never once mentioned that
                 // the stove was empty, and every reading of that line went looking for a cook.
+                m.readiness < 0.8f
+                    ? string.Format(CultureInfo.InvariantCulture, "  ARMED {0:0.00}x", m.readiness)
+                    : "",
                 m.buildingsWantingFuel > 0
                     ? string.Format(CultureInfo.InvariantCulture, "  {0} DRY{1}",
                         m.buildingsWantingFuel,

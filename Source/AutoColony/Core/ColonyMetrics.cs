@@ -38,6 +38,9 @@ namespace AutoColony
         /// <summary>Colonists with nothing to do.</summary>
         public int colonistsIdle;
 
+        /// <summary>Strength over expected threat; below 1 is under-armed for the colony's wealth.</summary>
+        public float readiness;
+
         /// <summary>Colonists who will bleed to death within a day if untended.</summary>
         public int colonistsBleedingOut;
 
