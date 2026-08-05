@@ -484,11 +484,6 @@ namespace AutoColony.Upkeep
         /// opens ground for a new room it should know whether one the colony already owns is
         /// free to take the work.
         /// </summary>
-        public static bool Expendable(Map map, BaseLayout layout, PlannedRoom planned)
-        {
-            return Expendable(map, layout, planned, null);
-        }
-
         public static bool Expendable(Map map, BaseLayout layout, PlannedRoom planned,
                                       HashSet<RoomRole> rolesWanted)
         {

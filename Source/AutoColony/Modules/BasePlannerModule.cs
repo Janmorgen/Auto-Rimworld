@@ -986,7 +986,31 @@ namespace AutoColony.Modules
 
                 // And only one nobody needs for what it currently is — the same test used
                 // before taking a room down, since the question is the same one.
-                if (!Upkeep.DefectSurvey.Expendable(ctx.map, layout, room)) continue;
+                // Asked WITH the roles the goals want, which the demolition path has always
+                // done and this one never did.
+                //
+                // The protection exists and is documented on Expendable itself — "never the
+                // last of a role any goal can ask for, satisfied or not" — written after run 96
+                // pulled down its own research room. Repurposing called the convenience overload
+                // that passes null, so the guard was simply absent here, and taking a room for
+                // parts and taking it for a different label are the same act.
+                //
+                // Run 142 spent days 15 to 23 building the bedroom its top-priority goal had
+                // demanded since hour zero, finished it at 12h, and repurposed it as a Power
+                // room at 15h to save 120 units of material:
+                //
+                //   day 23 12h  the Bedroom room is working — its bed is built
+                //   day 23 15h  repurposed the Bedroom room as a Power — the shell is already
+                //               standing, and building another one would have cost about 120
+                //   day 23 18h  waiting on the Bedroom room, while the plan is asking for a Power
+                //   day 40 02h  died of Hypothermia (extreme) — Goldenboy
+                //   day 41 17h  died of Hypothermia (extreme) — Bowman
+                //
+                // Both slept outside all winter beside four finished rooms. The 120 material was
+                // the cheapest thing the colony owned.
+                if (!Upkeep.DefectSurvey.Expendable(
+                        ctx.map, layout, room,
+                        ctx.plan != null ? ctx.plan.RolesAnyGoalWants : null)) continue;
 
                 // A shell too small to do the new job is not a saving.
                 //
