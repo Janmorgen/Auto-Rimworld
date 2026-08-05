@@ -109,6 +109,8 @@ Four have bitten so far, and all four are connection faults rather than logic er
 | **wrong scope** | the right question asked at the wrong level | a colony's want tallied once per room |
 | **contested ownership** | two systems acting on one thing | upkeep placing a table the planner also furnishes |
 | **lagging signal** | a remedy driven by a symptom that cannot clear until the remedy lands | AteWithoutTable ordering tables for days |
+| **history read as state** | a tally of events reported where the current answer was wanted | `check30.sh` counting every "pen is closed" ever printed, while the game showed *Pen not enclosed* |
+| **proxy for the real thing** | a measurable stand-in that stops tracking what it stood for | beds counted as shelter, roofing counted as cover, a gather circle counted as the world |
 
 When a fault doesn't fit these, name the new class and add a row. The table is a record of
 what this director actually gets wrong, which is worth more than a list of what might go wrong.

@@ -56,16 +56,36 @@ causes=$(grep -o "died of .*" "$CH" 2>/dev/null | sed 's/died of //' | sort | un
 excmod=$(grep -c "AutoColony.*Exception" "$LOG" 2>/dev/null); excmod=${excmod:-0}
 warns=$(grep -c "^Warning:" "$LOG" 2>/dev/null); warns=${warns:-0}
 
+# Also a cumulative count rather than a state — kept, but named honestly, so it
+# is not read as "rooms standing right now". The vitals line carries the live
+# figures; this is a tally of rooms that have ever come good.
 rooms=$(grep -c "room is working" "$CH" 2>/dev/null); rooms=${rooms:-0}
 # "pen is" also matches "the open is elective" in threat lines. Count what was
 # fenced and what the game agrees is closed, which are the two facts worth having.
 sited=$(grep -c "fencing a" "$CH" 2>/dev/null); sited=${sited:-0}
-closed=$(grep -c "the pen is closed" "$CH" 2>/dev/null); closed=${closed:-0}
-pens="$sited sited/$closed closed"
+
+# The pen's CURRENT verdict, not how many times it has ever been closed.
+#
+# This was `grep -c "the pen is closed"`, a tally of every time the line ever
+# appeared — and the director prints that line only when the answer *changes*.
+# Run 142 closed its pen on day 0 and lost it again on day 4; the game was
+# showing "Pen not enclosed" on screen while this read "1 closed", because one
+# was the count and the other was the state. A count of events reported as a
+# state is the same fault this script exists to catch in the director, and it
+# went unnoticed here for the life of the script.
+#
+# So: take the last verdict of either kind and say what it was.
+penline=$(grep -E "the pen is closed|the pen has a marker standing" "$CH" 2>/dev/null | tail -1)
+case "$penline" in
+    *"the pen is closed"*) penstate="closed" ;;
+    *"marker standing"*)   penstate="OPEN" ;;
+    *)                     penstate="none" ;;
+esac
+pens="$sited sited/$penstate now"
 lean=$(grep "work is leaning" "$CH" 2>/dev/null | tail -1 | sed 's/.*leaning — //; s/ *\[[A-Z][a-z]*,[^]]*\]//')
 season=$(grep -o "\[\(Spring\|Summer\|Fall\|Winter\),[^]]*\]" "$CH" 2>/dev/null | tail -1)
 vitals=$(grep "colonists [0-9]" "$CH" 2>/dev/null | tail -1)
 focus=$(grep "working towards" "$CH" 2>/dev/null | tail -1 | sed 's/.*towards — //')
 death=$(grep "COLONY LOST\|final score" "$CH" 2>/dev/null | tail -1)
 
-echo "CHECK30| $running | $frame | died: $died taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | rooms: $rooms pens: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
+echo "CHECK30| $running | $frame | died: $died taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | roomsEver: $rooms pen: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
