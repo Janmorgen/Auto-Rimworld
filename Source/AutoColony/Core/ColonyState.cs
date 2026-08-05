@@ -537,6 +537,20 @@ namespace AutoColony
 
         // --- research ---
         public int researchFinished;
+
+        /// <summary>
+        /// Research points banked across every project, finished or part-done.
+        ///
+        /// The score used to count *finished projects*, which in 91 of 93 measured epochs was
+        /// zero. A colony ninety-five percent through Pemmican scored exactly the same as one
+        /// that never built a bench, so six percent of the score weight sat permanently at zero
+        /// and the optimiser had no way to learn its way towards research at all.
+        ///
+        /// Points are continuous and they move every hour somebody sits at a bench, which is
+        /// what a gradient needs. Finishing still matters — a finished project unlocks things —
+        /// but it is the milestone, not the measurement.
+        /// </summary>
+        public float researchPoints;
         public bool hasResearchBench;
 
         /// <summary>
@@ -1685,8 +1699,18 @@ namespace AutoColony
         static void CaptureResearch(ColonyState s)
         {
             var all = DefDatabase<ResearchProjectDef>.AllDefsListForReading;
+            var manager = Find.ResearchManager;
+
             for (int i = 0; i < all.Count; i++)
+            {
                 if (all[i].IsFinished) s.researchFinished++;
+
+                try
+                {
+                    if (manager != null) s.researchPoints += manager.GetProgress(all[i]);
+                }
+                catch (Exception) { }
+            }
         }
 
         /// <summary>
@@ -1730,6 +1754,7 @@ namespace AutoColony
             m.fires = fires;
             m.firesNearBase = firesNearBase;
             m.researchFinished = researchFinished;
+            m.researchPoints = researchPoints;
 
             var stats = Find.StoryWatcher != null ? Find.StoryWatcher.statsRecord : null;
             if (stats != null)

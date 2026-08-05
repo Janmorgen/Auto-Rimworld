@@ -29,6 +29,10 @@ namespace AutoColony
         public int colonists = 1;
         public float wealthTotal;
         public int researchFinished;
+
+        /// <summary>Points banked at the epoch's start, so progress can be differenced.</summary>
+        public float researchPoints;
+
         public int day;
 
         public static EpochStart From(ColonyMetrics m)
@@ -37,6 +41,7 @@ namespace AutoColony
             e.colonists = m.colonists;
             e.wealthTotal = m.wealthTotal;
             e.researchFinished = m.researchFinished;
+            e.researchPoints = m.researchPoints;
             e.day = m.day;
             return e;
         }
@@ -46,6 +51,7 @@ namespace AutoColony
             Scribe_Values.Look(ref colonists, "colonists", 1);
             Scribe_Values.Look(ref wealthTotal, "wealthTotal", 0f);
             Scribe_Values.Look(ref researchFinished, "researchFinished", 0);
+            Scribe_Values.Look(ref researchPoints, "researchPoints", 0f);
             Scribe_Values.Look(ref day, "day", 0);
         }
     }
@@ -516,8 +522,26 @@ namespace AutoColony
             breakdown.Add(new ScoreTerm("Health", health, WHealth));
 
             // --- research throughput ---
+            // Points banked, not projects finished.
+            //
+            // "Finished projects / 2" scored 0.00 in 91 of the 93 epochs this project has
+            // measured, and never once reached 1.00. It was not wrong — those colonies really
+            // did finish nothing — but a step function on an event that almost never happens is
+            // a constant, and a constant teaches the optimiser nothing. Six percent of the score
+            // weight has been unreachable for the whole history of the run archive, and a colony
+            // ninety-five percent through Pemmican scored the same as one with no bench.
+            //
+            // Progress moves every hour somebody sits at a bench, which is what a gradient
+            // needs. Scaled against a cheap Neolithic project — Pemmican and PsychoidBrewing are
+            // 500, Stonecutting 300 — so a colony that banks one of those in an epoch scores
+            // well, and finishing several still saturates.
+            //
+            // Finishing is kept as the bonus it should be rather than the whole measure: it is
+            // the milestone, the points are the work.
             int projects = Math.Max(0, end.researchFinished - start.researchFinished);
-            float research = AcMath.Clamp01(projects / 2f);
+            float banked = Math.Max(0f, end.researchPoints - start.researchPoints);
+            float research = AcMath.Clamp01(banked / 500f) * 0.7f
+                           + AcMath.Clamp01(projects / 2f) * 0.3f;
             breakdown.Add(new ScoreTerm("Research", research, WResearch));
 
             // --- infrastructure: everyone housed, with a little slack ---

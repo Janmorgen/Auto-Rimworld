@@ -139,6 +139,9 @@ namespace AutoColony
 
         // cumulative counters, differenced across an epoch
         public int researchFinished;
+
+        /// <summary>Research points banked, finished or not — the continuous version.</summary>
+        public float researchPoints;
         public int cumulativeDeaths;
         public int cumulativeRaids;
 
