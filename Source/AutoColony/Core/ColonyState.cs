@@ -1610,6 +1610,17 @@ namespace AutoColony
             var filter = refuelable.Props.fuelFilter;
             if (filter == null) return 0;
 
+            // Only what the colony would actually go and cut.
+            //
+            // This counted every tree on the map while ResourceModule marks trees within 55
+            // cells of the base. Run 122 sat on sand with no tree in reach and read "1990
+            // standing, so chopping is the lever" for eighteen days — six hoppers dry the whole
+            // time, the generator never lit. The number was true about the map and false about
+            // the colony, and the two scopes have to be one scope or the report is a lie in the
+            // direction of doing nothing.
+            var origin = ColonyOrigin(map);
+            int radiusSq = Modules.ResourceModule.GatherRadius * Modules.ResourceModule.GatherRadius;
+
             int total = 0;
             try
             {
@@ -1626,6 +1637,7 @@ namespace AutoColony
                             var plant = standing[j] as Plant;
                             if (plant == null || !plant.Spawned) continue;
                             if (plant.IsForbidden(Faction.OfPlayer)) continue;
+                            if ((plant.Position - origin).LengthHorizontalSquared > radiusSq) continue;
                             total += (int)(plant.def.plant.harvestYield * plant.Growth);
                         }
                     }
@@ -1633,6 +1645,28 @@ namespace AutoColony
             }
             catch (Exception) { }
             return total;
+        }
+
+        /// <summary>
+        /// Roughly where the colony is — the centre of what it has built, or the map centre
+        /// before it has built anything. The same circle the gatherer works in.
+        /// </summary>
+        static IntVec3 ColonyOrigin(Map map)
+        {
+            try
+            {
+                var built = map.listerBuildings.allBuildingsColonist;
+                if (built == null || built.Count == 0) return map.Center;
+
+                int x = 0, z = 0, n = 0;
+                for (int i = 0; i < built.Count; i++)
+                {
+                    if (built[i] == null || !built[i].Spawned) continue;
+                    x += built[i].Position.x; z += built[i].Position.z; n++;
+                }
+                return n == 0 ? map.Center : new IntVec3(x / n, 0, z / n);
+            }
+            catch (Exception) { return map.Center; }
         }
 
         static readonly Dictionary<ushort, List<ThingDef>> harvestSourceCache =

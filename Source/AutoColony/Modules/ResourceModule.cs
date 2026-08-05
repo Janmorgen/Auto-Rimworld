@@ -39,7 +39,13 @@ namespace AutoColony.Modules
         const int MaxPerPass = 25;
 
         /// <summary>How far from the base colonists are sent to gather.</summary>
-        const int GatherRadius = 55;
+        /// <summary>
+        /// How far from the colony the gatherer will mark anything. Public because
+        /// ColonyState measures standing fuel against the same circle — two scopes for the
+        /// same question is what let run 122 report "1990 standing, chopping is the lever"
+        /// for eighteen days while the base sat on sand with no tree within reach.
+        /// </summary>
+        public const int GatherRadius = 55;
 
         /// <summary>Whether the last pass marked anything, so transitions can be spoken.</summary>
         bool wasGathering;
