@@ -860,7 +860,7 @@ namespace AutoColony.Modules
 
         void HandleThreat(DirectorContext ctx)
         {
-            float strength = CombatAssessment.ColonyStrength(ctx.state);
+            float roster = CombatAssessment.ColonyStrength(ctx.state);
             float threat = HostileStrength(ctx);
 
             // Whether this fight is worth having, rather than merely whether it is happening.
@@ -874,11 +874,32 @@ namespace AutoColony.Modules
             // whether anyone suitable exists — so the question is who goes, not whether.
             var fighters = CombatAssessment.RankFighters(ctx.state.ableColonists);
 
+            // The force that can take the field, as distinct from the roster it comes from.
+            //
+            // These were the same number and they are not. The winnability test read the
+            // strength of everyone able, and only afterwards did the loop release the reserved
+            // medic and everyone too hurt to stand — so the colony settled the question on a
+            // body it then declined to send. Run 132, day 3:
+            //
+            //   07h  WITHDRAWING 2  — strength 118 vs threat 165 (0.71x), needed 1.25x
+            //   09h  engaging with 1 — strength 388 vs threat 158 (2.46x), needed 1.40x
+            //
+            // Three of the four were already on the floor at 09h. 388 was the roster; what
+            // walked out was one person worth a fraction of it, at a true ratio nearer 0.4x
+            // than the 2.46x printed beside it. All four bled to death within ten hours.
+            //
+            // No decision rule changes here. The colony is told how many hands it actually has,
+            // and the rule it already had reaches the right answer on its own.
+            var medic = ChooseReservedMedic(ctx, fighters);
+            float retreatAt = ctx.Gene(Genes.DefenseRetreatHealth);
+            var fieldable = Fieldable(fighters, medic, retreatAt);
+            float strength = CombatAssessment.StrengthOf(fieldable);
+
             // What losing this fight would cost, alongside how likely losing it is. With most of
             // the colony already on the floor, the few still upright are the only thing standing
             // between it and nobody left to tend or feed anyone, so they hold cover on odds they
             // would have met in the open at full strength.
-            float caution = CasualtyPolicy.EngagementCaution(fighters.Count, ctx.state.colonistsDowned);
+            float caution = CasualtyPolicy.EngagementCaution(fieldable.Count, ctx.state.colonistsDowned);
             var refuge = Refuge(ctx);
             bool hasRefuge = refuge.IsValid && refuge != RallyPoint(ctx);
 
@@ -905,10 +926,10 @@ namespace AutoColony.Modules
             // a constant cannot hold.
             var kind = KindOfThreat(ctx);
             float learned = Learning.ThreatMemory.ForceFor(kind, ctx.Gene(Genes.DefenseEngageRatio));
-            OpenEncounter(ctx, kind, fighters);
+            OpenEncounter(ctx, kind, fieldable);
 
             float required = CasualtyPolicy.RequiredAdvantage(
-                learned, fighters.Count,
+                learned, fieldable.Count,
                 ctx.state.colonistsDowned, hasRefuge, canRecover);
 
             bool winnable = threat <= 0f || strength / threat >= required;
@@ -931,34 +952,24 @@ namespace AutoColony.Modules
             if (ctx.state.predatorsHunting > 0) winnable = true;
 
             var rally = winnable ? RallyPoint(ctx) : refuge;
-            float retreatAt = ctx.Gene(Genes.DefenseRetreatHealth);
             int mobilised = 0;
             float committedStrength = 0f;
-
-            // Somebody has to still be standing afterwards to tend whoever is not.
-            var medic = ChooseReservedMedic(ctx, fighters);
 
             for (int i = 0; i < fighters.Count; i++)
             {
                 var pawn = fighters[i];
                 if (pawn.drafter == null) continue;
 
-                if (pawn == medic)
-                {
-                    // Released rather than merely not drafted: they may have been in the line
-                    // when the casualty happened, and work priorities already put Doctor at the
-                    // top the moment anyone went down, so letting go of them is the whole order.
-                    if (pawn.drafter.Drafted) pawn.drafter.Drafted = false;
-                    drafted.Remove(pawn);
-                    continue;
-                }
-
-                float health = pawn.health != null && pawn.health.summaryHealth != null
-                    ? pawn.health.summaryHealth.SummaryHealthPercent
-                    : 1f;
-
-                // Too hurt to fight: release them so they seek treatment instead.
-                if (health < retreatAt)
+                // Not fieldable — the reserved medic, or too hurt to stand.
+                //
+                // Released rather than merely left undrafted: they may have been in the line
+                // when the casualty happened, and work priorities already put Doctor at the top
+                // the moment anyone went down, so letting go of them is the whole order. The
+                // hurt are released for the same reason, to go and seek treatment.
+                //
+                // One definition, consulted here and used in the decision above, so the force
+                // the fight was accepted on and the force that walks out cannot drift apart.
+                if (!fieldable.Contains(pawn))
                 {
                     if (pawn.drafter.Drafted) pawn.drafter.Drafted = false;
                     drafted.Remove(pawn);
@@ -1010,11 +1021,18 @@ namespace AutoColony.Modules
                 // read as an explanation of a choice it had not made.
                 Chronicle.Record(ChronicleCategory.Threat, string.Format(
                     "{0} hostiles (danger {1}); {2} {3} to {4} — strength {5:0} vs threat {6:0} " +
-                    "({7:0.00}x), needed {8:0.00}x{9}{10}",
+                    "({7:0.00}x), needed {8:0.00}x{9}{10}{11}",
                     ctx.state.hostilePawns, ctx.state.danger,
                     winnable ? "engaging with" : "WITHDRAWING",
                     mobilised, rally, strength, threat,
                     threat > 0f ? strength / threat : 999f, required,
+                    // Say when the roster is bigger than what can be sent, so the gap between
+                    // "how strong is this colony" and "who can walk out" stays readable rather
+                    // than having to be inferred from a body count two hours later.
+                    roster > strength * 1.05f
+                        ? string.Format(" ({0:0} of {1:0} fieldable — {2} held back)",
+                                        strength, roster, fighters.Count - fieldable.Count)
+                        : "",
                     besieged
                         ? " (a siege — they shell from range and will not come to the door, so " +
                           "there is no cover to hold)"
@@ -1040,6 +1058,34 @@ namespace AutoColony.Modules
         /// value breaks ties, so of two equally capable doctors the one the line can better
         /// spare stays behind.
         /// </summary>
+        /// <summary>
+        /// Who out of the ranked fighters can actually be sent.
+        ///
+        /// The single definition of "fieldable". It is asked once before the fight is accepted
+        /// and consulted again while drafting, which is the point — when the same filter lived
+        /// only inside the drafting loop, the decision above it was taken on a roster that
+        /// included people the loop was about to release.
+        /// </summary>
+        static List<Pawn> Fieldable(List<Pawn> fighters, Pawn medic, float retreatAt)
+        {
+            var able = new List<Pawn>();
+            if (fighters == null) return able;
+
+            for (int i = 0; i < fighters.Count; i++)
+            {
+                var pawn = fighters[i];
+                if (pawn == null || pawn == medic) continue;
+
+                float health = pawn.health != null && pawn.health.summaryHealth != null
+                    ? pawn.health.summaryHealth.SummaryHealthPercent
+                    : 1f;
+                if (health < retreatAt) continue;
+
+                able.Add(pawn);
+            }
+            return able;
+        }
+
         Pawn ChooseReservedMedic(DirectorContext ctx, List<Pawn> fighters)
         {
             if (!CasualtyPolicy.ShouldReserveMedic(fighters.Count, ctx.state.colonistsDowned))

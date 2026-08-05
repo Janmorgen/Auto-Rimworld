@@ -68,6 +68,7 @@ namespace AutoColony
         public int samples;
         public float moodSum;
         public float healthSum;
+        public float readinessSum;
         public float minDaysOfFood = 999f;
 
         /// <summary>
@@ -237,6 +238,7 @@ namespace AutoColony
             samples = 0;
             moodSum = 0f;
             healthSum = 0f;
+            readinessSum = 0f;
             minDaysOfFood = 999f;
             foodObserved = false;
             foodSamples = 0;
@@ -268,6 +270,7 @@ namespace AutoColony
             samples++;
             moodSum += m.avgMood;
             healthSum += m.avgHealth;
+            readinessSum += m.readiness;
             // The larder is not measurable until something has been hauled into it.
             //
             // `daysOfFood` comes off ResourceCounter, which sees only stockpiled goods, so every
@@ -330,6 +333,20 @@ namespace AutoColony
 
         public float AvgMood { get { return samples > 0 ? moodSum / samples : 0.5f; } }
         public float AvgHealth { get { return samples > 0 ? healthSum / samples : 1f; } }
+
+        /// <summary>
+        /// How armed the colony was across the epoch, rather than at the instant it ended.
+        ///
+        /// Read at the endpoint this was worse than useless. Readiness is strength over the
+        /// raid the colony's own wealth and headcount invite, and a colony with nobody left
+        /// invites nothing — so ThreatForecast.Readiness returned its "no threat expected" 1.0
+        /// and a wiped-out colony scored as perfectly armed. Run 132 died with all four
+        /// colonists bled out and banked 0.35 of its Defense term on that reading.
+        ///
+        /// Samples only exist while somebody is alive, so averaging over them cannot be
+        /// answered by an empty map.
+        /// </summary>
+        public float AvgReadiness { get { return samples > 0 ? readinessSum / samples : 0f; } }
         public float MentalBreakFraction { get { return samples > 0 ? (float)mentalBreakSamples / samples : 0f; } }
         public float FireFraction { get { return samples > 0 ? (float)fireSamples / samples : 0f; } }
         public float DownedFraction { get { return samples > 0 ? (float)downedSamples / samples : 0f; } }
@@ -364,6 +381,7 @@ namespace AutoColony
             Scribe_Values.Look(ref samples, "samples", 0);
             Scribe_Values.Look(ref moodSum, "moodSum", 0f);
             Scribe_Values.Look(ref healthSum, "healthSum", 0f);
+            Scribe_Values.Look(ref readinessSum, "readinessSum", 0f);
             Scribe_Values.Look(ref minDaysOfFood, "minDaysOfFood", 999f);
             Scribe_Values.Look(ref foodObserved, "foodObserved", false);
             Scribe_Values.Look(ref foodSamples, "foodSamples", 0);
@@ -604,9 +622,13 @@ namespace AutoColony
             // the position every colony here reaches around day 20, when wealth passes 15,000 and
             // three people are still carrying whatever they landed with.
             //
-            // end.readiness is colony fighting strength over the storyteller's own points figure
-            // for this map, so it rises by arming and falls by getting richer without arming.
-            float armed = AcMath.Clamp01(end.readiness);
+            // Readiness is colony fighting strength over the storyteller's own points figure for
+            // this map, so it rises by arming and falls by getting richer without arming.
+            //
+            // Averaged over the epoch rather than read at the end, for the same reason `unhurt`
+            // is: the endpoint of a colony that lost is an empty map, and an empty map invites
+            // no raid, which the forecast reports as being comfortably armed for it.
+            float armed = AcMath.Clamp01(acc.AvgReadiness);
 
             float defense = 0.25f * turretReadiness + 0.40f * unhurt + 0.35f * armed;
             breakdown.Add(new ScoreTerm("Defense", defense, WDefense));

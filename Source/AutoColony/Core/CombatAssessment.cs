@@ -198,6 +198,23 @@ namespace AutoColony
         }
 
         /// <summary>
+        /// Combined fighting value of a named group — the force that will actually walk out,
+        /// as opposed to the roster it was drawn from.
+        ///
+        /// <see cref="ColonyStrength"/> answers "how strong is this colony", which is the right
+        /// question for readiness and the wrong one for a fight, because the people it counts
+        /// include the medic held back and anyone too hurt to stand. Those two questions were
+        /// the same call for a long time and the difference killed a colony.
+        /// </summary>
+        public static float StrengthOf(List<Pawn> pawns)
+        {
+            if (pawns == null) return 0f;
+            float total = 0f;
+            for (int i = 0; i < pawns.Count; i++) total += ColonistValue(pawns[i]);
+            return total;
+        }
+
+        /// <summary>
         /// How dangerous a hostile or wild animal is. Combat power is the game's own estimate;
         /// an already-wounded attacker is discounted for what it has lost.
         /// </summary>
