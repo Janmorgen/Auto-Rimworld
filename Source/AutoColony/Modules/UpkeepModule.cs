@@ -974,10 +974,22 @@ namespace AutoColony.Modules
             if (now == fuelNoted) return;
 
             fuelNoted = now;
+
+            // Name the lever that actually applies. "Refuelling is Hauling work" is true and was
+            // the wrong half of the answer for most of run 116: there was nothing to haul,
+            // because nobody had cut it. Hauling is the lever once logs exist; before that it is
+            // PlantCutting, and saying the first while the second is what is missing sends the
+            // next reader — and the next fix — at the wrong subsystem.
+            bool uncut = Furniture.FuelBudget.FuelUncut(ctx.state.buildingsWantingFuel,
+                                                       ctx.state.fuelOnHand,
+                                                       ctx.state.fuelStanding);
             Chronicle.Record(ChronicleCategory.Economy, string.Format(
-                "fuel: {0} waiting on wood — {1}; refuelling is Hauling work, so that is the " +
-                "lever, not whatever the bench does",
-                dry.Count, now));
+                "fuel: {0} waiting on wood — {1}; {2}",
+                dry.Count, now,
+                uncut
+                    ? "no logs cut and " + ctx.state.fuelStanding + " standing, so chopping is " +
+                      "the lever, not hauling"
+                    : "refuelling is Hauling work, so that is the lever, not whatever the bench does"));
         }
 
         /// <summary>

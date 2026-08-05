@@ -492,8 +492,24 @@ namespace AutoColony.Modules
             Need("Mining", s.colonistsCutOff > 0 ? 5f
                          : 1f + Shortfall(s.steel, Target(ctx, Genes.SteelTarget, "Steel")) * 1.5f
                               * (0.5f + ctx.Gene(Genes.MiningAggression)));
-            Need("PlantCutting", 1f + Shortfall(s.wood, Target(ctx, Genes.WoodTarget, "WoodLog")) * 1.5f
-                                   * (0.5f + ctx.Gene(Genes.ChopAggression)));
+            // Fires out, no logs, and timber still standing is a chopping emergency, and the
+            // shortfall formula cannot say so.
+            //
+            // 1 + shortfall x 1.5 x (0.5 + aggression) tops out near 3.25 at maximum shortfall
+            // and maximum aggression. Tailoring sits at 3.4 and Crafting at 3.4, so however
+            // badly the colony needs wood, chopping loses to sewing. Run 116 reached day 20 with
+            // six hoppers dry, trees standing, and PlantCutting nowhere in the top six.
+            //
+            // Raising the *target* — which is what I did first — moved the number being compared
+            // and left the ceiling where it was. The formula is right for a stockpile that is
+            // running low and cannot express "the fires are out", so this does not adjust it; it
+            // steps over it, the same way a walled-in colonist steps over the Construction
+            // backlog curve.
+            bool uncut = Furniture.FuelBudget.FuelUncut(s.buildingsWantingFuel, s.fuelOnHand,
+                                                       s.fuelStanding);
+            Need("PlantCutting", uncut ? 5f
+                               : 1f + Shortfall(s.wood, Target(ctx, Genes.WoodTarget, "WoodLog")) * 1.5f
+                                    * (0.5f + ctx.Gene(Genes.ChopAggression)));
 
             // Research at a flat 1.2 is how a colony waits sixteen days for a 500-point
             // project while sewing at 3.2. The plan already publishes the project the focus is
