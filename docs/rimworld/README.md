@@ -1,6 +1,6 @@
 # RimWorld reference
 
-Twenty-one linked notes on RimWorld's core systems, supplied for this project's use. Base game
+The complete set — twenty-one linked notes on RimWorld's core systems, supplied for this project's use. Base game
 only — nothing here covers Royalty, Ideology, Biotech, Anomaly or Odyssey, which matches the
 install the director runs against (1.6.4871, no DLC).
 
@@ -62,8 +62,28 @@ would be a bug:
   at a value they cannot actually deliver. Smaller, and it cuts both ways since raiders are
   scored the same, but it is a known inaccuracy rather than a simplification.
 
-## Not included
+## An entire system the director does not have
 
-One file `index.md` links to has not been supplied, so that link dangles: `trading.md`.
+[trading.md](trading.md) describes a capability with **no counterpart anywhere in the
+director**. There is no trade module; the only mention of a trader in the whole codebase is a
+doc comment in `IncidentModule` listing "traders offering deals" among the things incidents
+can be. A caravan visiting the map is answered the same way any other incident is, and never
+traded with.
 
-Left as-is rather than edited, so it drops straight in if it arrives.
+That matters most for one resource. These colonies reach `med 0` — run 136 was at zero
+medicine on day 21 with a Low medicine alert standing — and medicine is precisely what stops
+the bleeding deaths that ended runs 132, 134 and 135. A visiting caravan needs no research to
+trade with, only a colonist sent to talk to it.
+
+Recorded as a task. Noted here because the gap is only visible by reading a file about a
+system and finding nothing on the other side of it, which is the argument for having these
+notes at all.
+
+Two smaller points from the same file, neither actionable yet:
+
+- Trade is a lever on colony **wealth**, and wealth sets raid size. `ThreatForecast` already
+  models that relationship and `Outgrowing()` already watches for readiness falling as wealth
+  climbs — but these colonies die below the 14,000 wealth floor where wealth contributes
+  nothing, so it is not the binding constraint at the stage they are failing.
+- The negotiating colonist's **Social** skill sets prices, which would be the first thing a
+  trade module needed to choose whom to send.
