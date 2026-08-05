@@ -136,6 +136,20 @@ namespace AutoColony
         /// </summary>
         public int colonistsBleedingOut;
 
+        /// <summary>
+        /// Colonists losing a disease race whose room is too dirty to operate in.
+        ///
+        /// Sharper than "somebody is losing", and it is the number that should move the mop.
+        /// Leslie died with the surgery held a full day waiting for a clean room that never
+        /// came: Cleaning rises to 3.0 while anyone is losing, and 3.0 loses to Cooking at 4.0
+        /// and Construction at 3.7, so nobody ever cleaned it.
+        ///
+        /// A held surgery is a different statement from a sick colonist. It says the colony has
+        /// decided what to do, knows how to do it, and is refusing — for a reason it could fix
+        /// in ten minutes with a broom.
+        /// </summary>
+        public int colonistsLosingInADirtyRoom;
+
         /// <summary>Which ones, so something can go and let them out.</summary>
         public List<Pawn> cutOff;
 
@@ -785,7 +799,19 @@ namespace AutoColony
 
                         // Asked of everyone, tended or not. A tended infection can still be
                         // losing, and that is exactly the case where tending is not the answer.
-                        if (LosingToDisease(p)) s.colonistsLosingToDisease++;
+                        if (LosingToDisease(p))
+                    {
+                        s.colonistsLosingToDisease++;
+
+                        try
+                        {
+                            var room = p.GetRoom();
+                            if (room != null && !room.PsychologicallyOutdoors &&
+                                room.GetStat(RoomStatDefOf.Cleanliness) < 0f)
+                                s.colonistsLosingInADirtyRoom++;
+                        }
+                        catch (Exception) { }
+                    }
                     }
                     catch (Exception) { }
                 }
@@ -1675,6 +1701,7 @@ namespace AutoColony
             m.colonistsCutOff = colonistsCutOff;
             m.colonistsIdle = colonistsIdle;
             m.colonistsBleedingOut = colonistsBleedingOut;
+            m.colonistsLosingInADirtyRoom = colonistsLosingInADirtyRoom;
             m.colonistsUntended = colonistsUntended;
             m.colonistsUntendedLethal = colonistsUntendedLethal;
             m.colonistsLosingToDisease = colonistsLosingToDisease;

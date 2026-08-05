@@ -543,7 +543,15 @@ namespace AutoColony.Modules
             // sets surgery success (0.60x filthy) and post-operative infection (full odds
             // filthy, a fifth sterile), so when somebody is losing to a disease the room they
             // will be cut open in is the most consequential floor in the colony.
-            Need("Cleaning", s.colonistsLosingToDisease > 0 ? 3f
+            // A held surgery makes the mop a surgical instrument.
+            //
+            // 3.0 was the weight for "somebody is losing", and it loses to Cooking at 4.0 and
+            // Construction at 3.7 — so in run 117 the theatre stayed filthy for a day, the
+            // amputation stayed held, and Leslie died two hours after it was finally allowed.
+            // The narrower signal deserves the higher number: this is not housekeeping, it is
+            // the one job standing between a colonist and an operating table.
+            Need("Cleaning", s.colonistsLosingInADirtyRoom > 0 ? 5f
+                           : s.colonistsLosingToDisease > 0 ? 3f
                            : s.avgMood < 0.6f ? 1.6f : 0.9f);
             // Items outdoors deteriorate wherever they are, and in a dry climate they are also
             // the easiest thing on the map to lose. Getting them into storage is preventative

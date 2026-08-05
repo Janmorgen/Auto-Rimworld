@@ -41,6 +41,9 @@ namespace AutoColony
         /// <summary>Colonists who will bleed to death within a day if untended.</summary>
         public int colonistsBleedingOut;
 
+        /// <summary>Losing a disease race in a room too dirty to operate in.</summary>
+        public int colonistsLosingInADirtyRoom;
+
         /// <summary>Colonists with an untended condition the game says needs tending.</summary>
         public int colonistsUntended;
 

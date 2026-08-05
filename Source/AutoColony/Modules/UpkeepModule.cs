@@ -303,8 +303,18 @@ namespace AutoColony.Modules
 
                 // A dirty theatre is its own infection. Hold the knife until the room is clean,
                 // unless the race is nearly over — past 85% a dirty table beats a grave.
+                //
+                // 85% was far too late, because it measured the disease and not the clock. Leslie
+                // went from 14% to 93% in a single day; the bill was queued at 93% and she died
+                // two hours later, before anybody reached the table. The threshold has to leave
+                // room for the surgery to actually happen — finding a doctor, walking there, and
+                // cutting — not merely for the decision to be taken.
+                //
+                // Two fifths, and the room gets an emergency mop while the hold stands. If the
+                // colony cannot get a floor clean in the time it takes a disease to cross from
+                // 40% to lethal, the floor was never going to be the deciding factor.
                 float cleanliness = RoomCleanlinessAround(pawn);
-                if (cleanliness < 0f && towardsDeath < 0.85f)
+                if (cleanliness < 0f && towardsDeath < 0.4f)
                 {
                     if (surgeryNoted.Add(pawn.thingIDNumber ^ 0x5A5A))
                         Chronicle.Record(ChronicleCategory.Health, string.Format(
