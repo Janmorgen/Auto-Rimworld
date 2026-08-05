@@ -542,6 +542,23 @@ namespace AutoColony
             // --- defense readiness, scaled by the threat wealth actually attracts ---
             float expectedTurrets = AcMath.Clamp(end.wealthTotal / 25000f, 0f, 8f);
             float defense = expectedTurrets < 0.5f ? 1f : AcMath.Clamp01(end.poweredTurrets / expectedTurrets);
+
+            // And whether anybody was actually hurt, which is the part that was missing.
+            //
+            // Run 118 was wiped out by a single Low-danger raider — four colonists bled to death
+            // over eighteen hours — and scored Defense 1.00. Below 12,500 wealth expectedTurrets
+            // falls under 0.5 and the term returns 1.0 unconditionally, and these colonies live
+            // at 12-20k while turrets sit behind Electricity at 1600 research they never reach.
+            // So Defense has been a constant 1.0 in every run this project has ever scored: a
+            // term that cannot vary teaches nothing, and this one was reporting perfection to a
+            // colony being buried.
+            //
+            // Turret readiness is still worth something — it is the part the director can build
+            // toward — but it is preparation, and preparation that ends with everyone on the
+            // floor was not enough. The outcome now caps it: time spent with somebody downed is
+            // already measured for Survival, and it is the closest thing to "how badly did the
+            // fighting go" the accumulator holds.
+            defense *= AcMath.Clamp01(1f - acc.DownedFraction * 1.5f);
             breakdown.Add(new ScoreTerm("Defense", defense, WDefense));
 
             // --- conduct: time spent in crisis, and misery with no answer ---
