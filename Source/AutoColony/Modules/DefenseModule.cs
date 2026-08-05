@@ -949,7 +949,28 @@ namespace AutoColony.Modules
             // the base; with a predator, the colonist on the floor *is* what the animal is eating.
             //
             // Withdrawing does not save them either. The wolf does not lose interest.
-            if (ctx.state.predatorsHunting > 0) winnable = true;
+            //
+            // But only where there is nowhere to put them. A door is a better answer than a
+            // fight, and the colony can now tell a real room from a patch of roof.
+            //
+            // Run 145, day 9, with a finished Kitchen standing since day 5:
+            //
+            //   05h  1 predator(s) hunting Fox — drafting
+            //   05h  engaging with 2 — strength 154 vs threat 160 (0.96x), needed 1.50x
+            //        (a room to hold, so the open is elective)
+            //   06h  died of Bite (warg razorfangs) — Pablo
+            //   14h  COLONY LOST
+            //
+            // The override read "a predator is hunting" and forced the fight at 0.96x against a
+            // warg — the animal the reference puts at a hundred percent revenge — while an
+            // enclosed room stood a short walk away. It turned "we cannot win this" into
+            // "engage" and the margin never entered the decision.
+            //
+            // Animals cannot open doors, so with a genuine refuge the stalked colonist is saved
+            // by walking inside, which is what withdrawing now means since the enclosure test
+            // went in. Without one, withdrawing is still just standing somewhere else and the
+            // original reasoning holds exactly as written.
+            if (ctx.state.predatorsHunting > 0 && !hasRefuge) winnable = true;
 
             var rally = winnable ? RallyPoint(ctx) : refuge;
             int mobilised = 0;
