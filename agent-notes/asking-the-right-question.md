@@ -132,6 +132,25 @@ rule believes about the same fact.
 
 ---
 
+## When two places compute the same thing
+
+Three faults in one session were one fault: a quantity computed in two places, disagreeing.
+
+| the quantity | one place said | the other said |
+|---|---|---|
+| how much wood the colony wants | designation target included the fires | the priority target did not |
+| what counts as "next to" a table | the ring around it, corners included | RimWorld's cardinal directions only |
+| where standing timber counts from | the whole map | within 55 cells of the base |
+
+Each surfaced as a different symptom — trees marked but nobody chopping, stools on corners that
+satisfied nothing, eighteen dry days beside a reported two thousand units of timber. Each was
+found by a number looking implausible rather than by a test.
+
+The rule that falls out: **where two modules need the same number, they must read one number.**
+Not two implementations that agree today. A shared constant, or one asking the other. The wood
+target, the seat adjacency and the gather radius are all now single sources; the bugs were the
+duplication, not the arithmetic.
+
 ## The one after this
 
 Everything above is about measuring the wrong thing. There is a second fault that begins where
