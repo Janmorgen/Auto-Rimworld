@@ -1218,6 +1218,30 @@ namespace AutoColony.Modules
                 if (!centre.InBounds(ctx.map)) continue;
                 if (ctx.map.roofGrid == null || !ctx.map.roofGrid.Roofed(centre)) continue;
 
+                // Roofed is not enclosed, and only enclosed keeps anything out.
+                //
+                // A roofed cell inside three walls and a gap passes the test above, and run 138
+                // withdrew two colonists into one. The manhunter walked in after them:
+                //
+                //   day 8 12h  WITHDRAWING 2 — strength 69 vs threat 57 (1.21x), needed 1.50x
+                //              (a room to hold, so the open is elective)
+                //   day 8 13h  holding Grove back from the fight to tend them (leaving 0 in the line)
+                //   day 8 19h  died of Blood loss — Stevie
+                //   day 8 19h  died of Blood loss — Grove
+                //
+                // The medic reservation worked exactly as designed and the medic was killed
+                // where they stood, because "a room to hold" was a claim nothing had checked.
+                // Animals cannot open doors, so a genuinely enclosed room is the one answer a
+                // pre-industrial colony has to a manhunter pack — and it was being confused
+                // with a patch of shade.
+                //
+                // RoomCensus already asks this question correctly and has since it was written.
+                // The same test, from the same knowledge, arriving late in the other place that
+                // needed it.
+                var actual = centre.GetRoom(ctx.map);
+                if (actual == null || actual.TouchesMapEdge || actual.PsychologicallyOutdoors)
+                    continue;
+
                 float score = threatAt.IsValid
                     ? (centre - threatAt).LengthHorizontalSquared
                     : 0f;

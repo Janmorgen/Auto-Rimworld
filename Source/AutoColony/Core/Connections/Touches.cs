@@ -152,6 +152,17 @@ namespace AutoColony.Connections
 
             new Consequence
             {
+                from = "world.blueprints",
+                to = "colonistBeds",
+                confidence = Confidence.Observed,
+                evidence = "run 138 day 8 — a roofed but unenclosed room counted as a refuge, " +
+                           "so WITHDRAWING read \"a room to hold, so the open is elective\" and " +
+                           "the manhunter followed both colonists in. What the planner has " +
+                           "finished decides whether withdrawing is a real option"
+            },
+
+            new Consequence
+            {
                 from = "world.drafted",
                 to = "colonistsBleedingOut",
                 confidence = Confidence.Observed,
