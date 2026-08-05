@@ -29,9 +29,22 @@ else frame="frame ok"; fi
 # Repeated chronicle lines: the signature of a remedy that is not fixing anything.
 # 28 identical "saguaro cactus plot sown" lines sat in the log for four checks before
 # anybody noticed they were the same line. A count is cheaper than my attention.
-repeats=$(sed 's/^day [0-9]* [0-9]*h *//' "$CH" 2>/dev/null \
+#
+# Recent lines only. The first version counted the whole run, so a loop that closed four
+# in-game days ago still reported "6x AddTable" for ever and read as an active fault —
+# which it did on run 120, and I nearly chased it. A detector that cannot go quiet is the
+# same failure as a remedy that cannot clear its own complaint.
+# Windowed by game day rather than by line count: early in a run the whole log is short,
+# so "last 400 lines" is still the whole history. Two in-game days is long enough to catch
+# a loop firing every six hours and short enough to go quiet once it stops.
+curday=$(grep -oE "^day [0-9]+" "$CH" 2>/dev/null | tail -1 | grep -oE "[0-9]+")
+curday=${curday:-0}
+from=$((curday-2)); [ "$from" -lt 0 ] && from=0
+repeats=$(awk -v from="$from" '
+    match($0, /^day ([0-9]+) /, m) { if (m[1]+0 >= from) { sub(/^day [0-9]+ [0-9]+h[ ]*/,""); print } }
+  ' "$CH" 2>/dev/null \
           | grep -E "^(BUILD|ECONOMY|HEALTH)" \
-          | sort | uniq -c | sort -rn | awk '$1>=5{printf "%dx %s; ", $1, substr($0, index($0,$2))}' \
+          | sort | uniq -c | sort -rn | awk '$1>=4{printf "%dx %s; ", $1, substr($0, index($0,$2))}' \
           | cut -c1-200)
 [ -z "$repeats" ] && repeats="none"
 
