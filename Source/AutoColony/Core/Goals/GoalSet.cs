@@ -548,16 +548,55 @@ namespace AutoColony.Goals
             return ctx.state.workingGenerators > 0;
         }
 
-        public override float Urgency(DirectorContext ctx) { return 0.5f; }
+        /// <summary>
+        /// How badly this colony needs electricity, which is not the same everywhere.
+        ///
+        /// This was a flat 0.5. On a map with trees, power is a convenience — a campfire cooks
+        /// and a passive cooler answers heat, both for wood the colony can go and cut. On a map
+        /// with no wood at all it is the only route left to a cooking fire, a heater, or a
+        /// freezer, and a flat urgency cannot tell those two worlds apart.
+        ///
+        /// Run 142 died of hypothermia at day 41 with ten dry burners and "no fuel anywhere on
+        /// this map to light them with" in its own log. Run 143 is on sand, four days old, and
+        /// already spending its starting wood on a passive cooler it will not be able to replace.
+        ///
+        /// So it reads the world the colony has: nothing standing in reach, nothing standing
+        /// beyond it, and nothing on hand means everything that burns is already dead and only
+        /// the grid can bring any of it back. Blended rather than switched, so a colony that is
+        /// merely low does not leap to the same conclusion as one that is out.
+        /// </summary>
+        public override float Urgency(DirectorContext ctx)
+        {
+            var s = ctx.state;
+
+            // Is there wood in this world at all, as distinct from in reach?
+            bool worldHasNone = s.fuelStanding <= 0 && s.fuelBeyondReach <= 0 && s.fuelOnHand <= 0;
+            if (!worldHasNone) return 0.5f;
+
+            // Everything that burns and is dry is a thing only electricity can now answer.
+            float stranded = s.burners > 0
+                ? AcMath.Clamp01(s.buildingsWantingFuel / (float)s.burners)
+                : 0f;
+            return AcMath.Clamp(0.5f + 0.5f * stranded, 0.5f, 1f);
+        }
 
         public override void DeclareNeeds(DirectorContext ctx, MaterialNeeds needs)
         {
             // A generator and a battery, with enough left over not to strip the stockpile.
             needs.Need("Steel", 220);
             needs.Need("ComponentIndustrial", 6);
-            // The generator is wood-fired, so it is not built and finished with — it burns fuel
-            // for as long as the colony wants power.
-            needs.Need("WoodLog", 300);
+
+            // The wood-fired generator burns fuel for as long as the colony wants power, so it
+            // is not built and finished with — but asking for three hundred wood on a map that
+            // has none is asking for a thing that will never arrive, and the goal then waits on
+            // a material need that cannot be met while the colony freezes.
+            //
+            // A colony with no wood in its world wants the generator that needs no fuel. Which
+            // one that is, and what it costs, is #49 — this only stops demanding the impossible.
+            bool worldHasNone = ctx.state.fuelStanding <= 0
+                                && ctx.state.fuelBeyondReach <= 0
+                                && ctx.state.fuelOnHand <= 0;
+            if (!worldHasNone) needs.Need("WoodLog", 300);
         }
 
         public override string Explain(DirectorContext ctx)
