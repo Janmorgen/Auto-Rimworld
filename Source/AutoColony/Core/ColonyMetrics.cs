@@ -98,6 +98,7 @@ namespace AutoColony
         public float outdoorTemperature;
         public float wealthTotal;
         public int colonistBeds;
+        public int shelteredBeds;
         /// <summary>
         /// Turrets that can actually fire — never the raw built count.
         ///

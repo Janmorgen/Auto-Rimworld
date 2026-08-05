@@ -353,6 +353,24 @@ namespace AutoColony
         public float wealthTotal;
         public float wealthBuildings;
         public int colonistBeds;
+
+        /// <summary>
+        /// Sleeping slots that are actually inside an enclosed room.
+        ///
+        /// <see cref="colonistBeds"/> counts beds, which is the right question for a rescue —
+        /// a bed under open sky still beats the floor to carry a casualty to. It is the wrong
+        /// question for whether anybody is housed, and the two were the same number.
+        ///
+        /// Run 140, day 7: four beds, 1447 material, means 1.00, no enclosed room anywhere, and
+        /// its two survivors carrying SleptOutside and SleptOnGround at -4 apiece into a mood of
+        /// 0.02 and an extreme break. The colony believed it had housed everyone and the game
+        /// was scoring them as sleeping in a field, because a bed in three walls and a gap is
+        /// furniture in the open.
+        ///
+        /// Third place the same distinction has bitten: Refuge() called a roofed cell cover,
+        /// RoomCensus has always asked correctly, and this counted furniture as shelter.
+        /// </summary>
+        public int shelteredBeds;
         /// <summary>Turrets that exist, whether or not they can actually shoot.</summary>
         public int turrets;
 
@@ -1328,7 +1346,14 @@ namespace AutoColony
                     // counting buildings would have the colony believe it is a bed short for
                     // every couple it houses — and go on building beds nobody needs.
                     if (bed != null && bed.ForColonists && !bed.Medical)
+                    {
                         s.colonistBeds += bed.TotalSleepingSlots;
+
+                        // The same enclosure test RoomCensus uses. A roof is not a room.
+                        var room = bed.Position.GetRoom(map);
+                        if (room != null && !room.TouchesMapEdge && !room.PsychologicallyOutdoors)
+                            s.shelteredBeds += bed.TotalSleepingSlots;
+                    }
                 }
                 foreach (var t in lister.AllBuildingsColonistOfClass<Building_Turret>())
                 {
@@ -1996,6 +2021,7 @@ namespace AutoColony
             m.outdoorTemperature = outdoorTemperature;
             m.wealthTotal = wealthTotal;
             m.colonistBeds = colonistBeds;
+            m.shelteredBeds = shelteredBeds;
             m.poweredTurrets = poweredTurrets;
             m.fires = fires;
             m.firesNearBase = firesNearBase;
