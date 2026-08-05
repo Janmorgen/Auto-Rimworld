@@ -67,7 +67,18 @@ namespace AutoColony.Goals
 
     // ------------------------------------------------------------------ short term
 
-    /// <summary>Everyone has somewhere to sleep.</summary>
+    /// <summary>
+    /// Everyone has somewhere to sleep — indoors.
+    ///
+    /// This asked for beds and got beds. Run 140 reached day 7 with four of them, fourteen
+    /// hundred material, no enclosed room anywhere, and both survivors carrying SleptOutside
+    /// and SleptOnGround at -4 apiece into a mood of 0.02 and an extreme break. Run 141 read
+    /// "beds 4 (0 sheltered)" at day 8 on the same shape. The goal was satisfied both times.
+    ///
+    /// A bed under open sky is furniture. RimWorld scores the colonist sleeping in it as having
+    /// slept outside, which is the mood penalty this goal exists to prevent, so satisfying it
+    /// on the bed count meant declaring victory on precisely the thing still going wrong.
+    /// </summary>
     public class ShelterGoal : ColonyGoal
     {
         public const string Id = "Shelter everyone";
@@ -77,18 +88,25 @@ namespace AutoColony.Goals
 
         public override bool Satisfied(DirectorContext ctx)
         {
-            return ctx.state.colonistBeds >= ctx.state.colonists;
+            return ctx.state.shelteredBeds >= ctx.state.colonists;
         }
 
         public override float Urgency(DirectorContext ctx)
         {
             if (ctx.state.colonists == 0) return 0f;
-            return 1f - AcMath.Clamp01(ctx.state.colonistBeds / (float)ctx.state.colonists);
+            return 1f - AcMath.Clamp01(ctx.state.shelteredBeds / (float)ctx.state.colonists);
         }
 
         public override string Explain(DirectorContext ctx)
         {
-            return ctx.state.colonistBeds + " beds for " + ctx.state.colonists + " colonists";
+            // Name the gap when there is one, because "2 beds for 3 colonists" and "4 beds none
+            // of them indoors" want completely different work and used to read the same.
+            return ctx.state.shelteredBeds < ctx.state.colonistBeds
+                ? string.Format(
+                    "{0} of {1} beds are inside a room, for {2} colonists — the rest are " +
+                    "furniture under open sky and the game scores sleeping in them as sleeping out",
+                    ctx.state.shelteredBeds, ctx.state.colonistBeds, ctx.state.colonists)
+                : ctx.state.shelteredBeds + " beds for " + ctx.state.colonists + " colonists";
         }
 
     }

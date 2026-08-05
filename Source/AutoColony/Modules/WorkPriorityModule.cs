@@ -903,8 +903,15 @@ namespace AutoColony.Modules
                     : "material and builders both present, so the blueprints are refused for " +
                       "reach or for stuff — the next place to look is which";
 
-            // Once per distinct situation. A line that repeats every hour is a line nobody reads.
-            string key = s.colonistsIdle + "/" + backlog + "/" + builders;
+            // Once per distinct *situation*, not per distinct backlog number.
+            //
+            // Keyed on the exact backlog first, which meant every blueprint built or placed
+            // minted a new key and the line fired again — run 141 printed it seven times in one
+            // check window, and the repeat detector rightly flagged my own diagnostic as noise.
+            // A count that drifts by one is the same situation; what changes it is whether
+            // anybody can build and roughly how big the backlog is.
+            string band = backlog < 10 ? "few" : backlog < 40 ? "some" : "many";
+            string key = (s.colonistsIdle > 0) + "/" + band + "/" + builders;
             if (idleBesideWorkNoted == key) return;
             idleBesideWorkNoted = key;
 
