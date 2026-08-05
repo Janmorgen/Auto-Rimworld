@@ -419,6 +419,27 @@ namespace AutoColony
         /// </summary>
         public int fuelStanding;
 
+        /// <summary>
+        /// Fuel standing as a plant *outside* the circle the gatherer works in, and how far the
+        /// nearest of it is.
+        ///
+        /// The gather radius was made one number so that "standing fuel" and "what the gatherer
+        /// marks" could not disagree — which was right, and left a second way to be wrong. A
+        /// colony cuts its circle bare and then reads zero standing fuel, which is true of the
+        /// circle and false of the world. Run 137 marked 17 trees inside 55 cells on day 6, had
+        /// felled all of them by day 10, and committed its long-term goal to 1000 research
+        /// points of tree sowing — "the only wood that grows back" — while a forest stood just
+        /// beyond the radius.
+        ///
+        /// So the colony measures the world as well as its reach, and can tell "there is none"
+        /// from "there is none *here*". Those want opposite answers: one is research, the other
+        /// is a longer walk.
+        /// </summary>
+        public int fuelBeyondReach;
+
+        /// <summary>Cells to the nearest standing fuel outside the gather radius, 0 if none.</summary>
+        public int nearestFuelDistance;
+
         /// <summary>Wood it would take to fill every hopper the colony owns.</summary>
         public int fuelWanted;
 
@@ -1060,6 +1081,7 @@ namespace AutoColony
 
                     s.fuelOnHand += FuelReachableFor(map, comp);
                     s.fuelStanding += StandingFuelFor(map, comp);
+                    BeyondReachFuelFor(map, comp, s);
                 }
                 s.fuelKinds = null;
             }
@@ -1749,6 +1771,56 @@ namespace AutoColony
             }
             catch (Exception) { }
             return total;
+        }
+
+        /// <summary>
+        /// The same count, for everything outside the gather radius, plus how far the nearest is.
+        ///
+        /// Deliberately a separate pass rather than a widened one: the in-reach figure decides
+        /// whether anyone is sent to chop, and it must keep meaning exactly what the gatherer
+        /// will act on. This one only answers whether the world still has wood in it.
+        /// </summary>
+        static void BeyondReachFuelFor(Map map, CompRefuelable refuelable, ColonyState s)
+        {
+            if (map == null || refuelable == null || refuelable.Props == null) return;
+            var filter = refuelable.Props.fuelFilter;
+            if (filter == null) return;
+
+            var origin = ColonyOrigin(map);
+            int radiusSq = Modules.ResourceModule.GatherRadius * Modules.ResourceModule.GatherRadius;
+            int nearestSq = int.MaxValue;
+
+            try
+            {
+                foreach (var def in filter.AllowedThingDefs)
+                {
+                    if (def == null) continue;
+                    var sources = HarvestSourcesOf(def);
+                    for (int i = 0; i < sources.Count; i++)
+                    {
+                        var standing = map.listerThings.ThingsOfDef(sources[i]);
+                        if (standing == null) continue;
+                        for (int j = 0; j < standing.Count; j++)
+                        {
+                            var plant = standing[j] as Plant;
+                            if (plant == null || !plant.Spawned) continue;
+                            if (plant.IsForbidden(Faction.OfPlayer)) continue;
+
+                            int distSq = (plant.Position - origin).LengthHorizontalSquared;
+                            if (distSq <= radiusSq) continue;
+
+                            s.fuelBeyondReach += (int)(plant.def.plant.harvestYield * plant.Growth);
+                            if (distSq < nearestSq) nearestSq = distSq;
+                        }
+                    }
+                }
+            }
+            catch (Exception) { }
+
+            if (nearestSq == int.MaxValue) return;
+            int nearest = (int)Math.Sqrt(nearestSq);
+            if (s.nearestFuelDistance == 0 || nearest < s.nearestFuelDistance)
+                s.nearestFuelDistance = nearest;
         }
 
         /// <summary>

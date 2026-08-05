@@ -475,11 +475,24 @@ namespace AutoColony.Goals
         public override string Explain(DirectorContext ctx)
         {
             var s = ctx.state;
+            // "The only wood that grows back" is a claim about the world, and until now it was
+            // only ever true of the gather circle. Run 137 felled all seventeen trees within 55
+            // cells by day 10 and then argued for a thousand research points on that basis,
+            // standing in a forest. Say which of the two situations this actually is, because
+            // they want opposite answers: one is research, the other is a longer walk.
+            string beyond = s.fuelStanding <= 0 && s.fuelBeyondReach > 0
+                ? string.Format(
+                    " — but {0} wood stands {1} cells out, past the {2} the gatherer works in, " +
+                    "so this is a reach problem before it is a research one",
+                    s.fuelBeyondReach, s.nearestFuelDistance, Modules.ResourceModule.GatherRadius)
+                : " — tree sowing is 1000 points and the only wood that grows back before " +
+                  "electricity";
+
             return string.Format(
-                "{0} wood standing or stacked for {1} things that burn it{2} — tree sowing is " +
-                "1000 points and the only wood that grows back before electricity",
+                "{0} wood standing or stacked for {1} things that burn it{2}{3}",
                 s.fuelOnHand, s.burners,
-                s.buildingsWantingFuel > 0 ? ", " + s.buildingsWantingFuel + " already dry" : "");
+                s.buildingsWantingFuel > 0 ? ", " + s.buildingsWantingFuel + " already dry" : "",
+                beyond);
         }
     }
 
