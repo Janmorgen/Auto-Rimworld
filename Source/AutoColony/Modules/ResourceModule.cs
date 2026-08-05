@@ -41,6 +41,9 @@ namespace AutoColony.Modules
         /// <summary>How far from the base colonists are sent to gather.</summary>
         const int GatherRadius = 55;
 
+        /// <summary>Whether the last pass marked anything, so transitions can be spoken.</summary>
+        bool wasGathering;
+
         protected override void Act(DirectorContext ctx)
         {
             var origin = ctx.Origin;
@@ -115,6 +118,30 @@ namespace AutoColony.Modules
 
             if (chopped + mined + hunted > 0)
                 Note("designated " + chopped + " trees, " + mined + " rock, " + hunted + " animals");
+
+            // Said in the record, not only in a verbose log nobody turns on.
+            //
+            // Designating is the whole job of this module and none of it reached the chronicle:
+            // Note() writes to AcLog.Verbose, which is off. So "6 DRY, UNCUT with PlantCutting
+            // at 5.0 and a colonist idle" was unanswerable from the record — there was no way to
+            // tell whether the trees were marked and unreachable, or never marked at all.
+            //
+            // Spoken on the edges rather than every pass: gathering starting after a lull, and
+            // gathering stopping. A line per pass would bury the log; a line per transition is
+            // the shape of the question anyone actually asks of it.
+            bool gathering = chopped + mined + hunted > 0;
+            if (gathering != wasGathering)
+            {
+                wasGathering = gathering;
+                if (gathering)
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "gathering: marked {0} trees, {1} rock, {2} animals within {3} cells of the base",
+                        chopped, mined, hunted, GatherRadius));
+                else
+                    Chronicle.Record(ChronicleCategory.Economy,
+                        "gathering: nothing left marked — every target is at its stock level, or " +
+                        "there is nothing in range to mark");
+            }
         }
 
         int MaybeChopWood(DirectorContext ctx, IntVec3 origin)
