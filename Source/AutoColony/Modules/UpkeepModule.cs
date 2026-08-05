@@ -196,14 +196,18 @@ namespace AutoColony.Modules
                 case RemedyKind.Relocate: return Relocate(ctx, defect);
                 case RemedyKind.AddLight: return AddLight(ctx, defect);
                 case RemedyKind.RemoveSurplusBeds: return RemoveSurplusBeds(ctx, defect);
-                case RemedyKind.AddBeauty: return AddBeauty(ctx, defect);
+                case RemedyKind.AddBeauty:
+                    return ShellsFirst(ctx, "decoration") ? false : AddBeauty(ctx, defect);
                 case RemedyKind.Reclaim: return Reclaim(ctx, defect);
                 case RemedyKind.BuryDead: return BuryDead(ctx, defect);
                 case RemedyKind.AddHeater: return AddHeater(ctx);
                 case RemedyKind.AddCooler: return AddCooler(ctx);
-                case RemedyKind.AddTable: return AddTable(ctx);
-                case RemedyKind.AddRecreation: return AddRecreation(ctx);
-                case RemedyKind.AddSeating: return AddSeating(ctx);
+                case RemedyKind.AddTable:
+                    return ShellsFirst(ctx, "a table") ? false : AddTable(ctx);
+                case RemedyKind.AddRecreation:
+                    return ShellsFirst(ctx, "recreation") ? false : AddRecreation(ctx);
+                case RemedyKind.AddSeating:
+                    return ShellsFirst(ctx, "seating") ? false : AddSeating(ctx);
                 default: return false;
             }
         }
@@ -723,6 +727,51 @@ namespace AutoColony.Modules
             Chronicle.Record(ChronicleCategory.Build,
                 "upkeep — " + Furniture.FuelUpkeep.Refusal(ctx.state, def));
         }
+
+        /// <summary>
+        /// Whether the colony has open walls that should have the hands instead.
+        ///
+        /// The planner already throttles wall-building when there are not enough colonists to
+        /// finish what is open — run 120: "5 rooms open and only 1 that 1 colonists can finish,
+        /// so the hands go to one of them instead of all of them". Upkeep had no such throttle,
+        /// so on the same pass it queued three stools and a passive cooler, and the single
+        /// surviving colonist furnished a room whose walls were still on the ground.
+        ///
+        /// Furniture in a room without walls is worse than nothing. It burns with the next
+        /// fire — thirteen stools went into one open room in two in-game days — and every hour
+        /// spent placing it is an hour not spent closing the shell that would have protected it.
+        ///
+        /// Comfort only. Heat, light and anything medical still go in: those answer measured
+        /// conditions rather than a standing wish, and a colonist freezing in a half-built room
+        /// is not helped by a rule about tidiness.
+        /// </summary>
+        static bool ShellsFirst(DirectorContext ctx, string what)
+        {
+            if (ctx.layout == null || ctx.map == null) return false;
+
+            var rooms = ctx.layout.rooms;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (room == null || !room.wallsQueued) continue;
+                if (BasePlannerModule.ShellIsComplete(ctx.map, room)) continue;
+
+                if (shellsFirstNoted != room.role.ToString())
+                {
+                    shellsFirstNoted = room.role.ToString();
+                    Chronicle.Record(ChronicleCategory.Build, string.Format(
+                        "holding off on {0} — the {1} room still has no walls, and furniture in an " +
+                        "open room burns with the next fire",
+                        what, room.role));
+                }
+                return true;
+            }
+
+            shellsFirstNoted = null;
+            return false;
+        }
+
+        static string shellsFirstNoted;
 
         /// <summary>
         /// Take down a wall the colony built across somebody's only way out.

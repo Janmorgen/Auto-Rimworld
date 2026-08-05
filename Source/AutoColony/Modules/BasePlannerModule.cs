@@ -2967,6 +2967,15 @@ namespace AutoColony.Modules
         /// that does not reach the map edge, which is the same judgement RimWorld makes when it
         /// decides whether a heater is heating anything.
         /// </summary>
+        /// <summary>
+        /// Public reading of the same question, for UpkeepModule's shells-first gate.
+        /// One implementation, so the two modules cannot disagree about what "closed" means.
+        /// </summary>
+        public static bool ShellIsComplete(Map map, PlannedRoom room)
+        {
+            return ShellComplete(map, room);
+        }
+
         static bool ShellComplete(Map map, PlannedRoom room)
         {
             string why;
