@@ -153,6 +153,10 @@ namespace AutoColony
         /// <summary>Which ones, so something can go and let them out.</summary>
         public List<Pawn> cutOff;
 
+        /// <summary>Who could not reach food on the previous capture, so transients are filtered.</summary>
+        static readonly HashSet<int> unreachableLastPass = new HashSet<int>();
+        static readonly HashSet<int> unreachableNow = new HashSet<int>();
+
         /// <summary>
         /// The hungriest colonist's food need, 0 to 1. The average would hide exactly the person
         /// in trouble, for the same reason it does with mood — see <see cref="minMood"/>.
@@ -866,11 +870,24 @@ namespace AutoColony
                 }
                 catch (Exception) { }
 
+                // Held across passes, because a wall is permanent and a blocked path is not.
+                //
+                // CanReach uses the pawn's own traverse parms, so anything they will not walk
+                // through reads as unreachable — and a colony with 202 fires burning reads as
+                // every colonist walled in. Run 123 reported "2 WALLED IN" in the middle of a
+                // firestorm, which would have sent the repair to deconstruct walls with the map
+                // alight and the one thing that mattered was water.
+                //
+                // Two consecutive captures. A fire moves; a wall does not.
                 if (p.Spawned && !CanReachFood(p))
                 {
-                    s.colonistsCutOff++;
-                    if (s.cutOff == null) s.cutOff = new List<Pawn>();
-                    s.cutOff.Add(p);
+                    if (unreachableLastPass.Contains(p.thingIDNumber))
+                    {
+                        s.colonistsCutOff++;
+                        if (s.cutOff == null) s.cutOff = new List<Pawn>();
+                        s.cutOff.Add(p);
+                    }
+                    unreachableNow.Add(p.thingIDNumber);
                 }
 
                 if (p.needs != null && p.needs.mood != null)
@@ -989,6 +1006,10 @@ namespace AutoColony
                 }
                 s.fuelKinds = null;
             }
+
+            unreachableLastPass.Clear();
+            foreach (var id in unreachableNow) unreachableLastPass.Add(id);
+            unreachableNow.Clear();
 
             // Cut off is a statement about this colonist against the rest of the colony, so it
             // means nothing when nobody can reach food.
