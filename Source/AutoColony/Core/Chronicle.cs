@@ -175,12 +175,17 @@ namespace AutoColony
                 m.minMood,
                 m.colonistsCutOff > 0
                     ? string.Format(CultureInfo.InvariantCulture,
-                        " ({0} WALLED IN{1})", m.colonistsCutOff,
-                        m.colonistsStarving > 0 ? ", " + m.colonistsStarving + " STARVING" : "")
+                        " ({0} WALLED IN{1}{2})", m.colonistsCutOff,
+                        m.colonistsStarving > 0 ? ", " + m.colonistsStarving + " STARVING" : "",
+                        m.colonistsIdle > 0 ? ", " + m.colonistsIdle + " IDLE" : "")
                     : m.colonistsStarving > 0
-                        ? string.Format(CultureInfo.InvariantCulture, " ({0} STARVING, hungriest {1:0.00})",
-                            m.colonistsStarving, m.minFood)
-                        : "",
+                        ? string.Format(CultureInfo.InvariantCulture,
+                            " ({0} STARVING, hungriest {1:0.00}{2})",
+                            m.colonistsStarving, m.minFood,
+                            m.colonistsIdle > 0 ? ", " + m.colonistsIdle + " IDLE" : "")
+                        : m.colonistsIdle > 0
+                            ? string.Format(CultureInfo.InvariantCulture, " ({0} IDLE)", m.colonistsIdle)
+                            : "",
                 m.colonistsUntended > 0 || m.colonistsLosingToDisease > 0
                     ? string.Format(CultureInfo.InvariantCulture, " ({0} UNTENDED{1}{2})",
                         m.colonistsUntended,

@@ -645,6 +645,20 @@ namespace AutoColony.Modules
             float wanted = ctx.plan.Needs.For(thingDefName);
             float layered = ctx.plan.QuantityWanted(thingDefName);
             if (layered > wanted) wanted = layered;
+
+            // And the fires, which are a standing bill nobody writes down.
+            //
+            // ResourceModule already raises its *designation* target by fuelWanted, so trees get
+            // marked for cutting — and this, which decides how much anybody is told to care
+            // about chopping, did not. Run 115 sat at "4 DRY, UNCUT" for hours with PlantCutting
+            // at 2.5: the trees were marked and nobody was in a hurry.
+            //
+            // Third time today the same shape has appeared — the order is issued and the work
+            // that carries it out is left at its ordinary weight. The two targets have to be the
+            // same number or the colony designates what it will not prioritise.
+            if (thingDefName == "WoodLog" && ctx.state.fuelWanted > wanted)
+                wanted = ctx.state.fuelWanted;
+
             return wanted > target ? wanted : target;
         }
 
@@ -707,6 +721,27 @@ namespace AutoColony.Modules
             // small colony never ends up with nobody willing to haul or cook.
             int assignCount = Round(scored.Count * (0.4f + 0.6f * spread));
             if (assignCount < 4) assignCount = 4;
+
+            // Somebody standing still is the colony saying this number is too small.
+            //
+            // A narrow assignment is usually right: four work types each keeps colonists on what
+            // they are good at and stops everyone thrashing between jobs. It is wrong in exactly
+            // one case, and the game names that case for us — MindState.IsIdle, the property
+            // behind its own "N colonists idle" alert. If all four of somebody's work types
+            // happen to be empty at once, they have nothing to do and the spread gene cannot
+            // know it.
+            //
+            // Run 115 stood at three of three idle with zero days of food and a Low food alert
+            // up. Nothing was misweighted: Hunting was at 5.0 and Cooking at 4.5, over a colony
+            // with no food to cook and nothing loose to haul. Meanwhile four fuel hoppers stood
+            // dry beside standing timber nobody was assigned to cut.
+            //
+            // So idleness opens the assignment rather than changing any weight. The ordering is
+            // untouched — the same work is still preferred in the same order — there is simply
+            // more of it available to fall through to. It costs nothing when nobody is idle,
+            // which is nearly always.
+            if (ctx.state.colonistsIdle > 0) assignCount = scored.Count;
+
             if (assignCount > scored.Count) assignCount = scored.Count;
 
             for (int r = 0; r < scored.Count; r++)

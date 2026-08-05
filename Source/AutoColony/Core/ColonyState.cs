@@ -102,6 +102,22 @@ namespace AutoColony
         /// </summary>
         public int colonistsCutOff;
 
+        /// <summary>
+        /// Colonists with nothing to do, read as the game's own <c>MindState.IsIdle</c> — the
+        /// property behind its "N colonists idle" alert.
+        ///
+        /// Nothing in the director has ever measured this, and it is the most direct statement
+        /// the game makes about the work table being wrong. Run 115 stood at three of three idle
+        /// with zero days of food and a Low food alert up: the priorities were set, they were
+        /// simply set over work that had no jobs in it.
+        ///
+        /// Idle is not laziness, it is an assignment that has run out of things to cover. A
+        /// colonist is given as few as four of nineteen work types, and if all four happen to be
+        /// empty — nothing to cook because there is no food, nothing to haul because there is
+        /// nothing loose — they stand still while the colony starves.
+        /// </summary>
+        public int colonistsIdle;
+
         /// <summary>Which ones, so something can go and let them out.</summary>
         public List<Pawn> cutOff;
 
@@ -766,6 +782,12 @@ namespace AutoColony
                 // Asked of everyone every pass, not only of the hungry. A colonist sealed in at
                 // full belly is a death in two days; waiting for the hunger to show wastes the
                 // day in which the wall could still be taken down cheaply.
+                // Idle is only meaningful for someone able to work: a colonist in bed, drafted,
+                // or having a breakdown is not idle, they are busy being unavailable.
+                if (p.Spawned && !p.Downed && !p.InBed() && p.mindState != null &&
+                    p.mindState.IsIdle && (p.drafter == null || !p.drafter.Drafted))
+                    s.colonistsIdle++;
+
                 if (p.Spawned && !CanReachFood(p))
                 {
                     s.colonistsCutOff++;
@@ -1619,6 +1641,7 @@ namespace AutoColony
             m.minFood = minFood;
             m.colonistsStarving = colonistsStarving;
             m.colonistsCutOff = colonistsCutOff;
+            m.colonistsIdle = colonistsIdle;
             m.colonistsUntended = colonistsUntended;
             m.colonistsUntendedLethal = colonistsUntendedLethal;
             m.colonistsLosingToDisease = colonistsLosingToDisease;
