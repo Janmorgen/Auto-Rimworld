@@ -277,6 +277,36 @@ namespace AutoColony
         /// Reported beside combatPower in the hunt chronicle so the next run says which number is
         /// closer to what these fights actually cost. Changing the decision on an unverified
         /// measurement would be trading one guess for another.
+        ///
+        /// **The first data does not support the suspicion, and is left here rather than
+        /// quietly dropped.** Run 164 day 2:
+        ///
+        ///   Boomalope   combatPower 80    measured 19
+        ///   Megasloth   combatPower 280   measured 221
+        ///
+        /// Measured came in *below* combatPower both times, where the argument above predicted
+        /// above. Had this been wired to the decision on the strength of that argument, the
+        /// colony would have become more willing to hunt dangerous animals, not less — the exact
+        /// opposite of the fix intended, shipped in the name of three dead and injured colonists.
+        ///
+        /// The boomalope explains why, and it is a real limitation of measuring rather than a
+        /// stray number. A boomalope barely fights; its melee is worth about what this says. It
+        /// is rated 80 because it *explodes when killed*, and an explosion is not damage per
+        /// second from a weapon it is holding. So combatPower is not simply the notional number
+        /// the humanlike argument makes it out to be — it carries hazards this measurement is
+        /// blind to by construction, and a megasloth that mostly does fight with its body scores
+        /// close under both.
+        ///
+        /// What that leaves open: no measured figure yet exists for the three animals that
+        /// actually hurt colonies — muffalo, rhinoceros, timber wolf — because none has appeared
+        /// on a map since this started reporting. Until one does, the unit mismatch is neither
+        /// confirmed nor refuted, only shown not to run in the direction assumed.
+        ///
+        /// And a second reading of the same evidence now looks stronger. Both bad outcomes were
+        /// fights taken on a *thin* margin, not comfortable ones: the rhinoceros at 1.96x against
+        /// a required 1.77x, the timber wolf at 2.13x against 1.785x. That points at how high the
+        /// bar sits for prey that fights back, or at the cost of a fight the colony wins, rather
+        /// than at the units on either side of it. See #55.
         /// </summary>
         public static float MeasuredAnimalValue(Pawn pawn)
         {
