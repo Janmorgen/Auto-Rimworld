@@ -51,7 +51,7 @@ namespace AutoColony.Connections
     ///
     /// Incomplete by construction, and honestly so: a module is listed once its reads and
     /// affects have been derived from its source, never from memory of what it probably does.
-    /// Six of fifteen are done. The rest are absent rather than guessed.
+    /// Nine of sixteen are done. The rest are absent rather than guessed.
     ///
     /// It has already paid for itself. <see cref="ContestedEffects"/> over the first six turned
     /// up four things written by more than one module, and the fourth was a live fault nobody
@@ -78,7 +78,9 @@ namespace AutoColony.Connections
             "world.workPriorities",   // pawn.workSettings — who does what, and in what order
             "world.bills",            // standing orders on a bench
             "world.growingZones",     // what a zone is set to sow
-            "world.stockpileFilters"  // what a stockpile will accept
+            "world.stockpileFilters", // what a stockpile will accept
+            "world.tradeDeals",       // silver and goods across a trader's counter
+            "world.researchProject"   // what the colony is currently studying
         };
 
         public static readonly Touch[] Modules =
@@ -143,6 +145,44 @@ namespace AutoColony.Connections
                     "coldShortfall", "colonists", "heatExcess", "pendingBlueprints", "pendingFrames"
                 },
                 affects = new[] { "world.bills" }
+            },
+
+            new Touch
+            {
+                module = "TradeModule",
+                reads = new[]
+                {
+                    "ableColonists", "colonists", "components", "daysOfFood", "medicineCount",
+                    "silver", "steel", "textiles", "wood"
+                },
+                affects = new[] { "world.tradeDeals" }
+            },
+
+            // The two below read nothing the colony senses, and that is the declaration rather
+            // than an omission.
+            //
+            // ResearchModule chooses what to study from the plan, the genome and the archive.
+            // PowerModule decides what to build from scanning the map. Neither consults a single
+            // ColonyState field — not daysOfFood, not coldShortfall, not colonistsDowned — so
+            // nothing either of them does can respond to the colony being in trouble.
+            //
+            // Whether that is a fault depends on the module. Research being led by strategy
+            // rather than by today's weather is defensible. Power being blind to coldShortfall
+            // while UpkeepModule places heaters against it is harder to defend, and it is the
+            // sort of gap this manifest exists to make visible rather than to settle here.
+
+            new Touch
+            {
+                module = "ResearchModule",
+                reads = new string[0],
+                affects = new[] { "world.researchProject" }
+            },
+
+            new Touch
+            {
+                module = "PowerModule",
+                reads = new string[0],
+                affects = new[] { "world.blueprints" }
             },
 
             new Touch
