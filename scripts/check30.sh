@@ -11,8 +11,37 @@ LOG="$JD/rimworld.log"
 SHOT="$JD/watch.png"
 
 # --- screenshot first, so it is contemporaneous with the vitals below ---
-DISPLAY=:0 spectacle -b -n -a -o "$SHOT" >/dev/null 2>&1
+#
+# Full screen, then cropped to the game window by its own geometry.
+#
+# This used `spectacle -a`, which captures the ACTIVE window. That is the game only
+# while nothing else has focus, and on 2026-08-06 it silently returned a file manager
+# showing a directory listing — a check that would have reported on the colony from a
+# picture of some filenames. The whole reason step 1 of the checklist exists is that the
+# screen catches what the logs cannot, and an instrument that quietly photographs the
+# wrong thing is worse than none: it still produces an image, and the image still looks
+# like an answer.
+#
+# Deliberately does NOT focus the game first. xdotool windowactivate would make this
+# reliable and would also yank focus away from whoever is using the machine, every
+# thirty minutes, for ever.
+WID=$(DISPLAY=:0 xdotool search --name "RimWorld" 2>/dev/null | head -1)
+DISPLAY=:0 spectacle -b -n -f -o "$SHOT.full.png" >/dev/null 2>&1
 sleep 3
+
+if [ -n "$WID" ]; then
+  GEO=$(DISPLAY=:0 xdotool getwindowgeometry "$WID" 2>/dev/null)
+  POS=$(echo "$GEO" | grep -oE 'Position: [0-9]+,[0-9]+' | grep -oE '[0-9]+,[0-9]+')
+  DIM=$(echo "$GEO" | grep -oE 'Geometry: [0-9]+x[0-9]+' | grep -oE '[0-9]+x[0-9]+')
+  if [ -n "$POS" ] && [ -n "$DIM" ]; then
+    ffmpeg -loglevel error -y -i "$SHOT.full.png" \
+      -vf "crop=${DIM%x*}:${DIM#*x}:${POS%,*}:${POS#*,}" "$SHOT" >/dev/null 2>&1
+  fi
+fi
+
+# If anything above failed, the full screen is still an honest picture — small, but not
+# a picture of something else. Never leave a stale $SHOT in place to be read as current.
+[ -s "$SHOT" ] || cp "$SHOT.full.png" "$SHOT" 2>/dev/null
 
 running=$(pgrep -f RimWorldLinux >/dev/null && echo running || echo DEAD)
 
