@@ -6,7 +6,7 @@ namespace AutoColony
     /// What a hunt costs in revenge, counted over the whole hunting session rather than one
     /// animal at a time.
     ///
-    /// Run 161 hunted muffalo and was answered with four Muffalo revenges in eight days, two
+    /// Run 161 hunted muffalo and was answered with three Muffalo revenges in eight days, two
     /// colonists downed. Nothing was misweighted. The colony asked the right question at the
     /// wrong level, twice over:
     ///

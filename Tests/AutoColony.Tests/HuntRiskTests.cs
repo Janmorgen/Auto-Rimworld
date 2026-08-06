@@ -6,7 +6,7 @@ namespace AutoColony.Tests
     /// <summary>
     /// What a hunting session costs in revenge.
     ///
-    /// Run 161 is the whole argument: four Muffalo revenges in eight days, two colonists downed,
+    /// Run 161 is the whole argument: three Muffalo revenges in eight days, two colonists downed,
     /// from a hunt module that judged every animal on its own and found each of them a
     /// comfortable fight. The numbers here are the real def values, read out of
     /// Races_Animal_CowGroup.xml rather than remembered — muffalo manhunterOnDamageChance 0.1,

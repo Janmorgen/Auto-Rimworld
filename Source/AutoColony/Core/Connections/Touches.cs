@@ -336,8 +336,9 @@ namespace AutoColony.Connections
                 from = "world.designations",
                 to = "learning.threatMemory",
                 confidence = Confidence.Observed,
-                evidence = "run 161 days 2-8 — hunt designations on muffalo produced four " +
-                           "'Muffalo revenge' incidents and three recorded Manhunter fights, " +
+                evidence = "run 161 days 2-8 — seven muffalo designated across two passes " +
+                           "produced three 'Muffalo revenge' incidents and three recorded " +
+                           "Manhunter fights, " +
                            "the memory going 1.50x, 1.69x, 1.90x with two colonists downed. " +
                            "The hunt module manufactures the threats the threat memory learns " +
                            "from, which makes this the one edge in the map that is a loop"
