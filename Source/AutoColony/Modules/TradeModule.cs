@@ -130,7 +130,92 @@ namespace AutoColony.Modules
                     wants.Add(new Want("medicine", tiers, wantedMedicine - s.medicineCount));
             }
 
+            // Whatever the plan is blocked on, which it already declares.
+            //
+            // Reading plan.Needs rather than keeping a list here means the colony shops for
+            // whatever it is currently short of, and a new goal costs nothing. It also reaches
+            // the thing no colony in this project has ever obtained: components. The Power goal
+            // wants six, they need Machining research and a machining table to make, and run
+            // 152 sat at "components 0/6" with 811 steel and a finished research room, unable
+            // to buy the one part it could not build.
+            if (ctx.plan != null && ctx.plan.Needs != null)
+            {
+                foreach (var need in ctx.plan.Needs.All)
+                {
+                    var def = AcDefs.Thing(need.Key);
+                    if (def == null) continue;
+
+                    int held = HeldOf(s, need.Key);
+                    int short_ = need.Value - held;
+                    if (short_ <= 0) continue;
+
+                    wants.Add(new Want(need.Key, new List<ThingDef> { def }, short_));
+                }
+            }
+
             return wants;
+        }
+
+        /// <summary>How much of a named material the colony already holds, where it counts it.</summary>
+        static int HeldOf(ColonyState s, string defName)
+        {
+            switch (defName)
+            {
+                case "WoodLog": return s.wood;
+                case "Steel": return s.steel;
+                case "ComponentIndustrial": return s.components;
+                case "Silver": return s.silver;
+                default: return 0;
+            }
+        }
+
+        /// <summary>
+        /// What the colony can spare, so a shortfall can be met by selling rather than only by
+        /// having silver.
+        ///
+        /// Trading is not shopping. Within one deal the colony can sell what it has too much of
+        /// and buy what it has too little of, and the silver never has to exist — a colony
+        /// stocked with cloth and short of medicine is not poor, it is holding the wrong goods.
+        /// Every colony this project has lost to an infection was sitting on something.
+        ///
+        /// Surplus is measured, never listed. Only materials the colony actually counts are
+        /// offered, and only above what the plan says it needs — so it will sell the wood it
+        /// is not going to burn and never the wood a wall is waiting on. Anything the director
+        /// does not track a need for is not sold at all, which is deliberately conservative:
+        /// the failure mode of guessing here is selling the beds.
+        /// </summary>
+        static List<Want> Surpluses(DirectorContext ctx, List<Want> wants)
+        {
+            var spare = new List<Want>();
+            var s = ctx.state;
+
+            AddSpare(spare, ctx, wants, "WoodLog", s.wood, 100);
+            AddSpare(spare, ctx, wants, "Steel", s.steel, 150);
+            AddSpare(spare, ctx, wants, "Cloth", s.textiles, 50);
+
+            return spare;
+        }
+
+        /// <summary>
+        /// Offer what is left of a material after the plan's claim on it and a reserve.
+        ///
+        /// Never offers anything a want is asking for: selling medicine to buy medicine is the
+        /// sort of thing that looks clever in a loop and is idiotic in a colony.
+        /// </summary>
+        static void AddSpare(List<Want> spare, DirectorContext ctx, List<Want> wants,
+                             string defName, int held, int reserve)
+        {
+            var def = AcDefs.Thing(defName);
+            if (def == null || held <= 0) return;
+            if (WantFor(wants, def) != null) return;
+
+            int claimed = ctx.plan != null && ctx.plan.Needs != null
+                ? ctx.plan.Needs.For(defName) : 0;
+
+            int free = held - claimed - reserve;
+            if (free <= 0) return;
+
+            spare.Add(new Want(defName, new List<ThingDef> { def }, free));
         }
 
         /// <summary>
@@ -263,6 +348,53 @@ namespace AutoColony.Modules
                     bought.Add(take + " " + line.Label);
                 }
 
+                // Short of silver? Sell what the colony has too much of, in the same deal.
+                //
+                // This is the half that makes trading useful to a colony that has never been
+                // rich. Silver is not the point — the point is that a colony holding two
+                // hundred spare wood and no medicine is not poor, it is holding the wrong
+                // goods, and one conversation fixes that. Sold only up to what the purchase
+                // costs, because the aim is the medicine, not the money.
+                var sold = new List<string>();
+                if (unaffordable > 0 || bought.Count == 0)
+                {
+                    int stillNeeded = CostOfOutstanding(lines, wants, silver);
+                    if (stillNeeded > 0)
+                        stillNeeded = SellUpTo(lines, Surpluses(ctx, wants), stillNeeded, sold);
+
+                    // With the proceeds in hand, try the purchases again.
+                    if (sold.Count > 0)
+                    {
+                        offered = 0; unaffordable = 0; refused = 0;
+                        for (int i = 0; i < lines.Count; i++)
+                        {
+                            var line = lines[i];
+                            if (line == null || !line.TraderWillTrade || !line.HasAnyThing) continue;
+                            if (line.ActionToDo == TradeAction.PlayerSells) continue;   // already selling this
+
+                            var want = WantFor(wants, line.ThingDef);
+                            if (want == null || want.outstanding <= 0) continue;
+
+                            int available = line.CountHeldBy(Transactor.Trader);
+                            if (available <= 0) continue;
+
+                            offered++;
+                            int take = want.outstanding < available ? want.outstanding : available;
+                            float each = line.GetPriceFor(TradeAction.PlayerBuys);
+                            if (each > 0f)
+                            {
+                                int affordable = (int)((silver + Proceeds(lines)) * 0.7f / each);
+                                if (take > affordable) take = affordable;
+                            }
+                            if (take <= 0) { unaffordable++; continue; }
+                            if (!AskFor(line, take)) { refused++; continue; }
+
+                            want.outstanding -= take;
+                            bought.Add(take + " " + line.Label);
+                        }
+                    }
+                }
+
                 if (bought.Count == 0)
                 {
                     NoteTrader(trader, WhyNothing(offered, unaffordable, refused,
@@ -275,9 +407,9 @@ namespace AutoColony.Modules
 
                 if (traded)
                     Chronicle.Record(ChronicleCategory.Economy, string.Format(
-                        "bought {0} from {1} — {2} was negotiating at Social {3}, and the colony " +
-                        "had {4} silver against a shortfall it could not make itself",
+                        "bought {0} from {1}{2} — {3} was negotiating at Social {4}, on {5} silver",
                         string.Join(", ", bought.ToArray()), trader.TraderName ?? trader.LabelShortCap,
+                        sold.Count > 0 ? ", paying with " + string.Join(", ", sold.ToArray()) : "",
                         negotiator.LabelShortCap, SocialOf(negotiator), ctx.state.silver));
                 else
                     NoteTrader(trader, "the deal would not execute");
@@ -308,6 +440,98 @@ namespace AutoColony.Modules
 
                 line.ForceToSource(count);
                 if (line.ActionToDo == TradeAction.PlayerBuys) return true;
+
+                line.ForceTo(0);
+            }
+            catch (System.Exception) { }
+            return false;
+        }
+
+        /// <summary>Silver still needed to finish the outstanding wants, beyond what is spendable.</summary>
+        static int CostOfOutstanding(List<Tradeable> lines, List<Want> wants, int silver)
+        {
+            float cost = 0f;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var line = lines[i];
+                if (line == null || !line.TraderWillTrade || !line.HasAnyThing) continue;
+
+                var want = WantFor(wants, line.ThingDef);
+                if (want == null || want.outstanding <= 0) continue;
+
+                int available = line.CountHeldBy(Transactor.Trader);
+                if (available <= 0) continue;
+
+                int take = want.outstanding < available ? want.outstanding : available;
+                cost += line.GetPriceFor(TradeAction.PlayerBuys) * take;
+            }
+
+            int spendable = (int)(silver * 0.7f);
+            int shortfall = (int)cost - spendable;
+            return shortfall > 0 ? shortfall : 0;
+        }
+
+        /// <summary>
+        /// Sell spare goods until the shortfall is covered. Returns what is still missing.
+        ///
+        /// Stops the moment the purchase is affordable rather than emptying the store — a
+        /// colony that sells everything it can is a colony that will be short of it next week.
+        /// </summary>
+        static int SellUpTo(List<Tradeable> lines, List<Want> spare, int needed, List<string> sold)
+        {
+            for (int i = 0; i < lines.Count && needed > 0; i++)
+            {
+                var line = lines[i];
+                if (line == null || !line.TraderWillTrade) continue;
+
+                var have = WantFor(spare, line.ThingDef);
+                if (have == null || have.outstanding <= 0) continue;
+
+                int mine = line.CountHeldBy(Transactor.Colony);
+                if (mine <= 0) continue;
+
+                float each = line.GetPriceFor(TradeAction.PlayerSells);
+                if (each <= 0f) continue;
+
+                int give = (int)(needed / each) + 1;
+                if (give > have.outstanding) give = have.outstanding;
+                if (give > mine) give = mine;
+                if (give <= 0) continue;
+
+                if (!Offer(line, give)) continue;
+
+                needed -= (int)(each * give);
+                have.outstanding -= give;
+                sold.Add(give + " " + line.Label);
+            }
+            return needed > 0 ? needed : 0;
+        }
+
+        /// <summary>What the sell side of the deal is currently worth.</summary>
+        static int Proceeds(List<Tradeable> lines)
+        {
+            float total = 0f;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var line = lines[i];
+                if (line == null || line.ActionToDo != TradeAction.PlayerSells) continue;
+                int n = line.CountToTransfer;
+                if (n < 0) n = -n;
+                total += line.GetPriceFor(TradeAction.PlayerSells) * n;
+            }
+            return (int)total;
+        }
+
+        /// <summary>The mirror of AskFor: put a line in as a sale, and confirm the game agrees.</summary>
+        static bool Offer(Tradeable line, int count)
+        {
+            try
+            {
+                line.ForceToSource(count);
+                if (line.ActionToDo == TradeAction.PlayerSells) return true;
+
+                line.ForceToDestination(count);
+                if (line.ActionToDo == TradeAction.PlayerSells) return true;
 
                 line.ForceTo(0);
             }
