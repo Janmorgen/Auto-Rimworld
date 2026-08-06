@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AutoColony.Learning;
 using RimWorld;
 using Verse;
+using Verse.AI;
 
 namespace AutoColony.Modules
 {
@@ -876,6 +877,86 @@ namespace AutoColony.Modules
         /// It changes no behaviour. The assignment above already widens on idleness; this only
         /// makes the widening explicable when it does not work.
         /// </summary>
+        /// <summary>
+        /// Which of the two it actually is, asked rather than left as a question.
+        ///
+        /// This used to end "refused for reach or for stuff — the next place to look is which",
+        /// and then repeated itself five times in one check window while nobody looked. A
+        /// diagnostic that names two possible causes and cannot separate them has handed its
+        /// job back; both questions are cheap to ask directly, so it asks.
+        ///
+        /// Reach first, because it is the decisive one: material that cannot be walked to is
+        /// the same as no material, and a colonist sealed away from the site will never build
+        /// it however full the stockpile is.
+        /// </summary>
+        static string WhyBlueprintsStand(DirectorContext ctx)
+        {
+            try
+            {
+                var map = ctx.map;
+                if (map == null) return "no map to look at";
+
+                var pending = new List<Thing>();
+                pending.AddRange(map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint));
+                pending.AddRange(map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame));
+                if (pending.Count == 0) return "nothing pending after all";
+
+                int unreachable = 0;
+                var missing = new List<string>();
+
+                for (int i = 0; i < pending.Count; i++)
+                {
+                    var site = pending[i];
+                    if (site == null || !site.Spawned) continue;
+
+                    if (!AnyoneCanReach(ctx, site)) { unreachable++; continue; }
+
+                    var constructible = site as IConstructible;
+                    if (constructible == null) continue;
+
+                    var cost = constructible.TotalMaterialCost();
+                    if (cost == null) continue;
+
+                    for (int c = 0; c < cost.Count; c++)
+                    {
+                        var need = cost[c];
+                        if (need == null || need.thingDef == null) continue;
+                        if (map.resourceCounter.GetCount(need.thingDef) <= 0 &&
+                            !missing.Contains(need.thingDef.label))
+                            missing.Add(need.thingDef.label);
+                    }
+                }
+
+                if (unreachable > 0 && unreachable == pending.Count)
+                    return "no colonist can reach any of it — the site is walled off, not short";
+                if (unreachable > 0)
+                    return unreachable + " of " + pending.Count + " sites cannot be reached";
+                if (missing.Count > 0)
+                    return "reachable, but the colony holds none of: " +
+                           string.Join(", ", missing.ToArray());
+
+                return "reachable and the material is in store, so the hands are going " +
+                       "somewhere else — a work priority question, not a supply one";
+            }
+            catch (System.Exception) { return "the reason could not be determined"; }
+        }
+
+        static bool AnyoneCanReach(DirectorContext ctx, Thing site)
+        {
+            var able = ctx.state.ableColonists;
+            for (int i = 0; i < able.Count; i++)
+            {
+                var pawn = able[i];
+                if (pawn == null || !pawn.Spawned) continue;
+                try
+                {
+                    if (pawn.CanReach(site, PathEndMode.Touch, Danger.Some)) return true;
+                }
+                catch (System.Exception) { }
+            }
+            return false;
+        }
+
         void NoteIdleBesideWork(DirectorContext ctx)
         {
             var s = ctx.state;
@@ -900,8 +981,7 @@ namespace AutoColony.Modules
                 ? "nobody here can build at all"
                 : s.usableMaterial <= 0
                     ? "no material to build with"
-                    : "material and builders both present, so the blueprints are refused for " +
-                      "reach or for stuff — the next place to look is which";
+                    : WhyBlueprintsStand(ctx);
 
             // Once per distinct *situation*, not per distinct backlog number.
             //
