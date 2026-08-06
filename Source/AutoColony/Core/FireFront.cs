@@ -26,8 +26,13 @@ namespace AutoColony
         /// Not a measure of effort but of arithmetic: fire spreads to its neighbours on its own
         /// schedule regardless of how many people are running at it, so past a certain size the
         /// front grows faster than it can be put out and everyone sent is merely standing in it.
+        ///
+        /// The rate itself is a gene, because where that certain size falls depends on the map:
+        /// wind, what is burning, how far the front is, how fast the colonists walk. Six was a
+        /// guess and lived here as a constant the colony could not argue with. Callers that
+        /// cannot reach the genome fall back to it.
         /// </summary>
-        public const int FightableFiresPerColonist = 6;
+        public const int DefaultFightableFiresPerColonist = 6;
 
         /// <summary>Movement toward the colony smaller than this is sampling noise, not approach.</summary>
         public const float ApproachTolerance = 1f;
@@ -48,11 +53,21 @@ namespace AutoColony
             return distance >= 0f && distance <= DangerRadius;
         }
 
-        /// <summary>Whether the colony's people could still physically put this front out.</summary>
-        public static bool Fightable(int fires, int ableColonists)
+        /// <summary>
+        /// Whether the colony's people could still physically put this front out.
+        ///
+        /// <paramref name="handsFree"/> is colonists who can take a work order, which is not the
+        /// same as colonists who can act. A drafted colonist can act — that is the point of
+        /// drafting them — and cannot be sent to a fire. Passing the able count here is the bug
+        /// this parameter is named to prevent: DefenseModule drafts against a raid and then asks
+        /// this question, and a raid that throws incendiaries produces both conditions from one
+        /// event. The colony would commit to a front held by nobody.
+        /// </summary>
+        public static bool Fightable(int fires, int handsFree, int firesPerColonist)
         {
-            if (ableColonists <= 0) return false;
-            return fires <= ableColonists * FightableFiresPerColonist;
+            if (handsFree <= 0) return false;
+            if (firesPerColonist < 1) firesPerColonist = 1;
+            return fires <= handsFree * firesPerColonist;
         }
 
         /// <summary>
@@ -65,7 +80,7 @@ namespace AutoColony
         /// the colonist and not the fire.
         /// </summary>
         public static bool IsClosing(int fires, int previousFires, float nearest,
-                                     float previousNearest, int ableColonists)
+                                     float previousNearest, int handsFree, int firesPerColonist)
         {
             if (fires <= 0) return false;
             if (previousFires < 0) return false;           // first sample has nothing to compare
@@ -76,7 +91,7 @@ namespace AutoColony
             bool receding = previousNearest >= 0f && nearest > previousNearest + ApproachTolerance;
             if (receding) return false;
 
-            return Fightable(fires, ableColonists);
+            return Fightable(fires, handsFree, firesPerColonist);
         }
     }
 }

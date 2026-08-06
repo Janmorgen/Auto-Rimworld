@@ -323,7 +323,11 @@ namespace AutoColony.Modules
                 return false;
             }
 
-            int able = ctx.state.ableColonists != null ? ctx.state.ableColonists.Count : 0;
+            // Hands free, not hands able. Drafting is this module's own doing, and reading the
+            // able count here counted the people it had just sent to the line as available to
+            // fight a fire — see ColonyState.colonistsFreeForWork for the whole account.
+            int hands = ctx.state.colonistsFreeForWork;
+            int perColonist = ctx.GeneInt(Genes.DefenseFiresPerColonist);
 
             // Having gone out to a fire, stay at it until it is out.
             //
@@ -339,14 +343,15 @@ namespace AutoColony.Modules
             // fighting it.
             if (committedToFront)
             {
-                if (FireFront.Fightable(count, able)) return true;
+                if (FireFront.Fightable(count, hands, perColonist)) return true;
 
                 committedToFront = false;
-                NoteFrontBeyondReach(ctx, count, able);
+                NoteFrontBeyondReach(ctx, count, hands);
                 return false;
             }
 
-            bool closing = FireFront.IsClosing(count, previousCount, nearest, previousNearest, able);
+            bool closing = FireFront.IsClosing(count, previousCount, nearest,
+                                              previousNearest, hands, perColonist);
 
             if (closing)
             {
@@ -354,8 +359,8 @@ namespace AutoColony.Modules
                 NoteClosingFront(ctx, count, previousCount, nearest);
             }
             else if (previousCount >= 0 && count > previousCount &&
-                     !FireFront.Fightable(count, able))
-                NoteFrontBeyondReach(ctx, count, able);
+                     !FireFront.Fightable(count, hands, perColonist))
+                NoteFrontBeyondReach(ctx, count, hands);
 
             return closing;
         }

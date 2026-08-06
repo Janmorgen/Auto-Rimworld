@@ -144,6 +144,7 @@ namespace AutoColony.Learning
         /// </summary>
         public const string DefenseEngageRatio = "defense.engageRatio";
         public const string DefenseTurretCount = "defense.turretCount";
+        public const string DefenseFiresPerColonist = "defense.firesPerColonist";
 
         /// <summary>
         /// Where colonists stand to fight, as a set of competing preferences rather than a rule.
@@ -254,6 +255,8 @@ namespace AutoColony.Learning
             Add(DefenseRetreatHealth, 0.1f, 0.9f, 0.45f, "Defense", "Health fraction to retreat at");
             Add(DefenseEngageRatio, 0f, 1.5f, 0.35f, "Defense", "Strength ratio needed to fight in the open");
             Add(DefenseTurretCount, 0f, 12f, 3f, "Defense", "Target turret count");
+            Add(DefenseFiresPerColonist, 1f, 20f, 6f, "Defense",
+                "Fires one free colonist can beat before the front outruns them");
             Add(CombatCoverWeight, 0f, 8f, 4f, "Combat positioning", "Value of cover");
             Add(CombatStandoffWeight, 0f, 2f, 0.3f, "Combat positioning", "Value of holding a range");
             Add(CombatPreferredRange, 2f, 30f, 12f, "Combat positioning", "Range to fight at");

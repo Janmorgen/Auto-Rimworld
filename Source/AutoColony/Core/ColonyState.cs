@@ -119,6 +119,15 @@ namespace AutoColony
         public int colonistsIdle;
 
         /// <summary>
+        /// Colonists on their feet, sane, and not drafted — the hands that can take a work order.
+        ///
+        /// Distinct from <see cref="ableColonists"/>, which is who can act at all and therefore
+        /// includes the drafted. Any question of the form "have we got the people to do this
+        /// work" wants this one.
+        /// </summary>
+        public int colonistsFreeForWork;
+
+        /// <summary>
         /// Colonists the game says will die of blood loss within a day if nobody tends them.
         ///
         /// Read as <c>HealthUtility.TicksUntilDeathDueToBloodLoss</c>, which is the number
@@ -898,7 +907,27 @@ namespace AutoColony
                               p.mindState.mentalStateHandler.InMentalState;
                 if (broken) s.colonistsInMentalState++;
 
-                if (!p.Downed && !broken && p.Spawned) s.ableColonists.Add(p);
+                bool able = !p.Downed && !broken && p.Spawned;
+                if (able) s.ableColonists.Add(p);
+
+                // Able-bodied and free to take a work order are different questions, and this
+                // codebase answered both with ableColonists until the connection map was asked
+                // which modules write world.labourAvailable and found DefenseModule and
+                // WorkPriorityModule both did.
+                //
+                // A drafted colonist is able — CombatAssessment.RankFighters wants exactly
+                // those, they are the ones holding the line — and is not available, because the
+                // draft has already claimed them. DefenseModule was reading the first where it
+                // meant the second: it drafts against a raid, then asks FireFront.Fightable
+                // whether the colony's people can still put a fire out, counting the people it
+                // has just committed to a firing line. A raid with incendiaries produces both
+                // conditions at once, which is not a coincidence — it is the same event.
+                //
+                // The distinction was already drawn three lines below for colonistsIdle, which
+                // has excluded the drafted since it was written. One tally had the sense and
+                // the other did not.
+                bool drafted = p.drafter != null && p.drafter.Drafted;
+                if (able && !drafted) s.colonistsFreeForWork++;
 
                 // Somebody has to be able to use the bench once it exists.
                 //

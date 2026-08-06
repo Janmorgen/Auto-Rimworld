@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using AutoColony.Connections;
 using Xunit;
@@ -75,6 +76,57 @@ namespace AutoColony.Tests
                 Assert.True(declared.Contains(chain.from) || declared.Contains(chain.to),
                     "chain " + chain.from + " -> " + chain.to +
                     " touches nothing any module declares");
+        }
+
+        [Fact]
+        public void EveryContestedEffectIsKnownAndAccountedFor()
+        {
+            // Two modules writing one thing is the contested-ownership fault, and the map
+            // should surface it rather than leave it to be discovered by a dead colony. Not
+            // every case is a bug — but every case is a question, and this is the list of
+            // questions that currently have answers.
+            //
+            // world.bills: WorkPriorityModule queues refuelling and hauling work;
+            //   ProductionModule sets crafting and cooking bills. Different benches, no overlap
+            //   observed. Recorded so that if one starts clearing the other's bills it is a
+            //   known suspect rather than a mystery.
+            //
+            // world.blueprints: DefenseModule places sandbags and walls, UpkeepModule places
+            //   furniture. Disjoint kinds, and they coordinate through the world rather than
+            //   through each other — GenConstruct.CanPlaceBlueprintAt refuses a contested cell
+            //   at every one of the five placement sites, and UpkeepModule.CountInBase counts
+            //   blueprints and frames as things that already exist, so a thing another module
+            //   queued is seen as present rather than missing. Coordinating through shared
+            //   world state is the right shape: it needs no module to know another exists.
+            //
+            // world.designations: ResourceModule designates mining for steel and components;
+            //   UpkeepModule designates mining to clear a boulder out of a wall line. Neither
+            //   can double-designate — both check DesignationAt/DesignationOn before adding —
+            //   but the cells are not what they contend for. Both queues are drawn down by the
+            //   same miner-hours, and ResourceModule sizes its budget from its own additions
+            //   this pass only. A wall full of boulders can therefore soak the mining a steel
+            //   shortfall was counting on, with nothing anywhere reporting the trade.
+            //   Suspected, not observed — recorded as an edge so a run can settle it.
+            //
+            // world.labourAvailable: DefenseModule takes labour away by drafting;
+            //   WorkPriorityModule hands it out. This one was a live fault when the detector
+            //   first ran, and the reason to have written the detector: DefenseModule sized a
+            //   fire front against ColonyState.ableColonists, which includes the drafted,
+            //   having drafted them itself moments earlier. Fixed by giving the colony the
+            //   sense it was missing — colonistsFreeForWork — rather than a rule about fires.
+            //   The two modules still both write this, and that is correct: one supplies
+            //   labour and one spends it. What was wrong was measuring the supply with a
+            //   number that meant something else.
+            var known = new HashSet<string> { "world.bills", "world.blueprints",
+                                              "world.designations", "world.labourAvailable" };
+
+            foreach (var contested in Touches.ContestedEffects())
+            {
+                var effect = contested.Substring(0, contested.IndexOf(':'));
+                Assert.True(known.Contains(effect),
+                    "a new contested effect appeared and nobody has said whether it is safe: " +
+                    contested);
+            }
         }
 
         [Fact]

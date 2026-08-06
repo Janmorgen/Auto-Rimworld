@@ -51,7 +51,13 @@ namespace AutoColony.Connections
     ///
     /// Incomplete by construction, and honestly so: a module is listed once its reads and
     /// affects have been derived from its source, never from memory of what it probably does.
-    /// Two of fifteen are done. The rest are absent rather than guessed.
+    /// Six of fifteen are done. The rest are absent rather than guessed.
+    ///
+    /// It has already paid for itself. <see cref="ContestedEffects"/> over the first six turned
+    /// up four things written by more than one module, and the fourth was a live fault nobody
+    /// had noticed: DefenseModule sized a fire front against colonists it had drafted itself.
+    /// That was found by asking the declarations a question, not by losing a colony to it,
+    /// which is the whole argument for keeping this file honest.
     /// </summary>
     public static class Touches
     {
@@ -68,7 +74,11 @@ namespace AutoColony.Connections
             "world.designations",     // mine, cut, harvest, strip-roof
             "world.labourAvailable",  // hands free to do ordinary work, which drafting removes
             "learning.threatMemory",  // what a kind of fight has cost, carried between colonies
-            "plan.goals"              // which goal holds the plan, and for how long
+            "plan.goals",             // which goal holds the plan, and for how long
+            "world.workPriorities",   // pawn.workSettings — who does what, and in what order
+            "world.bills",            // standing orders on a bench
+            "world.growingZones",     // what a zone is set to sow
+            "world.stockpileFilters"  // what a stockpile will accept
         };
 
         public static readonly Touch[] Modules =
@@ -79,15 +89,55 @@ namespace AutoColony.Connections
                 reads = new[]
                 {
                     "ableColonists", "allColonists", "colonistBeds", "colonistsBleedingOut",
-                    "colonistsDowned", "danger", "fires", "firesNearBase", "hostilePawns",
-                    "huntedColonists", "nearestFireDistance", "poweredTurrets",
-                    "predatorsHunting", "wealthTotal"
+                    "colonistsDowned", "colonistsFreeForWork", "danger", "fires",
+                    "firesNearBase", "hostilePawns", "huntedColonists", "nearestFireDistance",
+                    "poweredTurrets", "predatorsHunting", "wealthTotal"
                 },
                 affects = new[]
                 {
                     "world.drafted", "world.pawnPosition", "world.attackOrders",
                     "world.blueprints", "world.labourAvailable", "learning.threatMemory"
                 }
+            },
+
+            new Touch
+            {
+                module = "ResourceModule",
+                reads = new[]
+                {
+                    "colonists", "colonistsDowned", "components", "conditions", "daysOfFood",
+                    "firesNearBase", "fuelWanted", "hostilesNearBase", "steel",
+                    "unbutcheredNutrition", "wood"
+                },
+                affects = new[] { "world.designations" }
+            },
+
+            new Touch
+            {
+                module = "ZoneModule",
+                reads = new[]
+                {
+                    "allColonists", "colonists", "daysOfFood", "distinctCrops", "growingCells",
+                    "growingSeasonNow", "medicineCount", "minMood", "tamedAnimals", "textiles"
+                },
+                affects = new[] { "world.growingZones", "world.stockpileFilters" }
+            },
+
+            new Touch
+            {
+                module = "WorkPriorityModule",
+                reads = new[] { "ableColonists", "allColonists", "colonistsIdle", "fuelWanted" },
+                affects = new[] { "world.workPriorities", "world.bills", "world.labourAvailable" }
+            },
+
+            new Touch
+            {
+                module = "ProductionModule",
+                reads = new[]
+                {
+                    "coldShortfall", "colonists", "heatExcess", "pendingBlueprints", "pendingFrames"
+                },
+                affects = new[] { "world.bills" }
             },
 
             new Touch
@@ -248,6 +298,37 @@ namespace AutoColony.Connections
                            "withdrawal it had already decided on while three bled to death " +
                            "with 25 medicine in store. Fixed in f79df1b: bleeding overrides " +
                            "the don't-empty-the-line clause"
+            },
+
+            new Consequence
+            {
+                from = "world.designations",
+                to = "steel",
+                confidence = Confidence.Suspected,
+                evidence = "found by ContestedEffects, not by a run. UpkeepModule designates " +
+                           "mining to clear boulders out of a wall line; ResourceModule " +
+                           "designates mining for steel and components. Neither can " +
+                           "double-designate a cell, but both queues draw on the same " +
+                           "miner-hours and ResourceModule sizes its budget from its own " +
+                           "additions this pass alone. A wall full of boulders can soak the " +
+                           "mining a steel shortfall was counting on, and nothing reports the " +
+                           "trade. To settle it: a run where a rocky site raises daysToSteel " +
+                           "while pendingFrames stalls on wall segments"
+            },
+
+            new Consequence
+            {
+                from = "world.drafted",
+                to = "firesNearBase",
+                confidence = Confidence.Observed,
+                evidence = "found by ContestedEffects over the declarations rather than by a " +
+                           "colony, and confirmed in source: DefenseModule drafts against a " +
+                           "raid, then sizes the fire front against ableColonists, which counts " +
+                           "the colonists it has just drafted. A raid with incendiaries makes " +
+                           "both conditions true from one event, so the front is judged " +
+                           "fightable by people who cannot be sent. Same shape as run 135's " +
+                           "world.drafted -> colonistsBleedingOut: drafting removes hands from " +
+                           "everything that is not the fight, and only the fight knows it"
             }
         };
 
@@ -271,6 +352,35 @@ namespace AutoColony.Connections
                                           " (" + effect + ")");
                 }
             return edges;
+        }
+
+        /// <summary>
+        /// Things more than one module changes.
+        ///
+        /// SharedNameEdges finds where one module's effect is another's input, which is the
+        /// ordinary way work flows. This finds the other shape: two modules writing the same
+        /// thing, neither aware of the other. That is the contested-ownership row in goal.md's
+        /// fault table, and it is what cost run 142 its bedroom — the planner repurposed the
+        /// room the goal layer was still asking for, because taking a room for parts and taking
+        /// it for a different label were the same act performed by different code.
+        ///
+        /// Two writers is not automatically a fault. It is a question that has to have an
+        /// answer, and the answer has to be written down somewhere.
+        /// </summary>
+        public static List<string> ContestedEffects()
+        {
+            var contested = new List<string>();
+            foreach (var effect in WorldEffects)
+            {
+                var writers = new List<string>();
+                for (int i = 0; i < Modules.Length; i++)
+                    if (System.Array.IndexOf(Modules[i].affects, effect) >= 0)
+                        writers.Add(Modules[i].module);
+
+                if (writers.Count > 1)
+                    contested.Add(effect + ": " + string.Join(", ", writers.ToArray()));
+            }
+            return contested;
         }
 
         /// <summary>Every name used anywhere in the manifest, for the consistency checks.</summary>

@@ -18,21 +18,21 @@ namespace AutoColony.Tests
             // 4 fires up from 1, a hundred cells out, one colonist. Outside any sane response
             // radius and coming anyway — the whole point of the test.
             Assert.True(FireFront.IsClosing(fires: 4, previousFires: 1, nearest: 100f,
-                                            previousNearest: 104f, ableColonists: 1));
+                                            previousNearest: 104f, handsFree: 1, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
         public void AFrontThatIsNotGrowingIsNotComing()
         {
             Assert.False(FireFront.IsClosing(fires: 4, previousFires: 4, nearest: 100f,
-                                             previousNearest: 100f, ableColonists: 3));
+                                             previousNearest: 100f, handsFree: 3, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
         public void AShrinkingFrontIsLeftAlone()
         {
             Assert.False(FireFront.IsClosing(fires: 2, previousFires: 9, nearest: 100f,
-                                             previousNearest: 100f, ableColonists: 3));
+                                             previousNearest: 100f, handsFree: 3, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
@@ -41,14 +41,14 @@ namespace AutoColony.Tests
             // The case the old distance rule was right about, and the reason growth alone is
             // not the test: a wildfire spreading away from the colony is not the colony's.
             Assert.False(FireFront.IsClosing(fires: 8, previousFires: 4, nearest: 120f,
-                                             previousNearest: 100f, ableColonists: 3));
+                                             previousNearest: 100f, handsFree: 3, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
         public void NoiseInTheNearestSampleDoesNotCountAsRetreat()
         {
             Assert.True(FireFront.IsClosing(fires: 8, previousFires: 4, nearest: 100.5f,
-                                            previousNearest: 100f, ableColonists: 3));
+                                            previousNearest: 100f, handsFree: 3, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
@@ -56,35 +56,35 @@ namespace AutoColony.Tests
         {
             // 43 fires and one colonist. Sending them loses the colonist and not the fire.
             Assert.False(FireFront.IsClosing(fires: 43, previousFires: 13, nearest: 80f,
-                                             previousNearest: 100f, ableColonists: 1));
+                                             previousNearest: 100f, handsFree: 1, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
         public void MorePeopleMakeALargerFrontWorthMeeting()
         {
             Assert.True(FireFront.IsClosing(fires: 30, previousFires: 13, nearest: 80f,
-                                            previousNearest: 100f, ableColonists: 5));
+                                            previousNearest: 100f, handsFree: 5, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
         public void TheFirstSampleHasNothingToCompareAgainst()
         {
             Assert.False(FireFront.IsClosing(fires: 4, previousFires: -1, nearest: 100f,
-                                             previousNearest: -1f, ableColonists: 3));
+                                             previousNearest: -1f, handsFree: 3, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
         public void AColonyWithNobodyOnTheirFeetFightsNothing()
         {
             Assert.False(FireFront.IsClosing(fires: 2, previousFires: 1, nearest: 10f,
-                                             previousNearest: 20f, ableColonists: 0));
+                                             previousNearest: 20f, handsFree: 0, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
         public void NoFireIsNoFront()
         {
             Assert.False(FireFront.IsClosing(fires: 0, previousFires: 4, nearest: -1f,
-                                             previousNearest: 100f, ableColonists: 3));
+                                             previousNearest: 100f, handsFree: 3, firesPerColonist: FireFront.DefaultFightableFiresPerColonist));
         }
 
         [Fact]
@@ -116,10 +116,44 @@ namespace AutoColony.Tests
         [Fact]
         public void FightableScalesWithThePeopleAvailable()
         {
-            Assert.True(FireFront.Fightable(6, 1));
-            Assert.False(FireFront.Fightable(7, 1));
-            Assert.True(FireFront.Fightable(18, 3));
-            Assert.False(FireFront.Fightable(19, 3));
+            Assert.True(FireFront.Fightable(6, 1, 6));
+            Assert.False(FireFront.Fightable(7, 1, 6));
+            Assert.True(FireFront.Fightable(18, 3, 6));
+            Assert.False(FireFront.Fightable(19, 3, 6));
+        }
+
+        [Fact]
+        public void ADraftedColonistIsNotAHandFreeToFightAFire()
+        {
+            // Found by the connection map rather than by a colony: asking which modules write
+            // world.labourAvailable turned up DefenseModule and WorkPriorityModule, and
+            // DefenseModule was reading ableColonists — which includes the drafted, because
+            // CombatAssessment.RankFighters needs exactly those — where it meant hands free.
+            //
+            // It drafts against a raid and then asks whether the colony can still fight a fire.
+            // A raid with incendiaries makes both true at once from one event, so this is the
+            // common case rather than the corner one. Four colonists all drafted is zero hands,
+            // and zero hands cannot beat one fire however able those four are.
+            Assert.False(FireFront.Fightable(fires: 1, handsFree: 0, firesPerColonist: 6));
+            Assert.True(FireFront.Fightable(fires: 1, handsFree: 1, firesPerColonist: 6));
+        }
+
+        [Fact]
+        public void TheColonyMayDisagreeWithSixFiresAColonist()
+        {
+            // The rate was a const the colony could not argue with, and where the front outruns
+            // the people depends on wind, fuel and how far they have to walk — all of which vary
+            // by map. A cautious genome commits to less; a bold one to more.
+            Assert.False(FireFront.Fightable(fires: 10, handsFree: 2, firesPerColonist: 4));
+            Assert.True(FireFront.Fightable(fires: 10, handsFree: 2, firesPerColonist: 9));
+        }
+
+        [Fact]
+        public void ARateOfZeroWouldMakeEveryFrontHopelessAndIsRefused()
+        {
+            // A genome is free to be cautious, not to be incoherent: a colony that believes one
+            // colonist can beat no fires never fights any fire, including the one in its kitchen.
+            Assert.True(FireFront.Fightable(fires: 1, handsFree: 1, firesPerColonist: 0));
         }
     }
 }
