@@ -114,7 +114,23 @@ pens="$sited sited/$penstate now"
 lean=$(grep "work is leaning" "$CH" 2>/dev/null | tail -1 | sed 's/.*leaning — //; s/ *\[[A-Z][a-z]*,[^]]*\]//')
 season=$(grep -o "\[\(Spring\|Summer\|Fall\|Winter\),[^]]*\]" "$CH" 2>/dev/null | tail -1)
 vitals=$(grep "colonists [0-9]" "$CH" 2>/dev/null | tail -1)
-focus=$(grep "working towards" "$CH" 2>/dev/null | tail -1 | sed 's/.*towards — //')
+
+# The focus, stamped with when it was said.
+#
+# "working towards" is logged when the focus CHANGES, and vitals every couple of in-game
+# hours, so the last of each can be far apart — and this line used to set them side by side
+# with nothing to say so. On 2026-08-06 that produced "0 of 1 beds are inside a room" beside
+# "beds 4 (0 sheltered)" and cost a real stretch of chasing a bed count that disagreed with
+# itself. It did not. One number was hours older than the other.
+#
+# Same failure as the screenshot that photographed a file manager, in a different instrument
+# on the same afternoon: an output that is individually true and jointly misleading. Cheaper
+# to print the timestamp than to re-learn this.
+focusline=$(grep "working towards" "$CH" 2>/dev/null | tail -1)
+focusat=$(echo "$focusline" | grep -oE "^day [0-9]+ [0-9]+h")
+nowat=$(echo "$vitals" | grep -oE "^day [0-9]+ [0-9]+h")
+focus=$(echo "$focusline" | sed 's/.*towards — //')
+[ -n "$focusat" ] && [ "$focusat" != "$nowat" ] && focus="$focus  (said at $focusat)"
 death=$(grep "COLONY LOST\|final score" "$CH" 2>/dev/null | tail -1)
 
 echo "CHECK30| $running | $frame | died: $died taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | roomsEver: $rooms pen: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
