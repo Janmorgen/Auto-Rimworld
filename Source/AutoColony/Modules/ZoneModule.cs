@@ -789,7 +789,7 @@ namespace AutoColony.Modules
                                                   Dictionary<string, ThingDef> byName)
         {
             float urgency = FoodTiming.Urgency(ctx.state.daysOfFood,
-                                               ctx.Gene(Genes.FoodDaysPerColonist));
+                                               ctx.FoodDaysWanted);
             if (urgency < 0.5f) return candidates;   // comfortable: any crop is a fair bet
 
             float fastest = float.MaxValue;

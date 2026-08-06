@@ -311,7 +311,7 @@ namespace AutoColony.Modules
             needs.Clear();
             var s = ctx.state;
 
-            float foodTarget = ctx.Gene(Genes.FoodDaysPerColonist);
+            float foodTarget = ctx.FoodDaysWanted;
             // Against the food that will be left once a decision taken now could land, for the
             // same reason hunting escalates on it: growing, hunting and cooking all take time
             // the colony has to have started spending before the larder is actually empty.

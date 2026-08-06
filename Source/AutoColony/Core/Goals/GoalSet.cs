@@ -185,7 +185,7 @@ namespace AutoColony.Goals
             // the only answer available.
             float landShortfall = 1f - AcMath.Clamp01(ctx.state.growingCells / (float)wanted);
             float hunger = 1f - AcMath.Clamp01(
-                ctx.state.daysOfFood / AcMath.Clamp(ctx.Gene(Genes.FoodDaysPerColonist), 1f, 30f));
+                ctx.state.daysOfFood / AcMath.Clamp(ctx.FoodDaysWanted, 1f, 60f));
 
             return AcMath.Clamp01(landShortfall * 0.7f + hunger * 0.3f);
         }
@@ -216,12 +216,12 @@ namespace AutoColony.Goals
 
         public override bool Satisfied(DirectorContext ctx)
         {
-            return ctx.state.daysOfFood >= ctx.Gene(Genes.FoodDaysPerColonist);
+            return ctx.state.daysOfFood >= ctx.FoodDaysWanted;
         }
 
         public override float Urgency(DirectorContext ctx)
         {
-            float target = ctx.Gene(Genes.FoodDaysPerColonist);
+            float target = ctx.FoodDaysWanted;
             if (target <= 0f) return 0f;
             return 1f - AcMath.Clamp01(ctx.state.daysOfFood / target);
         }
@@ -229,7 +229,7 @@ namespace AutoColony.Goals
         public override string Explain(DirectorContext ctx)
         {
             return ctx.state.daysOfFood.ToString("0.0") + " of " +
-                   ctx.Gene(Genes.FoodDaysPerColonist).ToString("0") + " days";
+                   ctx.FoodDaysWanted.ToString("0") + " days";
         }
 
     }

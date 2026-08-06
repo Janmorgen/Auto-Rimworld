@@ -273,7 +273,7 @@ namespace AutoColony.Modules
         /// </summary>
         int MaybeHunt(DirectorContext ctx, IntVec3 origin)
         {
-            float foodTarget = ctx.Gene(Genes.FoodDaysPerColonist);
+            float foodTarget = ctx.FoodDaysWanted;
             float daysOfFood = ctx.state.daysOfFood;
             if (daysOfFood >= foodTarget) return 0;
 

@@ -55,6 +55,7 @@
     <Compile Include="../../Source/AutoColony/Core/Prisoners/PrisonerPolicy.cs" Link="Production/PrisonerPolicy.cs" />
     <Compile Include="../../Source/AutoColony/Core/Connections/Touches.cs" Link="Production/Touches.cs" />
     <Compile Include="../../Source/AutoColony/Core/Goals/GoalPatience.cs" Link="Production/GoalPatience.cs" />
+    <Compile Include="../../Source/AutoColony/Core/FoodTarget.cs" Link="Production/FoodTarget.cs" />
     <Compile Include="../../Source/AutoColony/Core/Goals/ColonyPace.cs" Link="Production/ColonyPace.cs" />
     <Compile Include="../../Source/AutoColony/Core/Goals/FocusWatch.cs" Link="Production/FocusWatch.cs" />
     <Compile Include="../../Source/AutoColony/Learning/PatienceMemory.cs" Link="Production/PatienceMemory.cs" />

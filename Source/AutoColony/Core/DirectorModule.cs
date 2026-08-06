@@ -52,6 +52,27 @@ namespace AutoColony
         {
             if (director != null) director.CreditLater(banditId, arm);
         }
+
+        /// <summary>
+        /// Days of food this colony wants right now, season included.
+        ///
+        /// Every module that stocks, grows, gathers or buys food asks this rather than reading
+        /// the gene directly, so the nine of them cannot disagree about the answer. Run 159
+        /// bought exactly what the flat gene asked for, four days before winter, and starved
+        /// two days later. See FoodTarget.
+        /// </summary>
+        public float FoodDaysWanted
+        {
+            get
+            {
+                return FoodTarget.Days(
+                    Gene(Learning.Genes.FoodDaysPerColonist),
+                    state != null ? state.growingDaysLeft : 0,
+                    state != null ? state.barrenDaysAhead : 0,
+                    Gene(Learning.Genes.GrowthFoodMargin));
+            }
+        }
+
     }
 
     /// <summary>

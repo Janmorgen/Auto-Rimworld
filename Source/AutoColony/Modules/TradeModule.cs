@@ -141,7 +141,7 @@ namespace AutoColony.Modules
             // rice do not feed a colonist equally and "buy twenty food" means nothing. The
             // target is the same gene the rest of the director plans food against, so buying
             // stops where growing would have.
-            float wantDays = ctx.Gene(Learning.Genes.FoodDaysPerColonist);
+            float wantDays = ctx.FoodDaysWanted;
             if (s.daysOfFood < wantDays && s.colonists > 0)
             {
                 // A colonist eats about 1.6 nutrition a day; the shortfall is the days missing

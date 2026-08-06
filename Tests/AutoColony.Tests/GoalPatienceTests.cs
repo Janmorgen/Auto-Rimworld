@@ -233,4 +233,49 @@ namespace AutoColony.Tests
             Assert.Equal(0, PatienceMemory.For(BlockerKind.Research).spells);
         }
     }
+
+    /// <summary>
+    /// How much food the colony wants, once the calendar is allowed a say.
+    /// </summary>
+    public class FoodTargetTests
+    {
+        [Fact]
+        public void APermanentSummerColonyKeepsTheGenomeSNumber()
+        {
+            // No gap is coming, so there is nothing to hoard against. Zero barren days is a
+            // real answer and must not be read as "unknown".
+            Assert.Equal(5f, FoodTarget.Days(5f, 60, 0, 1.3f), 3);
+        }
+
+        [Fact]
+        public void AColonyFarFromWinterIsNotMadeToHoard()
+        {
+            // Forty days of growing left against a fifteen-day winter: still time to sow, so
+            // demanding a winter's food now would be the flat target's mistake in reverse.
+            Assert.Equal(5f, FoodTarget.Days(5f, 40, 15, 1.3f), 3);
+        }
+
+        [Fact]
+        public void AColonyOnTheEdgeOfWinterWantsEnoughToCrossIt()
+        {
+            // Run 159: four days of growing left, a real winter ahead, and it bought four days
+            // of food because that is what the flat gene asked for.
+            float days = FoodTarget.Days(5f, 4, 20, 1.3f);
+            Assert.True(days > 20f, "must want more than the gap itself, got " + days);
+        }
+
+        [Fact]
+        public void TheGeneStillWinsWhenItAsksForMore()
+        {
+            // A cautious genome is not overruled by a short winter.
+            Assert.Equal(30f, FoodTarget.Days(30f, 2, 10, 1.3f), 3);
+        }
+
+        [Fact]
+        public void AnIceSheetWantsAYearAndDoesNotDivideByZero()
+        {
+            float days = FoodTarget.Days(5f, 0, 60, 1.3f);
+            Assert.True(days >= 60f);
+        }
+    }
 }

@@ -559,6 +559,31 @@ namespace AutoColony
         /// <summary>Whether crops sown outdoors would actually grow at the moment.</summary>
         public bool growingSeasonNow;
 
+        /// <summary>
+        /// Days until the fields stop, and how long they stay stopped.
+        ///
+        /// growingSeasonNow is a thermometer: it answers "is anything growing today" and
+        /// nothing else. A colony that reads only that farms through summer with a comfortable
+        /// larder and starves in fall, because the moment it can see the problem is the moment
+        /// it is already too late to sow. Run 159 bought four days of food four days before
+        /// winter and was starving again on day 25 with six finished rooms and Starvation on
+        /// screen.
+        ///
+        /// RimWorld can answer this properly — the growing season is a per-tile fact it
+        /// computes from twelfth-by-twelfth average temperatures, which is where the world
+        /// map's own growing-period readout comes from. So the colony asks rather than guesses,
+        /// and gets a number it can plan against instead of a boolean it can only react to.
+        /// </summary>
+        public int growingDaysLeft;
+
+        /// <summary>
+        /// Days of non-growing season that follow, which is the gap food has to cross.
+        ///
+        /// Zero on a map with no winter, which is a real answer and not a missing one — a
+        /// permanent-summer colony genuinely never has to stockpile against a season.
+        /// </summary>
+        public int barrenDaysAhead;
+
         /// <summary>True in the half of the year that is heading into the cold.</summary>
         public bool winterComing;
 
@@ -1529,6 +1554,7 @@ namespace AutoColony
                 // temperature is the whole answer for an outdoor field and does not depend on
                 // which cell happens to be the middle of the map.
                 s.growingSeasonNow = s.outdoorTemperature > 0f && s.outdoorTemperature < 58f;
+                CaptureSeasonAhead(s, map);
                 s.winterComing = s.season == Season.Fall || s.season == Season.Winter
                                  || s.season == Season.PermanentWinter;
 
@@ -1846,6 +1872,69 @@ namespace AutoColony
             int nearest = (int)Math.Sqrt(nearestSq);
             if (s.nearestFuelDistance == 0 || nearest < s.nearestFuelDistance)
                 s.nearestFuelDistance = nearest;
+        }
+
+        /// <summary>
+        /// Walk the year ahead and find where the growing stops and starts again.
+        ///
+        /// Bounds are the game's own DefaultMinGrowthTemperature and DefaultMaxGrowthTemperature
+        /// — 0 and 58 — the same pair growingSeasonNow already tests today's temperature
+        /// against, so the forecast and the thermometer cannot disagree about what "growing"
+        /// means. A twelfth is five days.
+        /// </summary>
+        static void CaptureSeasonAhead(ColonyState s, Map map)
+        {
+            try
+            {
+                var growable = GenTemperature.TwelfthsInAverageTemperatureRange(
+                    map.Tile, Plant.DefaultMinGrowthTemperature, Plant.DefaultMaxGrowthTemperature);
+
+                if (growable == null || growable.Count == 0)
+                {
+                    // Nothing grows here at any time of year — an ice sheet. The whole year is
+                    // the gap, and saying "zero days left" would read as "it just ended".
+                    s.growingDaysLeft = 0;
+                    s.barrenDaysAhead = GenDate.DaysPerTwelfth * GenDate.TwelfthsPerYear;
+                    return;
+                }
+                if (growable.Count >= GenDate.TwelfthsPerYear)
+                {
+                    s.growingDaysLeft = GenDate.DaysPerTwelfth * GenDate.TwelfthsPerYear;
+                    s.barrenDaysAhead = 0;   // permanent summer: a real answer, not a missing one
+                    return;
+                }
+
+                var now = GenLocalDate.Twelfth(map);
+                int intoTwelfth = GenLocalDate.DayOfTwelfth(map);
+
+                // Days of growing still ahead, counting the rest of this twelfth if it grows.
+                int left = 0;
+                var t = now;
+                if (growable.Contains(t))
+                {
+                    left += GenDate.DaysPerTwelfth - intoTwelfth;
+                    for (int i = 1; i < GenDate.TwelfthsPerYear; i++)
+                    {
+                        t = TwelfthUtility.NextTwelfth(t);
+                        if (!growable.Contains(t)) break;
+                        left += GenDate.DaysPerTwelfth;
+                    }
+                }
+
+                // And the barren stretch that follows it.
+                int barren = 0;
+                for (int i = 0; i < GenDate.TwelfthsPerYear; i++)
+                {
+                    t = TwelfthUtility.NextTwelfth(t);
+                    if (growable.Contains(t)) break;
+                    barren += GenDate.DaysPerTwelfth;
+                }
+                if (!growable.Contains(now)) barren += GenDate.DaysPerTwelfth - intoTwelfth;
+
+                s.growingDaysLeft = left;
+                s.barrenDaysAhead = barren;
+            }
+            catch (Exception) { s.growingDaysLeft = 0; s.barrenDaysAhead = 0; }
         }
 
         /// <summary>
