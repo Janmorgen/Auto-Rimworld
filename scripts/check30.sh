@@ -89,3 +89,25 @@ focus=$(grep "working towards" "$CH" 2>/dev/null | tail -1 | sed 's/.*towards �
 death=$(grep "COLONY LOST\|final score" "$CH" 2>/dev/null | tail -1)
 
 echo "CHECK30| $running | $frame | died: $died taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | roomsEver: $rooms pen: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
+
+# ---------------------------------------------------------------- goal.md
+# Recited every check, READ FROM THE FILE rather than copied here.
+#
+# A second copy of the rules is a copy that drifts, which is the exact fault this
+# project keeps finding in the director — one question with two answers. So this
+# pulls the loop priority and the checklist straight out of goal.md, and if that
+# file changes the reminder changes with it. If goal.md is missing, say so loudly
+# rather than quietly reciting nothing.
+GOAL=/home/deck/Documents/projects/auto-rimworld/goal.md
+if [ -f "$GOAL" ]; then
+    echo "--- goal.md ---"
+    # Loop priority: the one-line rule under section 3.
+    sed -n '/^## 3\. Loop priority/,/^---/p' "$GOAL" | grep '^> ' \
+        | sed -E 's/^> /priority: /; s/\*\*//g'
+    # The checklist itself, numbered lines under section 6.
+    sed -n '/^## 6\. Every-loop checklist/,/^---/p' "$GOAL" \
+        | grep -E '^[0-9]+\.' \
+        | sed -E 's/\*\*//g; s/`//g; s/[[:space:]]+/ /g'
+else
+    echo "--- goal.md MISSING at $GOAL — the checklist cannot be recited ---"
+fi
