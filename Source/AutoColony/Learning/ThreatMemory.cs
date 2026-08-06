@@ -182,6 +182,54 @@ namespace AutoColony.Learning
         public static void RecordOutcome(ThreatKind kind, int committed, float damageTaken,
                                          int casualties)
         {
+            RecordOutcome(kind, committed, damageTaken, casualties, 0);
+        }
+
+        /// <summary>
+        /// The same, told how many came out of it still bleeding.
+        ///
+        /// Run 168 day 23 is why. A mad cougar was met at 1.55x against a required 1.50x, the
+        /// colony won it without anybody going down, and it cost 0.52 health across three sent
+        /// and left two colonists bleeding out. That averages to 0.17 each, which falls in the
+        /// gap between WalkedAway and HurtBadly — so the fight taught this memory **nothing at
+        /// all**. Health went 1.00 to 0.83 and the next fight starts from there.
+        ///
+        /// Two separate blindnesses, and the second is the one that matters:
+        ///
+        /// The mean hides the distribution. Two colonists badly hurt and one untouched reads the
+        /// same as three lightly grazed, and it is the first that loses colonies. This project
+        /// already learned that lesson for mood and fixed it there — worst mood is tracked
+        /// beside the average precisely because an average colony can be fine while one person
+        /// in it breaks. It was never carried across to fights.
+        ///
+        /// And "casualty" here means downed. Somebody on a blood-loss clock who is still on
+        /// their feet is neither a casualty nor a scrape, and was visible to this as neither.
+        ///
+        /// So bleeding disqualifies "cheap". That is not a new threshold — it makes an existing
+        /// category honest, because a colonist bleeding out has not walked away from anything.
+        /// </summary>
+        public static void RecordOutcome(ThreatKind kind, int committed, float damageTaken,
+                                         int casualties, int leftBleeding)
+        {
+            RecordOutcome(kind, committed, damageTaken, casualties, leftBleeding,
+                          DefaultBleedingAsCasualty);
+        }
+
+        /// <summary>How much of a casualty a still-bleeding colonist counts as, absent a genome.</summary>
+        public const float DefaultBleedingAsCasualty = 0.5f;
+
+        /// <summary>
+        /// The same, with the genome's view of what a bleeding colonist is worth.
+        ///
+        /// The weight has to come from somewhere and it is not something this file can know, so
+        /// it is the colony's to argue with. What is *not* a matter of opinion is the direction:
+        /// somebody still losing blood is partway to being on the floor, and treating them as
+        /// unhurt is how run 168's cougar taught nothing.
+        /// </summary>
+        public static void RecordOutcome(ThreatKind kind, int committed, float damageTaken,
+                                         int casualties, int leftBleeding,
+                                         float bleedingAsCasualty)
+        {
             if (committed <= 0) return;
 
             var r = For(kind);
@@ -193,18 +241,26 @@ namespace AutoColony.Learning
             float perColonist = damageTaken / committed;
             float target = r.force;
 
-            if (casualties > 0)
+            // A colonist still bleeding when the fight ends has not finished paying for it, and
+            // the health delta measured at that moment understates what the fight cost by
+            // however much they lose before somebody reaches them. Counted as a fraction of a
+            // casualty rather than as a separate signal, because that is what it is.
+            if (bleedingAsCasualty < 0f) bleedingAsCasualty = 0f;
+            float effectiveCasualties = casualties + leftBleeding * bleedingAsCasualty;
+
+            if (effectiveCasualties > 0f)
             {
-                // Somebody went down. Whatever was brought, it was not enough.
-                target = r.force * (1f + 0.5f * casualties);
+                // Somebody went down, or is going that way. Whatever was brought, it was not
+                // enough.
+                target = r.force * (1f + 0.5f * effectiveCasualties);
             }
             else if (perColonist > HurtBadly)
             {
                 target = r.force * (1f + (perColonist - HurtBadly));
             }
-            else if (perColonist < WalkedAway)
+            else if (perColonist < WalkedAway && leftBleeding <= 0)
             {
-                // Cheap. Try holding a pair of hands back next time.
+                // Cheap, and everybody actually walked away. Try holding a pair of hands back.
                 target = r.force * 0.9f;
             }
 

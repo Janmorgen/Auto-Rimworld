@@ -1618,6 +1618,7 @@ namespace AutoColony.Modules
 
             float damage = 0f;
             int casualties = 0;
+            int leftBleeding = 0;
 
             for (int i = 0; i < committedThisFight.Count; i++)
             {
@@ -1630,18 +1631,28 @@ namespace AutoColony.Modules
                 if (pawn.Dead) { damage += before; casualties++; continue; }
                 if (pawn.Downed) casualties++;
 
+                // Still on their feet and still losing blood. Neither a casualty nor a scrape,
+                // and until now visible to the memory as neither — see ThreatMemory.RecordOutcome.
+                if (Bleeding(pawn)) leftBleeding++;
+
                 float now = Health(pawn);
                 if (now < before) damage += before - now;
             }
 
             int committed = committedThisFight.Count;
-            Learning.ThreatMemory.RecordOutcome(fightKind, committed, damage, casualties);
+            Learning.ThreatMemory.RecordOutcome(fightKind, committed, damage, casualties,
+                                                leftBleeding,
+                                                ctx.Gene(Genes.DefenseBleedingAsCasualty));
             Learning.ThreatMemory.Save();
 
             Chronicle.Record(ChronicleCategory.Threat, string.Format(
-                "{0} cost {1:0.00} health across {2} sent{3} — {4}",
+                "{0} cost {1:0.00} health across {2} sent{3}{5} — {4}",
                 fightKind, damage, committed,
                 casualties > 0 ? ", " + casualties + " down" : " and nobody went down",
+                // "nobody went down" is true and was the whole story, beside a fight that had
+                // just put two colonists on a blood-loss clock. A diagnostic that is accurate
+                // and reads as reassuring is the kind this project has lost hours to.
+                leftBleeding > 0 ? ", " + leftBleeding + " still bleeding" : "",
                 Learning.ThreatMemory.Explain(fightKind)));
 
             healthAtEngage.Clear();
