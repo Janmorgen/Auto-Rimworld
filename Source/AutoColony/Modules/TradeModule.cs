@@ -130,6 +130,27 @@ namespace AutoColony.Modules
                     wants.Add(new Want("medicine", tiers, wantedMedicine - s.medicineCount));
             }
 
+            // Food, which is the want I left out and the one that matters most.
+            //
+            // Run 156, day 8: a caravan standing on the map, the colony at 1.7 days of food
+            // with Low food on screen and 800 silver in the bank, and this module said
+            // "nothing the colony is short of". Medicine and the plan's materials were in the
+            // list and the most basic want there is was not.
+            //
+            // Counted in nutrition rather than items, because a packaged meal and a bowl of
+            // rice do not feed a colonist equally and "buy twenty food" means nothing. The
+            // target is the same gene the rest of the director plans food against, so buying
+            // stops where growing would have.
+            float wantDays = ctx.Gene(Learning.Genes.FoodDaysPerColonist);
+            if (s.daysOfFood < wantDays && s.colonists > 0)
+            {
+                // A colonist eats about 1.6 nutrition a day; the shortfall is the days missing
+                // across everyone who has to eat.
+                float missing = (wantDays - s.daysOfFood) * s.colonists * 1.6f;
+                if (missing > 0f)
+                    wants.Add(new Want("food", null, missing, true));
+            }
+
             // Whatever the plan is blocked on, which it already declares.
             //
             // Reading plan.Needs rather than keeping a list here means the colony shops for
@@ -228,19 +249,68 @@ namespace AutoColony.Modules
         class Want
         {
             public readonly string label;
-            public readonly List<ThingDef> acceptable;
-            public int outstanding;
+            public readonly List<ThingDef> acceptable;   // null means "anything that satisfies"
+            public readonly bool byNutrition;
+            public float outstanding;
 
-            public Want(string label, List<ThingDef> acceptable, int outstanding)
+            public Want(string label, List<ThingDef> acceptable, float outstanding,
+                        bool byNutrition = false)
             {
                 this.label = label;
                 this.acceptable = acceptable;
                 this.outstanding = outstanding;
+                this.byNutrition = byNutrition;
             }
 
             public bool Accepts(ThingDef def)
             {
-                return def != null && acceptable.Contains(def);
+                if (def == null) return false;
+                if (acceptable != null) return acceptable.Contains(def);
+                return byNutrition && Feeds(def) > 0f;
+            }
+
+            /// <summary>
+            /// How much of this need one of that item answers.
+            ///
+            /// One for a material — a steel is a steel. For food it is the item's own
+            /// nutrition, read off the def, because a packaged meal and a bowl of rice do not
+            /// feed a colonist equally and buying "twenty food" would mean nothing.
+            /// </summary>
+            public float Contribution(ThingDef def)
+            {
+                return byNutrition ? Feeds(def) : 1f;
+            }
+
+            /// <summary>How many of that item it would take to answer what is left.</summary>
+            public int ItemsNeeded(ThingDef def)
+            {
+                float per = Contribution(def);
+                if (per <= 0f) return 0;
+                return (int)System.Math.Ceiling(outstanding / per);
+            }
+
+            /// <summary>Book what was actually taken, in the need's own units.</summary>
+            public void Took(ThingDef def, int items)
+            {
+                outstanding -= items * Contribution(def);
+                if (outstanding < 0f) outstanding = 0f;
+            }
+
+            static float Feeds(ThingDef def)
+            {
+                try
+                {
+                    if (def == null || def.ingestible == null) return 0f;
+                    // Not everything edible is food for a colonist. Kibble, hay and corpses are
+                    // ingestible and buying them to feed people is how a colony ends up eating
+                    // something that costs it more mood than the hunger did.
+                    if ((int)def.ingestible.preferability < (int)FoodPreferability.RawBad) return 0f;
+                    if ((def.ingestible.foodType & FoodTypeFlags.Meal) == 0 &&
+                        (def.ingestible.foodType & FoodTypeFlags.VegetableOrFruit) == 0 &&
+                        (def.ingestible.foodType & FoodTypeFlags.Meat) == 0) return 0f;
+                    return def.ingestible.CachedNutrition;
+                }
+                catch (System.Exception) { return 0f; }
             }
         }
 
@@ -328,7 +398,8 @@ namespace AutoColony.Modules
                     if (available <= 0) continue;
 
                     offered++;
-                    int take = want.outstanding < available ? want.outstanding : available;
+                    int take = want.ItemsNeeded(line.ThingDef);
+                    if (take > available) take = available;
 
                     // Never spend the colony down to nothing. Silver is also what a colony
                     // buys its next emergency with.
@@ -344,7 +415,7 @@ namespace AutoColony.Modules
                     if (!AskFor(line, take)) { refused++; continue; }
 
                     silver -= (int)(each * take);
-                    want.outstanding -= take;
+                    want.Took(line.ThingDef, take);
                     bought.Add(take + " " + line.Label);
                 }
 
@@ -379,7 +450,8 @@ namespace AutoColony.Modules
                             if (available <= 0) continue;
 
                             offered++;
-                            int take = want.outstanding < available ? want.outstanding : available;
+                            int take = want.ItemsNeeded(line.ThingDef);
+                            if (take > available) take = available;
                             float each = line.GetPriceFor(TradeAction.PlayerBuys);
                             if (each > 0f)
                             {
@@ -389,7 +461,7 @@ namespace AutoColony.Modules
                             if (take <= 0) { unaffordable++; continue; }
                             if (!AskFor(line, take)) { refused++; continue; }
 
-                            want.outstanding -= take;
+                            want.Took(line.ThingDef, take);
                             bought.Add(take + " " + line.Label);
                         }
                     }
@@ -462,7 +534,8 @@ namespace AutoColony.Modules
                 int available = line.CountHeldBy(Transactor.Trader);
                 if (available <= 0) continue;
 
-                int take = want.outstanding < available ? want.outstanding : available;
+                int take = want.ItemsNeeded(line.ThingDef);
+                if (take > available) take = available;
                 cost += line.GetPriceFor(TradeAction.PlayerBuys) * take;
             }
 
@@ -494,14 +567,14 @@ namespace AutoColony.Modules
                 if (each <= 0f) continue;
 
                 int give = (int)(needed / each) + 1;
-                if (give > have.outstanding) give = have.outstanding;
+                if (give > (int)have.outstanding) give = (int)have.outstanding;
                 if (give > mine) give = mine;
                 if (give <= 0) continue;
 
                 if (!Offer(line, give)) continue;
 
                 needed -= (int)(each * give);
-                have.outstanding -= give;
+                have.outstanding -= give;   // surplus is always counted in items
                 sold.Add(give + " " + line.Label);
             }
             return needed > 0 ? needed : 0;
