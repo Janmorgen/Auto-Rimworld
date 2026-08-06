@@ -226,6 +226,19 @@ namespace AutoColony.Connections
                            "days, and got a bedroom on day 15"
             },
 
+            // The season blindness reaching a capability that did not exist when it was found.
+            new Consequence
+            {
+                from = "plan.goals",
+                to = "world.blueprints",
+                confidence = Confidence.Observed,
+                evidence = "run 159 day 23-25 — the trade module bought food against " +
+                           "FoodDaysPerColonist, a flat target with no season in it, so a " +
+                           "colony in fall bought 2.2 days and was starving again two days " +
+                           "later with nothing growing outdoors. Buying inherits the same " +
+                           "blindness as sowing, because both read the same seasonless number"
+            },
+
             new Consequence
             {
                 from = "world.drafted",
