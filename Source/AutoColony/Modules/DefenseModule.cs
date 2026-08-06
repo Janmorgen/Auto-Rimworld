@@ -594,20 +594,103 @@ namespace AutoColony.Modules
         /// </summary>
         static Pawn NearestCarrier(DirectorContext ctx, Pawn victim)
         {
+            return NearestCarrier(ctx, victim, false);
+        }
+
+        /// <summary>
+        /// Somebody to carry the casualty, optionally including the drafted.
+        ///
+        /// The drafted are excluded by default and rightly so: a work job handed to a drafted
+        /// pawn breaks the draft, and a draft broken mid-fight is how a line collapses. But a
+        /// withdrawal is not a fight — see RetreatCargo — and during one every colonist is
+        /// drafted, so the default makes rescue impossible at precisely the moment three
+        /// colonists have now been lost to its absence.
+        ///
+        /// When the drafted are allowed, the choice is scored rather than taken by distance
+        /// alone, because how long the walk takes is what the casualty is actually waiting on.
+        /// </summary>
+        static Pawn NearestCarrier(DirectorContext ctx, Pawn victim, bool allowDrafted)
+        {
             Pawn best = null;
+            float bestFitness = 0f;
             float bestDist = float.MaxValue;
 
             var able = ctx.state.ableColonists;
             for (int i = 0; i < able.Count; i++)
             {
                 var pawn = able[i];
-                if (pawn == null || pawn.Drafted || pawn == victim) continue;
+                if (pawn == null || pawn == victim) continue;
+                if (pawn.Drafted && !allowDrafted) continue;
                 if (!pawn.CanReach(victim, PathEndMode.OnCell, Danger.Deadly)) continue;
 
-                float dist = (pawn.Position - victim.Position).LengthHorizontalSquared;
-                if (dist < bestDist) { bestDist = dist; best = pawn; }
+                if (!allowDrafted)
+                {
+                    float d = (pawn.Position - victim.Position).LengthHorizontalSquared;
+                    if (d < bestDist) { bestDist = d; best = pawn; }
+                    continue;
+                }
+
+                float distance = (pawn.Position - victim.Position).LengthHorizontal;
+                float speed = CombatAssessment.SafeStat(pawn, StatDefOf.MoveSpeed, 4.6f);
+                float fitness = RetreatCargo.CarrierFitness(
+                    distance, CombatAssessment.ColonistValue(pawn), speed);
+
+                if (fitness > bestFitness) { bestFitness = fitness; best = pawn; }
             }
             return best;
+        }
+
+        /// <summary>
+        /// Send a retreating colonist to carry a casualty out, rather than past.
+        ///
+        /// Only while withdrawing. RetreatCargo.WorthCarrying says why that case is easy: the
+        /// line is already being given up, so the fighter spent on the carry gives up nothing
+        /// that was in use. Undrafting is the whole order — a drafted pawn will not take the
+        /// rescue job, which is the reason none of the three lost colonists was ever collected.
+        /// </summary>
+        void CarryTheFallen(DirectorContext ctx)
+        {
+            var colonists = ctx.state.allColonists;
+            if (colonists == null) return;
+
+            for (int i = 0; i < colonists.Count; i++)
+            {
+                var victim = colonists[i];
+                if (victim == null || victim.Dead || !victim.Downed) continue;
+                if (victim.InBed()) continue;
+                if (evacuating.Contains(victim.thingIDNumber)) continue;
+
+                var carrier = NearestCarrier(ctx, victim, true);
+                if (carrier == null) continue;
+
+                if (!RetreatCargo.WorthCarrying(true, CombatAssessment.ColonistValue(carrier), 0f))
+                    continue;
+
+                Building_Bed bed = null;
+                try { bed = RestUtility.FindBedFor(victim, carrier, false, false, null); }
+                catch (Exception) { }
+                if (bed == null) { NoteNowhereSafe(ctx, victim, NoFires); continue; }
+
+                // The draft has to be released or the job is refused, and releasing it is the
+                // point: this colonist's fight is over and their job now is the carry.
+                if (carrier.drafter != null && carrier.drafter.Drafted)
+                    carrier.drafter.Drafted = false;
+                drafted.Remove(carrier);
+
+                var job = JobMaker.MakeJob(JobDefOf.Rescue, victim, bed);
+                job.count = 1;
+                if (!carrier.jobs.TryTakeOrderedJob(job, JobTag.Misc)) continue;
+
+                evacuating.Add(victim.thingIDNumber);
+                Chronicle.Record(ChronicleCategory.Health, string.Format(
+                    "withdrawing, and {0} is down where they fell — {1} is carrying them out " +
+                    "rather than past. The line is already being given up, so the fighter spent " +
+                    "on this gives up nothing; three colonists have been taken or lost lying "  +
+                    "where a retreat walked by them",
+                    victim.LabelShortCap, carrier.LabelShortCap));
+                Note("carried " + victim.LabelShortCap + " out of a withdrawal");
+                return;
+            }
         }
 
         static bool FireIsComingFor(List<Thing> fires, IntVec3 cell)
@@ -980,6 +1063,19 @@ namespace AutoColony.Modules
             var rally = winnable ? RallyPoint(ctx) : refuge;
             int mobilised = 0;
             float committedStrength = 0f;
+
+            // Nobody is left where they fell.
+            //
+            // Run 164 lost Simon eleven minutes after he went down: the colony judged the fight
+            // lost, withdrew two able colonists past him to the refuge, and a raider carried him
+            // off. The rescue that would have taken him could not run, because rescuing is work
+            // and every colonist was drafted. Two colonies before that lost one each the same
+            // way. See RetreatCargo.
+            //
+            // Done before the withdrawal orders rather than after, so the carrier is chosen out
+            // of the people who are about to walk away instead of being missed by a loop that has
+            // already sent everyone somewhere else.
+            if (!winnable) CarryTheFallen(ctx);
 
             for (int i = 0; i < fighters.Count; i++)
             {

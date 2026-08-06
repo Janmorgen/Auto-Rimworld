@@ -382,6 +382,21 @@ namespace AutoColony.Connections
                            "hours of bleeding, decided by a comparison nothing was making. The " +
                            "deadline was read from the game every pass and thrown away, kept " +
                            "only as a count of who had one"
+            },
+
+            new Consequence
+            {
+                from = "world.drafted",
+                to = "colonistsDowned",
+                confidence = Confidence.Observed,
+                evidence = "run 164 day 5 10h-11h — Simon went down, the colony judged the " +
+                           "fight lost and withdrew two able colonists past him to the refuge, " +
+                           "and a raider carried him off an hour later. NearestCarrier skips " +
+                           "every drafted colonist because a work job breaks the draft, and " +
+                           "during a withdrawal every colonist is drafted, so no rescue was " +
+                           "possible at the one moment it mattered. Third colonist lost this " +
+                           "way. Third instance of this same edge after run 135's bleeding and " +
+                           "the fire front judged fightable by people already sent to a line"
             }
         };
 

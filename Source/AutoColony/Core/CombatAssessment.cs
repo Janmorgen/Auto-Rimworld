@@ -150,6 +150,12 @@ namespace AutoColony
             return AcMath.Clamp(health, 0.1f, 1f) * AcMath.Clamp(able, 0.1f, 1f) * armour;
         }
 
+        /// <summary>A stat read that will not throw, for callers outside this class.</summary>
+        public static float SafeStat(Pawn pawn, StatDef def, float fallback)
+        {
+            return Stat(pawn, def, fallback);
+        }
+
         static float Stat(Pawn pawn, StatDef def, float fallback)
         {
             try { return def != null ? pawn.GetStatValue(def) : fallback; }
