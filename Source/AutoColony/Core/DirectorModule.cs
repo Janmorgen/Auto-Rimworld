@@ -61,6 +61,35 @@ namespace AutoColony
         /// bought exactly what the flat gene asked for, four days before winter, and starved
         /// two days later. See FoodTarget.
         /// </summary>
+        /// <summary>
+        /// Days of food the colony will still have when it comes to eat it.
+        ///
+        /// daysOfFood counts everything reachable and edible, which is the right answer to "is
+        /// there food" and the wrong one to "are we secure". Run 168 held 15.0 days of which 7.2
+        /// were spoiling; across four runs the spoiling share has been a third to a half.
+        /// ColonyState measures it and exactly one decision — the refrigeration goal's urgency —
+        /// has ever read it, against forty-three that read the gross number.
+        ///
+        /// The subtraction is not the whole spoiling figure, and getting that wrong was nearly
+        /// shipped. "Spoiling" means rots inside SpoilingSoonDays, which is food that must be
+        /// eaten soon rather than food already lost — most of it is edible today. What is
+        /// actually lost is only what cannot be consumed before it rots, so the colony keeps the
+        /// horizon's worth of it and loses the rest.
+        /// </summary>
+        public float DaysOfFoodKeeping
+        {
+            get
+            {
+                if (state == null) return 0f;
+
+                float lost = state.daysOfFoodSpoiling - ColonyState.SpoilingSoonDays;
+                if (lost < 0f) lost = 0f;
+
+                float keeping = state.daysOfFood - lost;
+                return keeping < 0f ? 0f : keeping;
+            }
+        }
+
         public float FoodDaysWanted
         {
             get

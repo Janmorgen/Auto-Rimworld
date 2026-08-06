@@ -186,7 +186,7 @@ namespace AutoColony.Modules
             // Decide with the colony's actual capacity in mind, not just the gene: taking in
             // more mouths during a food crisis is how a strategy loses colonists.
             float effectiveRisk = risk;
-            if (ctx.state.daysOfFood < ctx.Gene(Genes.FoodDaysPerColonist) * 0.5f) effectiveRisk *= 0.4f;
+            if (ctx.DaysOfFoodKeeping < ctx.Gene(Genes.FoodDaysPerColonist) * 0.5f) effectiveRisk *= 0.4f;
             if (ctx.state.danger != StoryDanger.None) effectiveRisk *= 0.5f;
 
             // People are the exception to gene-gated caution. When the growth layer says the

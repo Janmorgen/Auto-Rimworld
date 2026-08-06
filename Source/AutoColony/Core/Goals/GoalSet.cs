@@ -216,7 +216,9 @@ namespace AutoColony.Goals
 
         public override bool Satisfied(DirectorContext ctx)
         {
-            return ctx.state.daysOfFood >= ctx.FoodDaysWanted;
+            // What the colony will still have when it eats it, not what is lying about today.
+            // See DirectorContext.DaysOfFoodKeeping.
+            return ctx.DaysOfFoodKeeping >= ctx.FoodDaysWanted;
         }
 
         public override float Urgency(DirectorContext ctx)
@@ -739,7 +741,8 @@ namespace AutoColony.Goals
             // Room for one more, literally: a built bed nobody sleeps in, and food enough that
             // another mouth is margin rather than risk.
             bool spareBed = ctx.state.colonistBeds > ctx.state.colonists;
-            bool fedWithMargin = ctx.state.daysOfFood >= ctx.Gene(Genes.GrowthFoodMargin);
+            // Another mouth eats for months, so the question is what survives to be eaten.
+            bool fedWithMargin = ctx.DaysOfFoodKeeping >= ctx.Gene(Genes.GrowthFoodMargin);
             return !(spareBed && fedWithMargin);
         }
 

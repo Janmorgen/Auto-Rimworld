@@ -98,7 +98,7 @@ namespace AutoColony.Modules
             {
                 bed = RestUtility.FindBedFor(victim, carrier, false, false, GuestStatus.Prisoner);
                 float value = ValueOf(victim);
-                if (!PrisonerPolicy.WorthCapturing(value, ctx.state.daysOfFood, recruitBias,
+                if (!PrisonerPolicy.WorthCapturing(value, ctx.DaysOfFoodKeeping, recruitBias,
                                                    bed != null, true))
                 {
                     // Say why, once. A capture that silently does not happen is indistinguishable
@@ -120,7 +120,7 @@ namespace AutoColony.Modules
                 // An ordinary bed: rescue needs no prison, which is most of why it is the better
                 // outcome when the option exists at all.
                 bed = RestUtility.FindBedFor(victim, carrier, false, false, null);
-                if (!PrisonerPolicy.WorthRescuing(ctx.state.daysOfFood, bed != null, true))
+                if (!PrisonerPolicy.WorthRescuing(ctx.DaysOfFoodKeeping, bed != null, true))
                     return false;
 
                 job = JobDefOf.Rescue;

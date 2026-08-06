@@ -142,7 +142,9 @@ namespace AutoColony.Modules
             // target is the same gene the rest of the director plans food against, so buying
             // stops where growing would have.
             float wantDays = ctx.FoodDaysWanted;
-            if (s.daysOfFood < wantDays && s.colonists > 0)
+            // Buying against the gross figure means declining to buy on the strength of food
+            // that will be compost by the time it was needed.
+            if (ctx.DaysOfFoodKeeping < wantDays && s.colonists > 0)
             {
                 // A colonist eats about 1.6 nutrition a day; the shortfall is the days missing
                 // across everyone who has to eat.

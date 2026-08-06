@@ -1270,7 +1270,13 @@ namespace AutoColony
         /// ResourceCounter reports, minus its restriction to storage.
         /// </summary>
         /// <summary>Shelf life below which food counts as about to be lost.</summary>
-        const float SpoilingSoonDays = 3f;
+        /// <summary>
+        /// How soon "spoiling" means. Public because the honest food-security figure has to
+        /// subtract only what cannot be eaten inside this window — see
+        /// DirectorContext.DaysOfFoodKeeping — and two places disagreeing about the horizon
+        /// would be the duplicated-quantity fault again.
+        /// </summary>
+        public const float SpoilingSoonDays = 3f;
 
         static float ReachableHumanEdibleNutrition(Map map, out float spoiling, out float meals)
         {

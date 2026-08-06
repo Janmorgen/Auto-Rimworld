@@ -427,6 +427,12 @@ namespace AutoColony.Modules
             // colonists. Nothing here decides which is which: buildingsWantingFuel is the game's
             // own ShouldAutoRefuelNow, and it is true exactly when carrying wood is the next
             // thing that has to happen.
+            // Gross on purpose, where the security decisions now read DaysOfFoodKeeping.
+            //
+            // The question here is "is there raw food nobody has cooked", and food about to
+            // spoil makes that MORE urgent rather than less — cooking is one of the ways it
+            // stops spoiling. Reading the keeping figure would quietly cancel the cooking at
+            // exactly the moment it was worth most.
             bool nothingCooked = s.daysOfFood >= 1f && s.daysOfMeals < 1f &&
                                  s.buildingsWantingFuel == 0;
 
