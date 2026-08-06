@@ -298,7 +298,18 @@ namespace AutoColony.Modules
             Chronicle.Record(ChronicleCategory.Economy, string.Format(
                 "work is leaning — {0}  [{1}{2}, {3:0}C]",
                 shape, s.season,
-                s.growingSeasonNow ? ", fields growing" : ", nothing grows outdoors",
+                // The forecast said out loud, so a failure to read it is visible.
+                //
+                // CaptureSeasonAhead catches its own exceptions and leaves both figures at
+                // zero, and FoodTarget then returns the plain gene — which is exactly the old
+                // behaviour, silently. A forecast that quietly stops working looks identical to
+                // one that says the fields never stop, and that is the fault this project has
+                // now been caught by five times in its own instruments. So it is printed:
+                // "fields growing, 22 days left then 15 barren".
+                (s.growingSeasonNow ? ", fields growing" : ", nothing grows outdoors")
+                    + (s.growingDaysLeft > 0 || s.barrenDaysAhead > 0
+                        ? ", " + s.growingDaysLeft + "d left then " + s.barrenDaysAhead + "d barren"
+                        : ", season unread"),
                 s.outdoorTemperature));
         }
 
