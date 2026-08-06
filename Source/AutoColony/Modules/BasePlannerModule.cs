@@ -1151,7 +1151,7 @@ namespace AutoColony.Modules
         /// there, and waiting for every last blueprint to be built would stall the base whenever
         /// one item was unreachable.
         /// </summary>
-        static bool FocusRoomUnfinished(DirectorContext ctx)
+        public static bool FocusRoomUnfinished(DirectorContext ctx)
         {
             if (ctx.plan == null || ctx.plan.Focus == null) return false;
 

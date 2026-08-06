@@ -525,11 +525,33 @@ namespace AutoColony.Modules
             // and means at 1.00, chopping wood at 2.5 against building at 2.2 while three
             // colonists shared two beds. Nothing was misweighted; building simply had no way to
             // say it was falling behind.
+            // ...and the backlog is not the only thing that says so.
+            //
+            // Scaling with the backlog fixed how loudly building could ask. It left the trigger
+            // asking the wrong question: "are there blueprints right now" rather than "is the
+            // plan waiting on a room". Between batches of blueprints a sited, unfinished,
+            // focused-on room produces a backlog of zero, Construction drops to 0.8 — below
+            // neutral — and the colonists go and do something else.
+            //
+            // Run 166 day 2: Kitchen and Bedroom sited since day 0, roomsEver 0, three colonists
+            // asleep on open ground with "Need colonist beds" on screen, and the work lean
+            // reading Tailoring 2.2, Growing 1.7, Cleaning 1.6, Cooking 1.5 with Construction
+            // nowhere in it. The goal layer had named shelter the most urgent thing in the colony
+            // and the labour layer had no way to hear it.
+            //
+            // The greater of the two pressures, not a branch between them: a room the plan is
+            // waiting on is construction work whether or not a blueprint happens to be queued
+            // this instant. FocusRoomUnfinished is the planner's own test, shared rather than
+            // reimplemented, so the two layers cannot come to disagree about what unfinished
+            // means.
             int backlog = s.pendingBlueprints + s.pendingFrames;
+            float fromBacklog = backlog > 0
+                ? 2.2f + AcMath.Clamp01(backlog / 30f) * 1.5f
+                : 0.8f;
+            float fromPlan = BasePlannerModule.FocusRoomUnfinished(ctx) ? 2.2f : 0f;
+
             Need("Construction", s.colonistsCutOff > 0 ? 5f
-                               : backlog > 0
-                                 ? 2.2f + AcMath.Clamp01(backlog / 30f) * 1.5f
-                                 : 0.8f);
+                               : (fromBacklog > fromPlan ? fromBacklog : fromPlan));
 
             // Against the plan's target as well as the genome's, the same way the resource
             // module designates against both. Otherwise the colony digs and chops for what the

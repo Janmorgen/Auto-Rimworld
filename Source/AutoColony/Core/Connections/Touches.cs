@@ -127,7 +127,11 @@ namespace AutoColony.Connections
             new Touch
             {
                 module = "WorkPriorityModule",
-                reads = new[] { "ableColonists", "allColonists", "colonistsIdle", "fuelWanted" },
+                reads = new[]
+                {
+                    "ableColonists", "allColonists", "colonistsIdle", "fuelWanted",
+                    "pendingBlueprints", "pendingFrames", "plan.goals"
+                },
                 affects = new[] { "world.workPriorities", "world.bills", "world.labourAvailable" }
             },
 
@@ -397,6 +401,21 @@ namespace AutoColony.Connections
                            "possible at the one moment it mattered. Third colonist lost this " +
                            "way. Third instance of this same edge after run 135's bleeding and " +
                            "the fire front judged fightable by people already sent to a line"
+            },
+
+            new Consequence
+            {
+                from = "plan.goals",
+                to = "world.workPriorities",
+                confidence = Confidence.Observed,
+                evidence = "run 166 day 2 — the plan's focus was 'Shelter everyone, 0 beds for " +
+                           "3 colonists', a Kitchen and Bedroom had been sited since day 0, and " +
+                           "the work lean read Tailoring 2.2, Growing 1.7, Cleaning 1.6, " +
+                           "Cooking 1.5 with Construction nowhere in it. Construction keyed on " +
+                           "pendingBlueprints alone, which is zero between batches, so it sat " +
+                           "at 0.8 while three colonists slept outside. The goal layer named " +
+                           "the most urgent thing in the colony and the labour layer had no " +
+                           "way to hear it"
             }
         };
 
