@@ -2,6 +2,15 @@
 
 Read this at the start of every loop. It is short on purpose.
 
+**Where things are.** How RimWorld itself works is in **`docs/rimworld/`** — twenty-one
+reference notes covering every core system, consulted every run and never edited (§9). What
+each module reads and changes is in `Source/AutoColony/Core/Connections/Touches.cs` (§4). What
+the colony is doing right now is `scripts/check30.sh`, which recites this checklist back at
+every check.
+
+Do not answer a question about the game from memory when a note covers it, and do not take a
+*number* from the note — read the def through the API probe. §9 says why.
+
 ---
 
 ## 1. What the project is
@@ -142,8 +151,7 @@ Accepted cost: run length is not a clean measurement. Do not quote it as though 
 5. **Trace it before touching it.** Read the module's declared reads and affects, confirm they
    are still true, and follow the chain out from them — the fault is usually one link further
    along than the symptom.
-6. **Consult `docs/rimworld/` on any question about how the game works** — before assuming,
-   before deriving it from a chronicle, and before writing the change. See §9.
+6. **Consult `docs/rimworld/` before assuming anything about how the game works.** See §9.
 7. Make one change, on the highest rung of the ladder that reaches.
 8. Update the declarations I invalidated, and add any new edge to the map, labelled
    **observed** or **suspected**.
