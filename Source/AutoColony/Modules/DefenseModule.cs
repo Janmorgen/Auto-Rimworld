@@ -1112,6 +1112,45 @@ namespace AutoColony.Modules
             return able;
         }
 
+        /// <summary>Set once per spell so the too-late line is stated rather than repeated.</summary>
+        bool tooLateNoted;
+
+        /// <summary>
+        /// How long this colonist needs to reach that one, in ticks.
+        ///
+        /// Straight-line distance at their own move speed, which is what makes a lost leg
+        /// visible: RimWorld charges a missing part to MoveSpeed, so a one-legged doctor reads
+        /// as the slow walker they are without this having to know what a leg is.
+        /// </summary>
+        static int TicksToReach(Pawn pawn, Pawn patient)
+        {
+            if (pawn == null || patient == null) return 0;
+            if (!patient.Spawned || !pawn.Spawned) return MedicChoice.Unreachable;
+
+            try
+            {
+                if (!pawn.CanReach(patient, PathEndMode.Touch, Danger.Deadly))
+                    return MedicChoice.Unreachable;
+
+                float speed = pawn.GetStatValue(StatDefOf.MoveSpeed);
+                float distance = (pawn.Position - patient.Position).LengthHorizontal;
+                return MedicChoice.TicksToCross(distance, speed);
+            }
+            catch (Exception) { return MedicChoice.Unreachable; }
+        }
+
+        /// <summary>The shortest walk anyone has to the patient, in hours, for the chronicle.</summary>
+        static float NearestWalkHours(List<Pawn> fighters, Pawn patient)
+        {
+            int best = int.MaxValue;
+            for (int i = 0; i < fighters.Count; i++)
+            {
+                int t = TicksToReach(fighters[i], patient);
+                if (t >= 0 && t < best) best = t;
+            }
+            return best == int.MaxValue ? -1f : best / 2500f;
+        }
+
         Pawn ChooseReservedMedic(DirectorContext ctx, List<Pawn> fighters)
         {
             if (!CasualtyPolicy.ShouldReserveMedic(fighters.Count, ctx.state.colonistsDowned,
@@ -1126,8 +1165,15 @@ namespace AutoColony.Modules
                 return null;
             }
 
-            Pawn best = null;
+            // Who is bleeding, and how long they have. Both are read rather than assumed: the
+            // deadline decides whether a walk is worth starting, and the patient decides how far
+            // the walk is.
+            var patient = ctx.state.soonestBleedingOut;
+            int deadline = ctx.state.ticksToFirstBloodLoss;
+
             int bestSkill = -1;
+            Pawn best = null;
+            float bestUse = 0f;
             float bestValue = float.MaxValue;
 
             for (int i = 0; i < fighters.Count; i++)
@@ -1137,15 +1183,37 @@ namespace AutoColony.Modules
                 if (pawn.WorkTagIsDisabled(WorkTags.Caring)) continue;
 
                 int skill = CombatAssessment.SkillLevel(pawn, SkillDefOf.Medicine);
+                int toReach = TicksToReach(pawn, patient);
+                float use = MedicChoice.Usefulness(skill, toReach, deadline);
                 float value = CombatAssessment.ColonistValue(pawn);
 
-                if (skill > bestSkill || (skill == bestSkill && value < bestValue))
+                if (use > bestUse || (use == bestUse && best != null && value < bestValue))
                 {
                     best = pawn;
+                    bestUse = use;
                     bestSkill = skill;
                     bestValue = value;
                 }
             }
+
+            // Everybody arrives too late. Holding one back saves nobody and costs the line a
+            // fighter, so the honest answer is to say so rather than reserve a medic for a
+            // deadline that has already passed.
+            if (best == null && patient != null)
+            {
+                if (!tooLateNoted)
+                {
+                    tooLateNoted = true;
+                    Chronicle.Record(ChronicleCategory.Health, string.Format(
+                        "nobody can reach {0} before they bleed out ({1:0.0} hours of walking " +
+                        "against {2:0.0} left) — keeping everyone in the line, because a doctor " +
+                        "who arrives to a corpse has cost the fight a fighter and saved nothing",
+                        patient.LabelShortCap, NearestWalkHours(fighters, patient),
+                        deadline / 2500f));
+                }
+                return null;
+            }
+            tooLateNoted = false;
 
             if (best != null && best != reservedMedic)
             {

@@ -128,6 +128,19 @@ namespace AutoColony
         public int colonistsFreeForWork;
 
         /// <summary>
+        /// Ticks until the first colonist dies of blood loss, or -1 when nobody is on that clock.
+        ///
+        /// The deadline itself rather than a count of people who have one. Run 162 lost Pansy
+        /// with a Medicine 7 doctor reserved to tend them and one leg between the doctor and the
+        /// patient; nothing anywhere could compare how long the walk took against how long the
+        /// patient had, because this number was computed and discarded.
+        /// </summary>
+        public int ticksToFirstBloodLoss = -1;
+
+        /// <summary>The colonist that deadline belongs to, so help can be sent to the right one.</summary>
+        public Pawn soonestBleedingOut;
+
+        /// <summary>
         /// Colonists the game says will die of blood loss within a day if nobody tends them.
         ///
         /// Read as <c>HealthUtility.TicksUntilDeathDueToBloodLoss</c>, which is the number
@@ -997,7 +1010,20 @@ namespace AutoColony
                         p.health.hediffSet.BleedRateTotal > 0.001f)
                     {
                         int ticks = HealthUtility.TicksUntilDeathDueToBloodLoss(p);
-                        if (ticks < 60000) s.colonistsBleedingOut++;
+                        if (ticks < 60000)
+                        {
+                            s.colonistsBleedingOut++;
+
+                            // Keep the number, not only the fact. This line used to read the
+                            // deadline and throw it away, which left every downstream decision
+                            // answering "is somebody bleeding" when the question was "how long
+                            // have we got" — see MedicChoice for what that cost in run 162.
+                            if (s.ticksToFirstBloodLoss < 0 || ticks < s.ticksToFirstBloodLoss)
+                            {
+                                s.ticksToFirstBloodLoss = ticks;
+                                s.soonestBleedingOut = p;
+                            }
+                        }
                     }
                 }
                 catch (Exception) { }

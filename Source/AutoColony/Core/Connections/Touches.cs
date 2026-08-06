@@ -91,7 +91,8 @@ namespace AutoColony.Connections
                     "ableColonists", "allColonists", "colonistBeds", "colonistsBleedingOut",
                     "colonistsDowned", "colonistsFreeForWork", "danger", "fires",
                     "firesNearBase", "hostilePawns", "huntedColonists", "nearestFireDistance",
-                    "poweredTurrets", "predatorsHunting", "wealthTotal"
+                    "poweredTurrets", "predatorsHunting", "ticksToFirstBloodLoss",
+                    "wealthTotal"
                 },
                 affects = new[]
                 {
@@ -355,6 +356,32 @@ namespace AutoColony.Connections
                            "buying the fights the lesson was about. The dangerous-prey floor " +
                            "is now ThreatMemory.ForceFor(Manhunter), with the old constant as " +
                            "the prior for a colony that has met none"
+            },
+
+            new Consequence
+            {
+                from = "world.designations",
+                to = "colonistsBleedingOut",
+                confidence = Confidence.Observed,
+                evidence = "run 162 day 3 15h - day 4 07h — a hunt designation on a Rhinoceros " +
+                           "(threat 270, taken at 528 strength) became a 'Rhinoceros revenge' " +
+                           "eleven hours later that took Poole's right leg and put Pansy on the " +
+                           "floor bleeding. Pansy died of blood loss at day 4 07h. The hunt " +
+                           "module chooses what will later arrive as a casualty, and the two " +
+                           "were connected by nothing"
+            },
+
+            new Consequence
+            {
+                from = "ticksToFirstBloodLoss",
+                to = "world.drafted",
+                confidence = Confidence.Observed,
+                evidence = "run 162 day 4 01h-07h — the medic held back to tend was chosen on " +
+                           "Medicine skill alone, and the best doctor had just lost a leg to the " +
+                           "same fight that made the casualty. Six hours of walking against six " +
+                           "hours of bleeding, decided by a comparison nothing was making. The " +
+                           "deadline was read from the game every pass and thrown away, kept " +
+                           "only as a count of who had one"
             }
         };
 
