@@ -67,7 +67,8 @@ namespace AutoColony.Connections
             "world.blueprints",       // construction placed for colonists to build
             "world.designations",     // mine, cut, harvest, strip-roof
             "world.labourAvailable",  // hands free to do ordinary work, which drafting removes
-            "learning.threatMemory"   // what a kind of fight has cost, carried between colonies
+            "learning.threatMemory",  // what a kind of fight has cost, carried between colonies
+            "plan.goals"              // which goal holds the plan, and for how long
         };
 
         public static readonly Touch[] Modules =
@@ -210,6 +211,19 @@ namespace AutoColony.Connections
                            "is never built without a prisoner, so recruitment fired zero times " +
                            "across fifteen colonies and all 23 arrivals were wanderers the game " +
                            "handed over. The precondition nothing creates"
+            },
+
+            // Two rules, each written for a real loss, deadlocking each other.
+            new Consequence
+            {
+                from = "world.blueprints",
+                to = "plan.goals",
+                confidence = Confidence.Observed,
+                evidence = "run 142 — the planner reserves a spare slot for the focus room but " +
+                           "only once the plan asks twice running, while the focus detector " +
+                           "demoted after half a day, so the plan could never ask twice. " +
+                           "Shelter asked from hour zero, was stood down five times in four " +
+                           "days, and got a bedroom on day 15"
             },
 
             new Consequence

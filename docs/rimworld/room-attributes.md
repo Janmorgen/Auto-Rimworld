@@ -7,7 +7,7 @@ Most rooms colonists spend real time in (bedrooms, dining rooms, rec rooms, barr
 ## The Four Inputs
 
 - **Wealth** — total market value of everything in the room (furniture, floors, stored items).
-- **Beauty** — average beauty rating of the room's tiles and contents. Raised by sculptures/artwork, fine flooring (stone, silver/gold-plated tile), and flowering plants; lowered by filth, blood, vomit, and cheap or damaged furniture. Furniture beauty scales with its crafted **quality** — see [Crafting & Materials](crafting-and-materials.md).
+- **Beauty** — average beauty rating of the room's tiles and contents. Raised by sculptures/artwork, fine flooring (stone, silver/gold-plated tile), and flowering plants; lowered by filth, blood, vomit, and cheap or damaged furniture. Furniture beauty scales with its crafted **quality** and its **material** — see [Crafting](crafting.md) and [Materials](materials.md).
 - **Space** — effective walkable floor area. Bigger generally helps, but a huge, sparsely-furnished room scores worse than a smaller, well-furnished one.
 - **Cleanliness** — average floor cleanliness. Dirt, mud, and filth drag it down, and it keeps decaying until a colonist cleans it (or it sits on a self-cleaning floor type).
 
@@ -28,8 +28,8 @@ Most rooms colonists spend real time in (bedrooms, dining rooms, rec rooms, barr
 
 ## Where Cleanliness Matters Beyond Mood
 
-- **Hospitals** — a cleaner room reduces infection risk during treatment; see [Health & Medicine](health-and-medicine.md).
-- **Kitchens** — a cleaner room reduces food-poisoning risk in prepared meals; see [Food & Nutrition](food-and-nutrition.md).
+- **Hospitals** — a cleaner room reduces infection risk during treatment; see [Medicine](medicine.md).
+- **Kitchens** — a cleaner room reduces food-poisoning risk in prepared meals; see [Food](food.md).
 - Sterile tile flooring boosts cleanliness a lot but is visually plain (low beauty), so hospitals and kitchens often trade away some beauty for function.
 
 ## Beyond Colonist Rooms
@@ -39,4 +39,4 @@ Most rooms colonists spend real time in (bedrooms, dining rooms, rec rooms, barr
 
 ---
 
-**See also:** [Room Types](room-types.md) for which furniture defines each room · [Health & Medicine](health-and-medicine.md) for infection risk · [Index](index.md)
+**See also:** [Room Types](room-types.md) for which furniture defines each room · [Health](health.md) for infection risk · [Index](index.md)

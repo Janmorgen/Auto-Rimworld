@@ -43,4 +43,4 @@ Not player-sown, but common resource sources found across biomes:
 
 ---
 
-**See also:** [Biomes](biomes.md) for what grows where naturally · [Food & Nutrition](food-and-nutrition.md) for turning crops into meals · [Research](research.md) for the Devilstrand/Cocoa/Psychite research gates · [Index](index.md)
+**See also:** [Biomes](biomes.md) for what grows where naturally · [Food](food.md) for turning crops into meals · [Research](research.md) for the Devilstrand/Cocoa/Psychite research gates · [Index](index.md)

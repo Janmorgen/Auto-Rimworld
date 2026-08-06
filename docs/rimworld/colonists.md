@@ -69,8 +69,8 @@ Every colonist tracks several needs that decay over time and roll up into overal
 - **Comfort** — fulfilled by sitting/lying on quality furniture; higher-quality, more comfortable furniture refills it faster.
 - **Beauty** — satisfied just by being in/near attractive surroundings; punished by ugly or filthy ones.
 
-Mood itself is a separate rolling total built from every currently-active "thought" (see [Mood & Mental Breaks](mood-and-mental-breaks.md)), not just the needs bars directly — needs feed into thoughts, which feed into mood.
+Mood itself is a separate rolling total built from every currently-active "thought" (see [Mood](mood.md)), not just the needs bars directly — needs feed into thoughts, which feed into mood.
 
 ---
 
-**See also:** [Mood & Mental Breaks](mood-and-mental-breaks.md) for how low needs turn into thoughts and breaks · [Work & Production](work-and-production.md) for how skills translate into daily output · [Index](index.md)
+**See also:** [Mood](mood.md) and [Mental Breaks](mental-breaks.md) for how low needs turn into thoughts and breaks · [Work Priorities](work-priorities.md) for how skills translate into daily output · [Index](index.md)

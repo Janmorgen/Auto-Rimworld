@@ -32,7 +32,7 @@ Trading itself is covered in [Trading](trading.md); this file is about the relat
 ## Practical Notes
 
 - Keeping at least one or two factions solidly allied is worth prioritizing early — their trade caravans and potential military aid are a real safety net.
-- Wealth still matters here too: a very wealthy colony gets bigger raids regardless of how many factions like you, so diplomacy reduces *some* threats (hostile-faction raids) but doesn't replace defense — see [The Storyteller & Events](storyteller-and-events.md).
+- Wealth still matters here too: a very wealthy colony gets bigger raids regardless of how many factions like you, so diplomacy reduces *some* threats (hostile-faction raids) but doesn't replace defense — see [The Storyteller](storyteller.md).
 
 ---
 

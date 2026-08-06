@@ -29,9 +29,9 @@ Biome is set when you pick a landing site and can't be changed afterward — it 
 - **Growing season length** — from year-round down to a short window, directly limiting outdoor farming; see [Plants](plants.md).
 - **Soil fertility** — how much crop yield/growth speed you get per tile before hydroponics.
 - **Wildlife density and species** — which animals you can hunt or tame; see [Animals](animals.md).
-- **Disease frequency** — swamps and tropical biomes roll for disease far more often than tundra or desert; see [Health & Medicine](health-and-medicine.md).
-- **Temperature extremes** — how much heating/cooling infrastructure you'll need to keep colonists and crops safe; see [Base Building & Power](base-building-and-power.md).
+- **Disease frequency** — swamps and tropical biomes roll for disease far more often than tundra or desert; see [Medicine](medicine.md).
+- **Temperature extremes** — how much heating/cooling infrastructure you'll need to keep colonists and crops safe; see [Base Building](base-building.md) and [Power](power.md).
 
 ---
 
-**See also:** [Plants](plants.md) and [Animals](animals.md) for what each biome supports · [Health & Medicine](health-and-medicine.md) for the diseases some biomes make more common · [Index](index.md)
+**See also:** [Plants](plants.md) and [Animals](animals.md) for what each biome supports · [Medicine](medicine.md) for the diseases some biomes make more common · [Index](index.md)

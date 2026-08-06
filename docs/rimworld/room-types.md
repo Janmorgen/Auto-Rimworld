@@ -42,4 +42,4 @@ Workshops, kitchens, and labs don't have their own named "impressive workshop" m
 
 ---
 
-**See also:** [Room Attributes](room-attributes.md) for the mood-scoring mechanics · [Recruiting](recruiting.md) for prison cell effects · [Base Building & Power](base-building-and-power.md) for temperature control · [Index](index.md)
+**See also:** [Room Attributes](room-attributes.md) for the mood-scoring mechanics · [Recruiting](recruiting.md) for prison cell effects · [Base Building](base-building.md) for temperature control · [Index](index.md)

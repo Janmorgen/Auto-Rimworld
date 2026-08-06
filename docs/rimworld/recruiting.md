@@ -17,7 +17,7 @@ Three main ways new pawns join a base-game colony: recruiting prisoners, wandere
   - Your storyteller/difficulty settings
 - **Keeping a prisoner's mood up speeds this along** — a bed, prompt feeding, and a reasonably clean, temperature-controlled cell all help. See [Room Attributes](room-attributes.md).
 - A prisoner set to "Reduce Resistance" only can be used purely to grind a low-Social colonist's skill, then released, sold, or executed once you're done — this is one of the only reliable ways to train Social without waiting on organic social interactions.
-- Prisoners can also simply be **sold to traders** instead of recruited — see [Trading](trading.md) — or, less pleasantly, have organs harvested; see [Health & Medicine](health-and-medicine.md).
+- Prisoners can also simply be **sold to traders** instead of recruited — see [Trading](trading.md) — or, less pleasantly, have organs harvested; see [Medicine](medicine.md).
 
 ## Wanderers & Refugees
 
@@ -31,7 +31,7 @@ Three main ways new pawns join a base-game colony: recruiting prisoners, wandere
 ## Things to Weigh Before Recruiting
 
 - Check traits and backstory-locked work types before committing — a pyromaniac or a pawn incapable of violence changes how useful they'll actually be. See [Colonists In-Depth](colonists.md).
-- More colonists raise your colony's total wealth, which raises raid size and frequency — recruiting is a genuine tradeoff, not a pure win. See [The Storyteller & Events](storyteller-and-events.md).
+- More colonists raise your colony's total wealth, which raises raid size and frequency — recruiting is a genuine tradeoff, not a pure win. See [The Storyteller](storyteller.md).
 - A pawn's disabled work types (from traits/backstory) can't be forced no matter the priority — worth checking before you invest days breaking their resistance.
 
 ---

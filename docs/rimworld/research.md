@@ -128,4 +128,4 @@ This is the vanilla win condition. All of these are expensive (roughly 3,000–8
 
 ---
 
-**See also:** [Health & Medicine](health-and-medicine.md) for the prosthetics/bionics path · [Crafting](crafting.md) for what skills do with these unlocks · [Index](index.md)
+**See also:** [Prosthetics System](prosthetics.md) for what the Prosthetics research actually unlocks · [Crafting](crafting.md) for what skills do with these unlocks · [Index](index.md)

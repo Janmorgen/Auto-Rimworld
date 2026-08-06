@@ -34,7 +34,12 @@ namespace AutoColony
     public class AutoColonyDirector : GameComponent
     {
         /// <summary>Ticks between colony state captures. 1250 ticks is half an in-game hour.</summary>
-        const int StateInterval = 1250;
+        /// <summary>
+        /// Public because the planner derives its patience floor from it. A patience shorter
+        /// than a few passes of this would be measuring quantisation rather than the goal, and
+        /// stating the relationship keeps it true if this number ever moves.
+        /// </summary>
+        public const int StateInterval = 1250;
 
         // --- persistent learning state ---
         public EvolutionEngine evolution = new EvolutionEngine();

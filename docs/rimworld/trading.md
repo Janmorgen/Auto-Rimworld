@@ -28,9 +28,9 @@ Nearly everything with a market value: raw resources, crafted goods, apparel, we
 ## Practical Notes
 
 - Building up silver reserves and calling in caravans/ships regularly is one of the most reliable ways to convert excess production (crafted goods, drugs, art) into whatever specific resource you're short on.
-- Trade is also a lever on colony wealth, and therefore on raid size — see [The Storyteller & Events](storyteller-and-events.md) — so some players deliberately convert silver into non-wealth-counting consumables rather than hoarding it.
+- Trade is also a lever on colony wealth, and therefore on raid size — see [The Storyteller](storyteller.md) — so some players deliberately convert silver into non-wealth-counting consumables rather than hoarding it.
 - A well-stocked, well-defended caravan is generally safer than waiting on random passing traders if you need a specific resource urgently.
 
 ---
 
-**See also:** [Questing](questing.md) for reward-based alternatives to trading · [The Storyteller & Events](storyteller-and-events.md) for how wealth affects raids · [Index](index.md)
+**See also:** [Questing](questing.md) for reward-based alternatives to trading · [The Storyteller](storyteller.md) for how wealth affects raids · [Index](index.md)

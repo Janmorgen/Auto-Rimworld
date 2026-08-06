@@ -78,6 +78,31 @@ namespace AutoColony.Learning
         // ---- work assignment shape --------------------------------------------------
         public const string WorkSkillWeight = "work.skillWeight";
         public const string WorkPassionWeight = "work.passionWeight";
+
+        /// <summary>
+        /// How much longer a wait really takes than the arithmetic says, before the colony has
+        /// met that kind of wait often enough to have learned its own answer.
+        ///
+        /// The estimate assumes the measured rate holds and it does not — researchers get
+        /// pulled onto hauling, builders get drafted. This is the prior; PatienceMemory
+        /// replaces it with evidence the moment there is any.
+        /// </summary>
+        public const string PlannerPatienceSlack = "planner.patienceSlack";
+
+        /// <summary>
+        /// How long a goal is stood down for, as a fraction of the wait it just failed to make
+        /// good on. A goal that held the plan six days and moved nothing should not be back in
+        /// an hour.
+        /// </summary>
+        public const string PlannerDemotionFraction = "planner.demotionFraction";
+
+        /// <summary>
+        /// The longest any goal may hold the plan, in days, however patient the arithmetic says
+        /// to be. There is no honest derivation for this one — it is the point past which
+        /// holding on stops being patience and becomes a colony doing one thing while
+        /// everything else rots — so it is a gene and says so.
+        /// </summary>
+        public const string PlannerPatienceCeiling = "planner.patienceCeiling";
         public const string WorkNeedWeight = "work.needWeight";
         public const string WorkSpread = "work.spread";
         public const string WorkBands = "work.bands";
@@ -183,6 +208,14 @@ namespace AutoColony.Learning
             Add(WorkNeedWeight, 0f, 3f, 1.2f, "Work", "Weight on current colony need");
             Add(WorkSpread, 0f, 1f, 0.5f, "Work", "How widely each colonist is assigned");
             Add(WorkBands, 1f, 4f, 3f, "Work", "Distinct priority bands used");
+
+            // Defaults reproduce the old flat behaviour wherever no estimate can be made:
+            // ~0.5 days of patience and ~1 day of demotion, which is what FocusGraceTicks and
+            // DemotionTicks were. The change is a strict improvement where it bites and
+            // neutral everywhere else.
+            Add(PlannerPatienceSlack, 1f, 3f, 1.5f, "Planner", "Slack on an estimated wait");
+            Add(PlannerDemotionFraction, 0.25f, 2f, 1f, "Planner", "Stand-down as a fraction of the wait");
+            Add(PlannerPatienceCeiling, 2f, 20f, 6f, "Planner", "Longest a goal may hold the plan, days");
 
             Add(BaseRoomSize, 4f, 11f, 7f, "Base", "Planned room interior size");
             Add(BaseSpareBeds, 0f, 5f, 1f, "Base", "Spare beds kept ready");

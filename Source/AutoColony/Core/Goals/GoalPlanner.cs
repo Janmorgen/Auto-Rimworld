@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using AutoColony.Learning;
 using RimWorld;
 using Verse;
 
@@ -180,7 +181,7 @@ namespace AutoColony.Goals
         {
             var plan = new ColonyPlan();
 
-            int now = CurrentTick();
+            int now = CurrentTick(ctx);
 
             // Is anything actually happening? Any unsatisfied immediate goal counts, with no
             // threshold on top of it.
@@ -237,13 +238,23 @@ namespace AutoColony.Goals
             if (best == null) return plan;
 
             lastWanted = best.Name;
-            WatchTheFocus(best, bestUrgency, now, ctx);
 
             plan.Wanted = best;
             plan.EmergencyActive = best.Horizon == GoalHorizon.Immediate;
 
             // Walk back to something that can actually be started today.
             plan.Focus = Actionable(best, ctx, 0);
+
+            // Judged on the work, demoted by name.
+            //
+            // This ran before plan.Focus existed and was handed `best`, so the watcher asked
+            // whether the *wanted* goal was progressing while the colony was busy on a
+            // prerequisite. Those are different goals whenever anything is blocked, and the
+            // gap is not academic: PreservedFoodGoal requires a research room and wants no room
+            // of its own, so WorkIsUnderway looked at a goal with no room, found nothing, and
+            // stood it down — while the planner was correctly building the research room it had
+            // asked for. The colony was punished for the success of work done on its behalf.
+            WatchTheFocus(best, plan.Focus, bestUrgency, now, ctx);
             plan.Horizon = plan.Focus.Horizon;
             plan.Focus.DeclareNeeds(ctx, plan.Needs);
             plan.ResearchWanted = ResearchFor(plan.Focus);
@@ -346,16 +357,12 @@ namespace AutoColony.Goals
         /// <summary>How long a goal may be passed over before it is given a turn. Three days.</summary>
         const int BlockedTicksBeforeATurn = 180000;
 
-        /// <summary>
-        /// How long a goal holds the focus before it has to show progress. Half a day.
-        ///
-        /// Long enough that ordinary work — walking to the site, clearing it, hauling the
-        /// material — is not mistaken for failure.
-        /// </summary>
-        const int FocusGraceTicks = 30000;
-
-        /// <summary>How long a goal that failed to move is passed over afterwards. One day.</summary>
-        const int DemotionTicks = 60000;
+        // FocusGraceTicks and DemotionTicks used to live here — one flat half day of patience
+        // for every non-emergency goal, and one flat day of stand-down. Both are gone. A
+        // bedroom takes days of building and a research project takes days of somebody at a
+        // bench, so half a day was never long enough to see either move, and three goals gated
+        // on research could not pass the test at any time. Patience is now the estimated time
+        // for the blocker to clear, from rates the colony measures on itself. See PatienceFor.
 
         class GoalRecord
         {
@@ -363,6 +370,18 @@ namespace AutoColony.Goals
             public int focusSince = -1;
             public float urgencyAtFocus;
             public int demotedUntil = -1;
+
+            // Accumulated across the whole spell rather than reset whenever the focus flickers.
+            //
+            // focusSince alone meant a goal that lost the plan for a single planner pass got a
+            // whole fresh window. Harmless while every window was half a day; under a patience
+            // measured in days it lets a goal going nowhere hold the colony for ever by
+            // flickering, never accumulating enough continuous focus to be judged.
+            public int focusTicks;
+            public int lastFocusTick = -1;
+            public float urgencyAtSpellStart;
+            public int estimatedPatience = GoalPatience.NotDerivable;
+            public Learning.BlockerKind blocker = Learning.BlockerKind.Unknown;
         }
 
         readonly Dictionary<string, GoalRecord> records = new Dictionary<string, GoalRecord>();
@@ -381,6 +400,13 @@ namespace AutoColony.Goals
         string watchedGoal;
 
         /// <summary>
+        /// How fast this colony researches and builds, measured on itself rather than looked
+        /// up. Deliberately not persisted: a rate carried across a save reload would be
+        /// differenced against a stale tick baseline, which is worse than having no rate.
+        /// </summary>
+        readonly ColonyPace pace = new ColonyPace();
+
+        /// <summary>
         /// Notices a goal that holds the plan while the thing it measures fails to improve.
         ///
         /// A focus is a claim that working on this will make it better. Nothing ever checked the
@@ -393,63 +419,215 @@ namespace AutoColony.Goals
         /// because the fire is still burning is precisely the wrong response. This is for the
         /// goals that quietly go nowhere, not the ones that are loud about it.
         /// </summary>
-        void WatchTheFocus(ColonyGoal goal, float urgency, int now, DirectorContext ctx)
+        void WatchTheFocus(ColonyGoal wanted, ColonyGoal focus, float urgency, int now,
+                           DirectorContext ctx)
         {
-            var record = RecordFor(goal);
+            var record = RecordFor(wanted);
 
-            if (watchedGoal != goal.Name)
+            // A new spell. Everything about the last one is finished with.
+            if (watchedGoal != wanted.Name)
             {
-                watchedGoal = goal.Name;
+                watchedGoal = wanted.Name;
                 record.focusSince = now;
+                record.lastFocusTick = now;
+                record.focusTicks = 0;
                 record.urgencyAtFocus = urgency;
+                record.urgencyAtSpellStart = urgency;
+                record.estimatedPatience = GoalPatience.NotDerivable;
                 return;
             }
 
             record.blockedSince = -1;   // it is being worked on, not waiting
 
-            if (goal.Horizon == GoalHorizon.Immediate) return;
-            if (record.focusSince < 0 || now - record.focusSince < FocusGraceTicks) return;
+            // Accumulate held time across gaps rather than restarting on every flicker. A gap
+            // longer than a few passes is a different spell and is handled above by the name
+            // check; this covers the goal that keeps winning with the odd pass in between.
+            if (record.lastFocusTick >= 0 && now > record.lastFocusTick)
+                record.focusTicks += now - record.lastFocusTick;
+            record.lastFocusTick = now;
 
-            // A goal whose building is going up is not a goal going nowhere.
-            //
-            // Urgency is a reading of the finished state, and building improves it in steps: a
-            // bedroom reads "1 bed for 3 colonists" from the moment its walls are queued until
-            // the moment a second bed is finished, which is a good deal longer than half a day.
-            // Measuring the reading alone therefore calls ordinary construction a failure.
-            //
-            // Watched it do exactly that on its first outing: "Shelter everyone" stood down at
-            // 0.67 then, 0.67 now, while the bedroom it had asked for was half-built and the
-            // planner's own log said it was waiting on that room. The colony went to research
-            // with two of three colonists on the ground.
-            //
-            // So the question is whether the colony is visibly doing what the goal asked for,
-            // and a blueprint or frame standing in the room it wanted is the plainest possible
-            // evidence that it is.
-            if (WorkIsUnderway(goal, ctx))
+            if (wanted.Horizon == GoalHorizon.Immediate) return;
+
+            // How long the thing the colony is actually doing ought to take.
+            Learning.BlockerKind blocker;
+            int patience = PatienceFor(focus, ctx, now, out blocker);
+            record.estimatedPatience = patience;
+            record.blocker = blocker;
+
+            var verdict = FocusWatch.Judge(
+                record.focusTicks, patience, urgency, record.urgencyAtFocus,
+                WorkIsUnderway(focus, ctx), false);
+
+            if (verdict == FocusVerdict.Hold) return;
+
+            if (verdict == FocusVerdict.ResetWindow)
             {
+                // The window restarts, but the spell does not — held time is what the goal has
+                // cost the colony, and it has still cost it.
                 record.focusSince = now;
                 record.urgencyAtFocus = urgency;
                 return;
             }
 
-            // Improving at all is enough. The question is whether the work is doing anything,
-            // not whether it is doing it quickly.
-            if (urgency < record.urgencyAtFocus)
-            {
-                record.focusSince = now;
-                record.urgencyAtFocus = urgency;
-                return;
-            }
+            int standDown = GoalPatience.DemotionAfter(
+                patience > 0 ? patience : record.focusTicks,
+                ctx.Gene(Genes.PlannerDemotionFraction));
 
-            record.demotedUntil = now + DemotionTicks;
-            record.focusSince = now;
+            record.demotedUntil = now + standDown;
+
+            // What the wait actually cost, so the next estimate of this kind is better. Only
+            // recorded on a demotion — a spell that ended because something more urgent
+            // happened teaches nothing about how long this kind of work takes.
+            if (patience > 0)
+            {
+                Learning.PatienceMemory.RecordOutcome(blocker, patience, record.focusTicks);
+                Learning.PatienceMemory.Save();   // written on the outcome, as threat memory is
+            }
 
             Chronicle.Record(ChronicleCategory.Economy, string.Format(
-                "'{0}' has held the plan for half a day and is no better for it ({1:0.00} then, " +
-                "{2:0.00} now) — standing it down for a day to let something else run",
-                goal.Name, record.urgencyAtFocus, urgency));
+                "'{0}' held the plan {1:0.0} days against a patience of {2} — and urgency did " +
+                "not move ({3:0.00} at the last check, {4:0.00} now); standing it down for {5:0.0} days",
+                wanted.Name, record.focusTicks / 60000f, DescribePatience(patience, blocker, ctx),
+                record.urgencyAtFocus, urgency, standDown / 60000f));
 
+            record.focusSince = now;
+            record.focusTicks = 0;
             record.urgencyAtFocus = urgency;
+            record.urgencyAtSpellStart = urgency;
+        }
+
+        /// <summary>
+        /// How long the work in front of this goal ought to take, from rates the colony has
+        /// measured on itself.
+        ///
+        /// Read off declarations that already exist — RequiresResearch and WantsRoom — so all
+        /// seventeen goals get an answer with no per-goal code, and no goal can claim to be
+        /// waiting on something it is not. A goal waiting on two things takes the longer of
+        /// them: finishing the Power room early buys nothing while Electricity is outstanding.
+        /// </summary>
+        int PatienceFor(ColonyGoal goal, DirectorContext ctx, int now,
+                        out Learning.BlockerKind blocker)
+        {
+            blocker = Learning.BlockerKind.Unknown;
+
+            int research = ResearchEta(goal, ctx, now);
+            int building = ConstructionEta(goal, ctx, now);
+
+            int estimate = GoalPatience.Longer(research, building);
+            if (estimate != GoalPatience.NotDerivable)
+                blocker = building >= research ? Learning.BlockerKind.Construction
+                                               : Learning.BlockerKind.Research;
+
+            // Nothing measurable to wait on. Fall back to what this colony family has learned
+            // about waits of this kind, seeded by the genome until it has met one.
+            float ratio = Learning.PatienceMemory.RatioFor(
+                blocker, ctx.Gene(Genes.PlannerPatienceSlack));
+
+            if (estimate == GoalPatience.NotDerivable)
+                estimate = (int)(PatienceFloor * ratio * 4f);
+
+            return GoalPatience.Patience(
+                estimate, ratio, PatienceFloor,
+                (int)(ctx.Gene(Genes.PlannerPatienceCeiling) * 60000f));
+        }
+
+        /// <summary>
+        /// Shorter than a few planner passes is measuring quantisation, not the goal. Derived
+        /// from the planner's own cadence rather than chosen, so it stays true if that changes.
+        /// </summary>
+        static int PatienceFloor { get { return AutoColonyDirector.StateInterval * 4; } }
+
+        /// <summary>Ticks for this goal's outstanding research, at the rate the colony is banking it.</summary>
+        int ResearchEta(ColonyGoal goal, DirectorContext ctx, int now)
+        {
+            var wanted = goal.RequiresResearch;
+            if (wanted == null || wanted.Length == 0) return GoalPatience.NotDerivable;
+
+            float remaining = 0f;
+            for (int i = 0; i < wanted.Length; i++)
+            {
+                var project = DefDatabase<ResearchProjectDef>.GetNamedSilentFail(wanted[i]);
+                if (project == null || project.IsFinished) continue;
+
+                try
+                {
+                    var manager = Find.ResearchManager;
+                    float done = manager != null ? manager.GetProgress(project) : 0f;
+                    remaining += System.Math.Max(0f, project.CostApparent - done);
+                }
+                catch (System.Exception) { }
+            }
+            if (remaining <= 0f) return GoalPatience.NotDerivable;
+
+            float rate = pace.Rate("research", ctx.state.researchPoints, now);
+            return GoalPatience.TicksToFinish(remaining, rate);
+        }
+
+        /// <summary>Ticks for the room this goal wants, at the rate its builders are clearing work.</summary>
+        int ConstructionEta(ColonyGoal goal, DirectorContext ctx, int now)
+        {
+            var role = goal.WantsRoom;
+            if (!role.HasValue || ctx.layout == null || ctx.map == null)
+                return GoalPatience.NotDerivable;
+
+            float remaining = 0f;
+            var rooms = ctx.layout.rooms;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                if (rooms[i].role != role.Value) continue;
+                remaining += RemainingWorkIn(ctx.map, rooms[i]);
+            }
+            if (remaining <= 0f) return GoalPatience.NotDerivable;
+
+            float rate = pace.Drain("construction:" + role.Value, remaining, now);
+            return GoalPatience.TicksToFinish(remaining, rate);
+        }
+
+        /// <summary>Work still outstanding on everything standing unbuilt in a planned room.</summary>
+        static float RemainingWorkIn(Map map, PlannedRoom room)
+        {
+            float total = 0f;
+            try
+            {
+                foreach (var cell in room.Rect)
+                {
+                    if (!cell.InBounds(map)) continue;
+
+                    var things = cell.GetThingList(map);
+                    for (int i = 0; i < things.Count; i++)
+                    {
+                        var frame = things[i] as Frame;
+                        if (frame != null) { total += frame.WorkLeft; continue; }
+
+                        var blueprint = things[i] as Blueprint;
+                        if (blueprint != null && blueprint.def.entityDefToBuild != null)
+                            total += blueprint.def.entityDefToBuild
+                                        .GetStatValueAbstract(StatDefOf.WorkToBuild);
+                    }
+                }
+            }
+            catch (System.Exception) { }
+            return total;
+        }
+
+        /// <summary>
+        /// The patience with where it came from, because a derived number and a remembered one
+        /// deserve different trust — the same distinction Touches.cs draws between an observed
+        /// edge and a suspected one.
+        /// </summary>
+        static string DescribePatience(int patience, Learning.BlockerKind blocker,
+                                       DirectorContext ctx)
+        {
+            string days = (patience / 60000f).ToString("0.0") + " days";
+            switch (blocker)
+            {
+                case Learning.BlockerKind.Research:
+                    return days + " (research still outstanding)";
+                case Learning.BlockerKind.Construction:
+                    return days + " (a room still going up)";
+                default:
+                    return days + " (nothing measurable to wait on, so from memory)";
+            }
         }
 
         /// <summary>
@@ -516,7 +694,7 @@ namespace AutoColony.Goals
         public string RankingFor(DirectorContext ctx, int take)
         {
             var scored = new List<KeyValuePair<string, float>>();
-            int now = CurrentTick();
+            int now = CurrentTick(ctx);
             bool emergency = AnyImmediateOutstanding(ctx);
 
             for (int i = 0; i < goals.Count; i++)
@@ -702,8 +880,17 @@ namespace AutoColony.Goals
             return false;
         }
 
-        static int CurrentTick()
+        /// <summary>
+        /// The clock, preferring the one the colony state already carries.
+        ///
+        /// Taken straight off Find.TickManager, the planner could not be stepped by a probe —
+        /// the self-test builds a synthetic ColonyState and would have had to move real game
+        /// time to exercise anything that depends on elapsed ticks, which is every part of the
+        /// patience machinery. state.tick is the same number when a game is running.
+        /// </summary>
+        static int CurrentTick(DirectorContext ctx)
         {
+            if (ctx != null && ctx.state != null && ctx.state.tick > 0) return ctx.state.tick;
             try { return Find.TickManager != null ? Find.TickManager.TicksGame : 0; }
             catch (System.Exception) { return 0; }
         }

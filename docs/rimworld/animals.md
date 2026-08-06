@@ -82,4 +82,4 @@ These take the most work to tame or hunt safely but pay off in bulk meat, leathe
 
 ---
 
-**See also:** [Biomes](biomes.md) for which animals spawn where · [Food & Nutrition](food-and-nutrition.md) for feeding livestock · [Index](index.md)
+**See also:** [Biomes](biomes.md) for which animals spawn where · [Nutrition](nutrition.md) for feeding livestock · [Index](index.md)
