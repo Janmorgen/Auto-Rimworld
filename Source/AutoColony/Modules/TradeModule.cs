@@ -100,9 +100,9 @@ namespace AutoColony.Modules
         ///
         /// Shaped as a list so a second want costs a line rather than a branch.
         /// </summary>
-        static List<KeyValuePair<ThingDef, int>> Shortfalls(DirectorContext ctx)
+        static List<Want> Shortfalls(DirectorContext ctx)
         {
-            var wants = new List<KeyValuePair<ThingDef, int>>();
+            var wants = new List<Want>();
             var s = ctx.state;
 
             // medicineCount, not medicineStored, and the difference matters. A doctor fetches
@@ -110,15 +110,53 @@ namespace AutoColony.Modules
             // wound gets treated — ColonyState says so where it captures both, having been
             // caught by the stockpile version in run 84. Reading the stored figure here would
             // have the colony buying medicine it already owns and cannot be bothered to haul.
+            //
+            // Any tier will do, and it has to. The shortfall is counted across herbal,
+            // industrial and ultratech together — that is what medicineCount is — so asking
+            // for one specific def measured a need in one currency and shopped in another.
+            // Run 153: a trader stood on the map on day 25 with the colony short, the deal
+            // opened, and nothing was bought; Jet died of an infection on day 27. Most traders
+            // stock industrial medicine and the want named herbal.
             int wantedMedicine = s.colonists * 2;
             if (s.medicineCount < wantedMedicine)
             {
-                var med = AcDefs.Thing("MedicineHerbal");
-                if (med != null)
-                    wants.Add(new KeyValuePair<ThingDef, int>(med, wantedMedicine - s.medicineCount));
+                var tiers = new List<ThingDef>();
+                foreach (var name in new[] { "MedicineIndustrial", "MedicineHerbal", "MedicineUltratech" })
+                {
+                    var def = AcDefs.Thing(name);
+                    if (def != null) tiers.Add(def);
+                }
+                if (tiers.Count > 0)
+                    wants.Add(new Want("medicine", tiers, wantedMedicine - s.medicineCount));
             }
 
             return wants;
+        }
+
+        /// <summary>
+        /// Something the colony is short of, and every def that would answer it.
+        ///
+        /// A want names a need, not a product. "Medicine" is satisfied by any of three tiers,
+        /// and a want that named one of them would go unfilled beside a trader carrying the
+        /// other two.
+        /// </summary>
+        class Want
+        {
+            public readonly string label;
+            public readonly List<ThingDef> acceptable;
+            public int outstanding;
+
+            public Want(string label, List<ThingDef> acceptable, int outstanding)
+            {
+                this.label = label;
+                this.acceptable = acceptable;
+                this.outstanding = outstanding;
+            }
+
+            public bool Accepts(ThingDef def)
+            {
+                return def != null && acceptable.Contains(def);
+            }
         }
 
         /// <summary>
@@ -164,8 +202,7 @@ namespace AutoColony.Modules
         /// it is trusted, because "which side is the destination" is exactly the sort of
         /// unverified assumption that has cost this project colonies.
         /// </summary>
-        void Buy(DirectorContext ctx, Pawn trader, Pawn negotiator,
-                 List<KeyValuePair<ThingDef, int>> wants)
+        void Buy(DirectorContext ctx, Pawn trader, Pawn negotiator, List<Want> wants)
         {
             var traderInterface = trader as ITrader;
             if (traderInterface == null) return;
@@ -182,39 +219,54 @@ namespace AutoColony.Modules
                 int silver = ctx.state.silver;
                 var bought = new List<string>();
 
+                // Why nothing was bought, kept apart rather than lumped.
+                //
+                // The first version of this said "nothing affordable that the colony wants" for
+                // three different failures, and on run 153 that line appeared two days before a
+                // colonist died of an infection — with no way to tell whether the trader had no
+                // medicine, the colony could not afford it, or the trade API had not done what
+                // was asked. A diagnostic that cannot separate its own causes is the fault this
+                // director keeps finding elsewhere.
+                int offered = 0, unaffordable = 0, refused = 0;
+                float dearest = 0f;
+
                 var lines = deal.AllTradeables;
                 for (int i = 0; i < lines.Count; i++)
                 {
                     var line = lines[i];
                     if (line == null || !line.TraderWillTrade || !line.HasAnyThing) continue;
 
-                    int wanted = WantedOf(wants, line.ThingDef);
-                    if (wanted <= 0) continue;
+                    var want = WantFor(wants, line.ThingDef);
+                    if (want == null || want.outstanding <= 0) continue;
 
                     int available = line.CountHeldBy(Transactor.Trader);
                     if (available <= 0) continue;
 
-                    int take = wanted < available ? wanted : available;
+                    offered++;
+                    int take = want.outstanding < available ? want.outstanding : available;
 
                     // Never spend the colony down to nothing. Silver is also what a colony
                     // buys its next emergency with.
                     float each = line.GetPriceFor(TradeAction.PlayerBuys);
                     if (each > 0f)
                     {
+                        if (each > dearest) dearest = each;
                         int affordable = (int)(silver * 0.7f / each);
                         if (take > affordable) take = affordable;
                     }
-                    if (take <= 0) continue;
+                    if (take <= 0) { unaffordable++; continue; }
 
-                    if (!AskFor(line, take)) continue;
+                    if (!AskFor(line, take)) { refused++; continue; }
 
                     silver -= (int)(each * take);
+                    want.outstanding -= take;
                     bought.Add(take + " " + line.Label);
                 }
 
                 if (bought.Count == 0)
                 {
-                    NoteTrader(trader, "nothing affordable that the colony wants");
+                    NoteTrader(trader, WhyNothing(offered, unaffordable, refused,
+                                                  dearest, ctx.state.silver));
                     return;
                 }
 
@@ -263,12 +315,36 @@ namespace AutoColony.Modules
             return false;
         }
 
-        static int WantedOf(List<KeyValuePair<ThingDef, int>> wants, ThingDef def)
+        static Want WantFor(List<Want> wants, ThingDef def)
         {
-            if (def == null) return 0;
             for (int i = 0; i < wants.Count; i++)
-                if (wants[i].Key == def) return wants[i].Value;
-            return 0;
+                if (wants[i].Accepts(def)) return wants[i];
+            return null;
+        }
+
+        /// <summary>
+        /// Which of the three ways this failed, said separately, because they want different
+        /// answers: stock nothing can fix, price a richer colony could, and a refusal that
+        /// means the trade code itself is wrong.
+        /// </summary>
+        static string WhyNothing(int offered, int unaffordable, int refused,
+                                 float dearest, int silver)
+        {
+            if (offered == 0)
+                return "this trader stocks none of what the colony is short of";
+
+            if (refused > 0)
+                return refused + " line(s) the game would not let the colony buy — the trade " +
+                       "code asked for something it did not accept, which is a fault here " +
+                       "rather than a shortage";
+
+            if (unaffordable > 0)
+                return string.Format(
+                    "it is stocked but too dear — {0:0} silver each against {1} in the colony, " +
+                    "of which only 70% may be spent",
+                    dearest, silver);
+
+            return "stocked, affordable, and still nothing went through";
         }
 
         static int SocialOf(Pawn pawn)
