@@ -233,7 +233,9 @@ namespace AutoColony
                 if (measured > 0f) return measured;
             }
 
-            // Animals carry nothing, so the game's own estimate for the kind is the right number.
+            // Animals are still read from kindDef.combatPower, and that is under suspicion —
+            // see MeasuredAnimalValue for the argument and for what is being collected before
+            // the decision changes.
             float power = pawn.kindDef != null ? pawn.kindDef.combatPower : 50f;
             if (power <= 0f) power = 50f;
 
@@ -242,6 +244,65 @@ namespace AutoColony
                 health = pawn.health.summaryHealth.SummaryHealthPercent;
 
             return power * AcMath.Clamp(health, 0.25f, 1f);
+        }
+
+        /// <summary>
+        /// What an animal is worth in a fight, measured the way both other sides are measured.
+        ///
+        /// Not yet used to decide anything. It is here to be compared against the number that
+        /// does decide, because three colonies in a row have been hurt by elective fights the
+        /// colony judged comfortable:
+        ///
+        ///   run 161  five muffalo at 514 strength   three revenges, two colonists downed
+        ///   run 162  a rhinoceros at 528 strength   a leg lost, and Pansy dead of blood loss
+        ///   run 163  a timber wolf at 160 strength  revenge, two needing treatment
+        ///
+        /// Each time the hunt-risk aggregation priced the retaliation correctly and the strength
+        /// comparison waved it through. The suspicion is that the comparison divides two
+        /// different currencies. A colonist and a humanlike raider are both measured here as
+        /// offence times toughness — real damage per second against real armour. An animal is
+        /// taken from kindDef.combatPower, which is the storyteller's raid-points budget for
+        /// sizing an encounter, not damage per second times toughness.
+        ///
+        /// The argument against combatPower is already written in this file, four lines up, for
+        /// humanlikes: "an average for their *type*, so the colony compared its real strength
+        /// against their notional one". The same objection applies to a wolf and was never
+        /// carried across.
+        ///
+        /// Manipulation is left out of an animal's toughness where a colonist's includes it. A
+        /// colonist's fighting depends on hands because a weapon is held in them; a wolf's does
+        /// not, and averaging in a capacity it has no use for would understate exactly the
+        /// animals this is trying to stop understating.
+        ///
+        /// Reported beside combatPower in the hunt chronicle so the next run says which number is
+        /// closer to what these fights actually cost. Changing the decision on an unverified
+        /// measurement would be trading one guess for another.
+        /// </summary>
+        public static float MeasuredAnimalValue(Pawn pawn)
+        {
+            if (pawn == null || pawn.Dead) return 0f;
+
+            float offence = Offence(pawn);
+
+            float health = 1f;
+            if (pawn.health != null && pawn.health.summaryHealth != null)
+                health = pawn.health.summaryHealth.SummaryHealthPercent;
+
+            float moving = Capacity(pawn, PawnCapacityDefOf.Moving);
+            float sharp = Stat(pawn, StatDefOf.ArmorRating_Sharp, 0f);
+            float blunt = Stat(pawn, StatDefOf.ArmorRating_Blunt, 0f);
+            float armour = 1f + AcMath.Clamp(sharp + blunt, 0f, 2f) * 0.75f;
+
+            // Body size is the part of an animal's staying power that no stat carries: a
+            // rhinoceros and a rat with the same armour do not absorb the same fight.
+            float bulk = pawn.RaceProps != null ? pawn.RaceProps.baseHealthScale : 1f;
+            if (bulk <= 0f) bulk = 1f;
+
+            float toughness = AcMath.Clamp(health, 0.1f, 1f)
+                            * AcMath.Clamp(moving, 0.1f, 1f) * armour * bulk;
+
+            float value = offence * toughness;
+            return value > 0f ? value : 0f;
         }
 
         /// <summary>

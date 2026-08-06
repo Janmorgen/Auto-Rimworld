@@ -611,7 +611,17 @@ namespace AutoColony.Modules
             float power = animal.kindDef != null ? animal.kindDef.combatPower : 0f;
             if (into == declined && power > largestDeclined) largestDeclined = power;
 
-            string key = animal.LabelShortCap + " (" + power.ToString("0") + ")";
+            // combatPower is what decides; the measured value is what is under suspicion of
+            // being the honest number. Printed together, for anything that could fight back, so
+            // a run says which of the two matches what these fights actually cost. See
+            // CombatAssessment.MeasuredAnimalValue.
+            string key = animal.LabelShortCap + " (" + power.ToString("0");
+            if (FightsBack(animal))
+            {
+                float measured = CombatAssessment.MeasuredAnimalValue(animal);
+                key += ", measured " + measured.ToString("0");
+            }
+            key += ")";
             int n;
             into.TryGetValue(key, out n);
             into[key] = n + 1;
