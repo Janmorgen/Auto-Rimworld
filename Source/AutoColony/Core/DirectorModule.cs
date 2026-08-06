@@ -65,11 +65,26 @@ namespace AutoColony
         {
             get
             {
+                // The margin is a ratio, and it wants a gene that is one.
+                //
+                // This passed Genes.GrowthFoodMargin for two sessions, which is "days of food
+                // before another mouth is wanted" — a days count, range 4 to 10, used correctly
+                // as days by GoalSet and used here as a multiplier. Run 167 opened on 25 growing
+                // days against 25 barren and asked for 150 days of food.
+                //
+                // Nothing caught it because the arithmetic was tested with the number it should
+                // have been given: FoodTargetTests passes 1.3 throughout, so the tests encoded
+                // the right intent while the wiring supplied something else. It surfaced the
+                // first time a map put the growing season below the barren one, and only because
+                // the answer had just been made visible in the chronicle.
+                //
+                // The same duplicated-quantity fault this class exists to fix, committed in the
+                // fix. Two meanings, one gene.
                 return FoodTarget.Days(
                     Gene(Learning.Genes.FoodDaysPerColonist),
                     state != null ? state.growingDaysLeft : 0,
                     state != null ? state.barrenDaysAhead : 0,
-                    Gene(Learning.Genes.GrowthFoodMargin));
+                    Gene(Learning.Genes.FoodWinterMargin));
             }
         }
 

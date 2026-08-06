@@ -272,6 +272,27 @@ namespace AutoColony.Tests
         }
 
         [Fact]
+        public void TheMarginIsARatioAndNotACountOfDays()
+        {
+            // Run 167 asked for 150 days of food on a map with 25 barren days, because the call
+            // site passed growth.foodMargin — "days of food before another mouth is wanted",
+            // range 4 to 10 — into a parameter that multiplies. These tests could not catch it:
+            // every one of them passes 1.3, so they encoded the right intent while the wiring
+            // supplied something else.
+            //
+            // So the units are pinned here instead. A sane margin holds a little more than the
+            // winter costs. Anything that turns a month of winter into half a year of hoarding
+            // is a units error, whatever the genome says.
+            float sane = FoodTarget.Days(8f, 25, 25, 1.3f);
+            Assert.True(sane > 25f && sane < 40f,
+                "a 25-day winter wants a little over 25 days of food, got " + sane);
+
+            float absurd = FoodTarget.Days(8f, 25, 25, 6f);
+            Assert.True(absurd > 100f,
+                "documents the bug: a days-count used as a ratio produces " + absurd);
+        }
+
+        [Fact]
         public void AnIceSheetWantsAYearAndDoesNotDivideByZero()
         {
             float days = FoodTarget.Days(5f, 0, 60, 1.3f);
