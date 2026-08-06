@@ -306,10 +306,18 @@ namespace AutoColony.Modules
                 // one that says the fields never stop, and that is the fault this project has
                 // now been caught by five times in its own instruments. So it is printed:
                 // "fields growing, 22 days left then 15 barren".
+                //
+                // And the answer beside the inputs, because the same reasoning goes one step
+                // further than it did. The gene standing unchanged has two causes that look
+                // identical from outside: the season genuinely asks for no more than the genome
+                // already wanted, or FoodTarget was handed a forecast of zero and fell back.
+                // Printing what the colony decided to want is the only thing that separates
+                // them, and it is the number nine call sites act on.
                 (s.growingSeasonNow ? ", fields growing" : ", nothing grows outdoors")
                     + (s.growingDaysLeft > 0 || s.barrenDaysAhead > 0
                         ? ", " + s.growingDaysLeft + "d left then " + s.barrenDaysAhead + "d barren"
-                        : ", season unread"),
+                        : ", season unread")
+                    + ", wants " + ctx.FoodDaysWanted.ToString("0.0") + "d food",
                 s.outdoorTemperature));
         }
 
