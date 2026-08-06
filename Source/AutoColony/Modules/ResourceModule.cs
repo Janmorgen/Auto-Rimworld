@@ -323,6 +323,14 @@ namespace AutoColony.Modules
             var map = ctx.map;
             var des = DesignationDefOf.Hunt;
             int budget = (int)(8 * effective) + 1;
+            float woundsPerHealth = ctx.Gene(Genes.HuntWoundsPerHealth);
+
+            // What this colony has learned a manhunter fight costs it. Run 161 met three and
+            // went 1.50x, 1.69x, 1.90x — a lesson correctly drawn, recorded, and until now
+            // heard only by the module that fights the revenge and never by the one that buys
+            // it. DangerousPreyFloor stays as the prior for a colony that has met none.
+            float revengeFloor = Learning.ThreatMemory.ForceFor(
+                Learning.ThreatKind.Manhunter, HuntPolicy.DangerousPreyFloor);
 
             // Gather candidates first so they can be taken in order of danger rather than in
             // whatever order the map happens to list them.
@@ -352,7 +360,8 @@ namespace AutoColony.Modules
             // What survives that cull is every hunt the colony still endorses at this strength
             // and this desperation — which is the only honest measure of how much food is
             // already on its way.
-            int alreadyHunting = ReleaseUnwantedHunts(ctx, strength, desperation, radiusSq, origin);
+            int alreadyHunting = ReleaseUnwantedHunts(ctx, strength, desperation, radiusSq,
+                                                     origin, woundsPerHealth, revengeFloor);
 
             taken.Clear();
             declined.Clear();
@@ -362,15 +371,14 @@ namespace AutoColony.Modules
             for (int i = 0; i < candidates.Count && done < budget; i++)
             {
                 var animal = candidates[i];
-                float threat = ThreatOf(animal);
 
-                // Prey that fights back is held to a floor hunger cannot talk it out of.
-                bool safe = !FightsBack(animal);
-                bool worthIt = safe
-                    ? CombatAssessment.ShouldEngage(strength, threat, desperation)
-                    : CombatAssessment.ShouldHuntDangerous(strength, threat, desperation);
-
-                if (!worthIt)
+                // Prey that fights back is held to a floor hunger cannot talk it out of, and
+                // the fight it is held against is the one the whole session is buying — see
+                // SessionCanAfford. Harmless prey adds no risk and so is never refused here,
+                // which is the old ShouldEngage branch arriving at the same answer without a
+                // branch to pick it.
+                if (!SessionCanAfford(animal, strength, desperation, woundsPerHealth,
+                                                    revengeFloor))
                 {
                     Tally(declined, animal);
                     continue;
@@ -453,10 +461,16 @@ namespace AutoColony.Modules
         /// answer to "is any food already coming".
         /// </summary>
         int ReleaseUnwantedHunts(DirectorContext ctx, float strength, float desperation,
-                                 int radiusSq, IntVec3 origin)
+                                 int radiusSq, IntVec3 origin, float woundsPerHealth,
+                                 float revengeFloor)
         {
             var map = ctx.map;
             var des = DesignationDefOf.Hunt;
+
+            // The session starts here, not in the take loop: hunts already standing are risk
+            // the colony is already carrying, and anything taken this pass is added on top.
+            sessionChances.Clear();
+            sessionThreats.Clear();
 
             released.Clear();
 
@@ -475,12 +489,14 @@ namespace AutoColony.Modules
                 bool gone = animal.Dead || !animal.Spawned;
                 bool tooFar = !gone &&
                               (animal.Position - origin).LengthHorizontalSquared > radiusSq;
+                // Judged cumulatively, exactly as the take loop judges: a standing order the
+                // colony would not issue again *given the others it is already holding* is one
+                // it should withdraw. Keeping this per-animal while the take loop counted the
+                // set would have let five muffalo stand for ever, each individually defensible,
+                // because nothing would ever be the one that broke the bar.
                 bool notWorthIt = !gone && !tooFar &&
-                                  !(FightsBack(animal)
-                                        ? CombatAssessment.ShouldHuntDangerous(
-                                              strength, ThreatOf(animal), desperation)
-                                        : CombatAssessment.ShouldEngage(
-                                              strength, ThreatOf(animal), desperation));
+                                  !SessionCanAfford(animal, strength, desperation, woundsPerHealth,
+                                                    revengeFloor);
 
                 if (!gone && !tooFar && !notWorthIt) { kept++; continue; }
 
@@ -522,6 +538,66 @@ namespace AutoColony.Modules
         {
             var race = animal.RaceProps;
             return race.predator || race.manhunterOnDamageChance > 0.05f;
+        }
+
+        /// <summary>
+        /// The chance this hunt ends with the animal coming for the hunter.
+        ///
+        /// manhunterOnDamageChance is a chance per wound, not per hunt — the field says so and
+        /// docs/rimworld/animals.md agrees, "the odds a wounded animal turns". Reading it as a
+        /// per-hunt figure understates every large animal by however many shots it takes to put
+        /// down, which for a muffalo at healthScale 1.75 against a rat's 0.29 is most of them.
+        ///
+        /// A predator is a certainty rather than a chance: it does not flee a hunter, and the
+        /// existing FightsBack has always treated it as unconditional. Giving it one keeps every
+        /// predator hunt judged exactly as it is today, so this change moves the herbivores it
+        /// was wrong about and leaves the ones it was right about alone.
+        /// </summary>
+        static float RevengeChanceOf(Pawn animal, float woundsPerHealth)
+        {
+            var race = animal.RaceProps;
+            if (race == null) return 0f;
+            if (race.predator) return 1f;
+
+            float perWound = race.manhunterOnDamageChance;
+            if (perWound <= 0f) return 0f;
+
+            return HuntRisk.RevengeChance(
+                perWound, HuntRisk.WoundsToFell(race.baseHealthScale, woundsPerHealth));
+        }
+
+        /// <summary>The risk of every hunt this colony currently endorses, rebuilt each pass.</summary>
+        readonly List<float> sessionChances = new List<float>();
+        readonly List<float> sessionThreats = new List<float>();
+
+        /// <summary>
+        /// Whether the colony can still afford this hunt, given the ones it has already taken.
+        ///
+        /// The single change this whole class exists for. The bar is the same bar — colony
+        /// strength against a fight, at the current hunger — but the fight it judges is the one
+        /// the whole session is buying rather than the one animal under consideration. Five
+        /// hunts that each turn half the time is not five separate coin flips the colony gets to
+        /// win individually.
+        ///
+        /// Harmless prey adds nothing and so can never be refused by this, which is how deer and
+        /// rats stay free to hunt in any number without a clause exempting them.
+        /// </summary>
+        bool SessionCanAfford(Pawn animal, float strength, float desperation, float woundsPerHealth,
+                              float revengeFloor)
+        {
+            float chance = RevengeChanceOf(animal, woundsPerHealth);
+            float threat = chance > 0f ? CombatAssessment.ThreatValue(animal) : 0f;
+
+            sessionChances.Add(chance);
+            sessionThreats.Add(threat);
+
+            float retaliation = HuntRisk.ExpectedRetaliation(sessionChances, sessionThreats);
+            if (CombatAssessment.ShouldHuntDangerous(strength, retaliation, desperation,
+                                                     revengeFloor)) return true;
+
+            sessionChances.RemoveAt(sessionChances.Count - 1);
+            sessionThreats.RemoveAt(sessionThreats.Count - 1);
+            return false;
         }
 
         static float ThreatOf(Pawn animal)

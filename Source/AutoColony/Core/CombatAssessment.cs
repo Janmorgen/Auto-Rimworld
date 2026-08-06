@@ -284,6 +284,20 @@ namespace AutoColony
         }
 
         /// <summary>
+        /// The same judgement, at the margin this colony has learned these fights deserve.
+        ///
+        /// See HuntPolicy.RequiredRatio's four-argument form for why the floor is supplied:
+        /// what a manhunter pack costs is something ThreatMemory measures every time one
+        /// arrives, and the hunt that buys the next one should be paying attention to it.
+        /// </summary>
+        public static bool ShouldHuntDangerous(float colonyStrength, float threat,
+                                               float desperation, float dangerousFloor)
+        {
+            return HuntPolicy.WorthHunting(colonyStrength, threat, true, desperation,
+                                           DesperateRatio, dangerousFloor);
+        }
+
+        /// <summary>
         /// Human-readable form of the same judgement, for the chronicle.
         ///
         /// The threat passed here is the largest animal the pass *declined*, and

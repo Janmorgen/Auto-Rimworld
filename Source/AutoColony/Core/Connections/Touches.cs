@@ -329,6 +329,31 @@ namespace AutoColony.Connections
                            "fightable by people who cannot be sent. Same shape as run 135's " +
                            "world.drafted -> colonistsBleedingOut: drafting removes hands from " +
                            "everything that is not the fight, and only the fight knows it"
+            },
+
+            new Consequence
+            {
+                from = "world.designations",
+                to = "learning.threatMemory",
+                confidence = Confidence.Observed,
+                evidence = "run 161 days 2-8 — hunt designations on muffalo produced four " +
+                           "'Muffalo revenge' incidents and three recorded Manhunter fights, " +
+                           "the memory going 1.50x, 1.69x, 1.90x with two colonists downed. " +
+                           "The hunt module manufactures the threats the threat memory learns " +
+                           "from, which makes this the one edge in the map that is a loop"
+            },
+
+            new Consequence
+            {
+                from = "learning.threatMemory",
+                to = "world.designations",
+                confidence = Confidence.Observed,
+                evidence = "run 161 — the return leg, and until this commit it did not exist. " +
+                           "The colony drew precisely the right lesson from being mauled and " +
+                           "the module choosing what to hunt could not hear it, so it kept " +
+                           "buying the fights the lesson was about. The dangerous-prey floor " +
+                           "is now ThreatMemory.ForceFor(Manhunter), with the old constant as " +
+                           "the prior for a colony that has met none"
             }
         };
 

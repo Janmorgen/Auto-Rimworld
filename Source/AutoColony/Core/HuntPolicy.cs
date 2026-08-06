@@ -79,8 +79,29 @@ namespace AutoColony
         /// <summary>Strength needed before starting a fight with prey of this kind.</summary>
         public static float RequiredRatio(bool preyFightsBack, float desperation, float desperateRatio)
         {
+            return RequiredRatio(preyFightsBack, desperation, desperateRatio, DangerousPreyFloor);
+        }
+
+        /// <summary>
+        /// The same, with the dangerous-prey floor supplied rather than assumed.
+        ///
+        /// <see cref="DangerousPreyFloor"/> is a prior, not an answer. A colony that has been
+        /// mauled by three manhunter packs has learned something specific about what these
+        /// fights cost it, and ThreatMemory has been recording exactly that all along —
+        /// run 161's went 1.50x, 1.69x, 1.90x across three revenges. It reached the module that
+        /// fights the revenge and never reached the module that buys it.
+        ///
+        /// That is the loop the standing brief asks for: a bad outcome has to cost the director
+        /// something it can measure, and the only measurement that closes here is the one it
+        /// already takes.
+        /// </summary>
+        public static float RequiredRatio(bool preyFightsBack, float desperation,
+                                          float desperateRatio, float dangerousFloor)
+        {
             float d = desperation < 0f ? 0f : (desperation > 1f ? 1f : desperation);
-            float floor = preyFightsBack ? DangerousPreyFloor : desperateRatio;
+            if (dangerousFloor <= 0f) dangerousFloor = DangerousPreyFloor;
+
+            float floor = preyFightsBack ? dangerousFloor : desperateRatio;
             return ComfortableRatio + (floor - ComfortableRatio) * d;
         }
 
@@ -88,8 +109,18 @@ namespace AutoColony
         public static bool WorthHunting(float colonyStrength, float threat, bool preyFightsBack,
                                         float desperation, float desperateRatio)
         {
+            return WorthHunting(colonyStrength, threat, preyFightsBack, desperation,
+                                desperateRatio, DangerousPreyFloor);
+        }
+
+        /// <summary>Whether this colony should start that fight, at a floor it has learned.</summary>
+        public static bool WorthHunting(float colonyStrength, float threat, bool preyFightsBack,
+                                        float desperation, float desperateRatio,
+                                        float dangerousFloor)
+        {
             if (threat <= 0f) return true;
-            return colonyStrength >= threat * RequiredRatio(preyFightsBack, desperation, desperateRatio);
+            return colonyStrength >= threat * RequiredRatio(preyFightsBack, desperation,
+                                                            desperateRatio, dangerousFloor);
         }
     }
 }
