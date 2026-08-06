@@ -105,6 +105,11 @@ namespace AutoColony.Modules
             var wants = new List<KeyValuePair<ThingDef, int>>();
             var s = ctx.state;
 
+            // medicineCount, not medicineStored, and the difference matters. A doctor fetches
+            // medicine from anywhere reachable, so the stockpile is irrelevant to whether a
+            // wound gets treated — ColonyState says so where it captures both, having been
+            // caught by the stockpile version in run 84. Reading the stored figure here would
+            // have the colony buying medicine it already owns and cannot be bothered to haul.
             int wantedMedicine = s.colonists * 2;
             if (s.medicineCount < wantedMedicine)
             {
