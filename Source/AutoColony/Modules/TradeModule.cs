@@ -427,11 +427,13 @@ namespace AutoColony.Modules
                 // goods, and one conversation fixes that. Sold only up to what the purchase
                 // costs, because the aim is the medicine, not the money.
                 var sold = new List<string>();
+                string whyNoSale = "";
                 if (unaffordable > 0 || bought.Count == 0)
                 {
                     int stillNeeded = CostOfOutstanding(lines, wants, silver);
                     if (stillNeeded > 0)
-                        stillNeeded = SellUpTo(lines, Surpluses(ctx, wants), stillNeeded, sold);
+                        stillNeeded = SellUpTo(lines, Surpluses(ctx, wants), stillNeeded,
+                                               sold, out whyNoSale);
 
                     // With the proceeds in hand, try the purchases again.
                     if (sold.Count > 0)
@@ -470,7 +472,9 @@ namespace AutoColony.Modules
                 if (bought.Count == 0)
                 {
                     NoteTrader(trader, WhyNothing(offered, unaffordable, refused,
-                                                  dearest, ctx.state.silver));
+                                                  dearest, ctx.state.silver) +
+                                       (string.IsNullOrEmpty(whyNoSale)
+                                            ? "" : "; and could not sell to cover it — " + whyNoSale));
                     return;
                 }
 
@@ -550,18 +554,28 @@ namespace AutoColony.Modules
         /// Stops the moment the purchase is affordable rather than emptying the store — a
         /// colony that sells everything it can is a colony that will be short of it next week.
         /// </summary>
-        static int SellUpTo(List<Tradeable> lines, List<Want> spare, int needed, List<string> sold)
+        static int SellUpTo(List<Tradeable> lines, List<Want> spare, int needed,
+                            List<string> sold, out string why)
         {
+            // Why the colony could not raise the money, because "sold nothing" has three
+            // causes and only one of them is a shortage. Built with no diagnostic at all the
+            // first time, which is the fourth instrument this session that reported less than
+            // it appeared to.
+            int wouldSell = 0, traderRefused = 0, apiRefused = 0;
+
             for (int i = 0; i < lines.Count && needed > 0; i++)
             {
                 var line = lines[i];
-                if (line == null || !line.TraderWillTrade) continue;
+                if (line == null) continue;
 
                 var have = WantFor(spare, line.ThingDef);
                 if (have == null || have.outstanding <= 0) continue;
 
                 int mine = line.CountHeldBy(Transactor.Colony);
                 if (mine <= 0) continue;
+
+                wouldSell++;
+                if (!line.TraderWillTrade) { traderRefused++; continue; }
 
                 float each = line.GetPriceFor(TradeAction.PlayerSells);
                 if (each <= 0f) continue;
@@ -571,12 +585,22 @@ namespace AutoColony.Modules
                 if (give > mine) give = mine;
                 if (give <= 0) continue;
 
-                if (!Offer(line, give)) continue;
+                if (!Offer(line, give)) { apiRefused++; continue; }
 
                 needed -= (int)(each * give);
                 have.outstanding -= give;   // surplus is always counted in items
                 sold.Add(give + " " + line.Label);
             }
+
+            why = sold.Count > 0 ? ""
+                : wouldSell == 0
+                    ? "the colony has nothing spare it is willing to part with"
+                    : traderRefused == wouldSell
+                        ? "this trader will not take what the colony has spare"
+                        : apiRefused > 0
+                            ? apiRefused + " sale line(s) the game would not accept — a fault here"
+                            : "spare goods offered but they raise nothing worth having";
+
             return needed > 0 ? needed : 0;
         }
 
