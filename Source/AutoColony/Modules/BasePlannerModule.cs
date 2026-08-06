@@ -147,6 +147,18 @@ namespace AutoColony.Modules
         /// </summary>
         RoomRole? previouslyWanted;
 
+        /// <summary>
+        /// The room role the throttle most recently refused to open, or null if it opened
+        /// whatever was asked for.
+        ///
+        /// Read by GoalPlanner so the focus-not-working detector can tell "this goal is being
+        /// ignored" from "this goal is queued behind the building limit". Those look identical
+        /// from the goal's side — no construction of the wanted role exists in either case —
+        /// and treating them alike deadlocks the two rules against each other. See the note on
+        /// the "say the same thing twice" condition below.
+        /// </summary>
+        public static RoomRole? RoomHeldBack;
+
         bool FocusRoomWouldUseTheSpareSlot(DirectorContext ctx, int unfinished, int allowed)
         {
             var asking = ctx.plan != null && ctx.plan.Focus != null
@@ -739,8 +751,17 @@ namespace AutoColony.Modules
             if (unfinished >= allowed && FocusRoomWouldUseTheSpareSlot(ctx, unfinished, allowed))
                 allowed = unfinished + 1;
 
+            // Cleared before the test, set inside it. Left standing, a refusal from one pass
+            // would excuse a goal for ever after the throttle had let go.
+            RoomHeldBack = null;
+
             if (unfinished >= allowed)
             {
+                // What was refused, so the goal layer can tell queued from ignored.
+                RoomHeldBack = ctx.plan != null && ctx.plan.Focus != null
+                    ? ctx.plan.Focus.WantsRoom
+                    : null;
+
                 NoteRoomsHeld(ctx, unfinished, allowed);
 
                 // More open than the colony can now carry: give one back.

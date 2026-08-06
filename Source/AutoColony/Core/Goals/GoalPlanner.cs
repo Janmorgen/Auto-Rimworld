@@ -466,6 +466,25 @@ namespace AutoColony.Goals
             var wanted = goal.WantsRoom;
             if (!wanted.HasValue) return false;
 
+            // Queued is not ignored.
+            //
+            // The planner refuses to open a room when more are unfinished than the colony's
+            // hands can carry, and it reserves one spare slot for the focus room — but that
+            // slot "waits for the plan to say the same thing twice", because committing a shell
+            // to a tie between long-term goals is expensive.
+            //
+            // Those two rules deadlock each other. Demoting after half a day means the plan
+            // cannot say the same thing twice in a row, so the spare slot is never granted, so
+            // no construction of the wanted role appears, so the goal is demoted again. Run 142
+            // asked for shelter from hour zero, was stood down on day 1 at "1.00 then, 1.00
+            // now", and did not get its bedroom sited until day 15 — with 30 hours of focus
+            // spent on it against 31 on research and neither finishing.
+            //
+            // A goal the planner has explicitly held back is being worked on in the only sense
+            // available: it is next. Saying so lets the plan hold still long enough for the slot
+            // it is already owed.
+            if (Modules.BasePlannerModule.RoomHeldBack == wanted.Value) return true;
+
             var rooms = ctx.layout.rooms;
             for (int i = 0; i < rooms.Count; i++)
             {
