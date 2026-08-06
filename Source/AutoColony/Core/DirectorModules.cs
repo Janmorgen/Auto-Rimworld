@@ -29,6 +29,7 @@ namespace AutoColony
                 new ColonistPolicyModule(),
                 new PrisonerModule(),
                 new IncidentModule(),
+                new TradeModule(),
                 new UpkeepModule()
             };
         }
