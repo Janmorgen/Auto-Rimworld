@@ -73,6 +73,17 @@ fighting ability at all: a boomalope is rated 80 largely because it explodes.
 **Which to use** — depends on the question, and neither is a drop-in for the other. Full argument
 in [animals.md](animals.md#combat-power-is-not-fighting-ability).
 
+**Settled by run 174, against the measurement.** The colony hunted two boomalopes at day 0 hour
+0 with the bar computed against combatPower 80, and passed over four more. The revenge two hours
+later put all four colonists on the ground, started five fires, cut every route to the one
+bleeding out, and finished the colony before day 1. Had the decision been wired to the measured
+19 — which was the plan, and which is why the number was printed beside it first — the four it
+passed over would have been hunted too.
+
+The lesson generalises past animals: an instrument built to confirm a hypothesis is worth
+having precisely because it can refute it, and this one refuted its own with a body count
+attached.
+
 ---
 
 ## Units

@@ -69,6 +69,22 @@ is rated eighty because it **explodes when killed**, and an explosion is not dam
 from a weapon it is holding. So `combatPower` carries hazards a DPS-and-armour reading is blind
 to by construction, while a megasloth that does fight with its body scores close under both.
 
+**Run 174 settled it, and settled it against the measurement.** Day 0, hour 0:
+
+```
+hunting Boomalope (80, measured 19) x2; passed over Boomalope (80, measured 19) x4
+  [strength 61 vs threat 80, need 1.6x at desperation 0.90]
+```
+
+Two hours later: `Boomalope revenge`, five fires, all four colonists down, no route through
+the flames to the one bleeding out. Susumu died of blood loss with 9.2 hours of clock left and
+no path; Flea died of burns. The colony was finished on day 0.
+
+The bar had been computed against 80 and the colony still took two. Against **19** it would have
+taken the four it passed over as well. The number that looks like the honest measurement is the
+one that would have killed the colony faster, and it is worth being plain about why: a
+boomalope's danger was never in its bite. **[live, run 174]**
+
 Neither number is simply the honest one. Which to use depends on the question:
 
 - *how much will this hurt me in a stand-up fight* — measure it
