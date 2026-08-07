@@ -160,7 +160,32 @@ namespace AutoColony.Modules
                         "this is not a shortage of hands and no work priority answers it",
                         string.Join(", ", wanting.ToArray()), GatherRadius));
             }
+
+            // Onto the roadmap, now that a run has shown it persists.
+            //
+            // This was left off deliberately when the message was split, because "nothing in
+            // range" might have been a radius that widens under pressure rather than a real
+            // absence. Run 184 answered within a day: still wanting wood at day 1 12h, day 1
+            // 22h and day 2 18h, on a map whose trees near the base are gone. That is not
+            // transient, and it is the same statement FuelUpkeep makes about a map with nothing
+            // that burns — a want no amount of labour reaches.
+            //
+            // Reported every pass and idempotent, so the clock runs; the chronicle line above
+            // still speaks only on the transition, which is why it is not said four times.
+            if (wanting.Count > 0 && chopped + mined + hunted == 0)
+                CapabilityGaps.Report(string.Join(", ", wanting.ToArray()) + " within reach",
+                                      "anything to mark within " + GatherRadius + " cells",
+                                      1f, 0f, ctx.state.tick);
+            else
+                CapabilityGaps.Close(lastReachGap);
+
+            lastReachGap = wanting.Count > 0 && chopped + mined + hunted == 0
+                ? string.Join(", ", wanting.ToArray()) + " within reach"
+                : null;
         }
+
+        /// <summary>The reach gap reported last pass, so a changed want closes the old entry.</summary>
+        string lastReachGap;
 
         int MaybeChopWood(DirectorContext ctx, IntVec3 origin)
         {
