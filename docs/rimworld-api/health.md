@@ -6,6 +6,37 @@ Mechanics: [health.md](../rimworld/health.md) ·
 [medicine.md](../rimworld/medicine.md) ·
 [prosthetics.md](../rimworld/prosthetics.md)
 
+## What actually kills these colonies
+
+Counted across seven preserved chronicles in one session, seventeen deaths:
+
+| cause | deaths |
+|---|---|
+| Blood loss (extreme) | **13** |
+| Burn | 2 |
+| Bite (megasloth teeth) | 2 |
+
+Seventy-six percent. [health.md](../rimworld/health.md#injuries--bleeding) said so before any
+of it was measured — untreated bleeding rather than the hit is what kills in most combat deaths —
+and this is that claim with a number on it for this director specifically. **[live, runs 161-179]**
+
+The shape is consistent and it is not a tending failure. The colony has a deadline
+(`TicksUntilDeathDueToBloodLoss`), a medic choice that weighs reach against it, a rescue that
+carries casualties out of a retreat, and usually medicine in store. What it does not have is
+anybody left standing:
+
+    run 178  four colonists down at once after a manhunter pack, med 0, all four bled out
+    run 179  four down, 59 fires, med 30 — "no route to them at all against 3.3 hours left"
+    run 174  four down on day 0 from a boomalope blast, two bled out, two burned
+
+Every one of those is *everybody down together*, after which bleeding is unanswerable however
+good the tending logic is. So the leverage is upstream — not being overwhelmed in a single
+engagement — which is where #50 (a door before day three) and #55 (elective fights taken on thin
+margins) sit, rather than anywhere in this file.
+
+Worth stating plainly because it is easy to keep improving the wrong half: every fix to the
+bleeding response this session was correct and none of them would have saved these colonies.
+
 ## The bleeding clock
 
 ```csharp
