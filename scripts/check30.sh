@@ -78,7 +78,19 @@ repeats=$(awk -v from="$from" '
           | cut -c1-200)
 [ -z "$repeats" ] && repeats="none"
 
-died=$(grep -c "died of\|gone from the colony" "$CH" 2>/dev/null); died=${died:-0}
+# Deaths in the live colony and deaths inside a training trial are different events.
+#
+# A trial is a replay of the same stretch under a candidate strategy, and a candidate that
+# starves its colony is the experiment working — that is what scores it badly. Restarting on
+# one destroys the round it was gathering. The chronicle marks trial lines "[trial n/m]", so
+# the two are separable; nothing was separating them, and the standing rule for this loop is
+# "restart if colonists die".
+#
+# Also excludes departures, which the chronicle files under DEATH too — "gone from the colony"
+# is a kidnapping, and a kidnapping is not a death (#73).
+died=$(grep "died of" "$CH" 2>/dev/null | grep -vc "\[trial"); died=${died:-0}
+trialdied=$(grep "died of" "$CH" 2>/dev/null | grep -c "\[trial"); trialdied=${trialdied:-0}
+left=$(grep -c "gone from the colony" "$CH" 2>/dev/null); left=${left:-0}
 taken=$(grep -c "gone from the colony" "$CH" 2>/dev/null); taken=${taken:-0}
 causes=$(grep -o "died of .*" "$CH" 2>/dev/null | sed 's/died of //' | sort | uniq -c | tr '\n' ';' | tr -s ' ')
 
@@ -149,7 +161,7 @@ if [ -z "$vitals" ]; then
 reached its first vitals pass"
 fi
 
-echo "CHECK30| $running | $frame | died: $died taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | roomsEver: $rooms pen: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
+echo "CHECK30| $running | $frame | died: $died (trial: $trialdied, left: $left) taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | roomsEver: $rooms pen: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
 
 # ---------------------------------------------------------------- goal.md
 # Recited every check, READ FROM THE FILE rather than copied here.
