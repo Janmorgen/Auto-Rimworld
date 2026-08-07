@@ -76,6 +76,7 @@ namespace AutoColony.Connections
             "world.blueprints",       // construction placed for colonists to build
             "world.churn",            // things two modules keep putting back and taking away
             "world.reach",            // whether a thing can actually be walked to, and in how long
+            "plan.approachField",     // where the map funnels attackers walking in from an edge
             "world.designations",     // mine, cut, harvest, strip-roof
             "world.labourAvailable",  // hands free to do ordinary work, which drafting removes
             "learning.threatMemory",  // what a kind of fight has cost, carried between colonies
@@ -110,7 +111,7 @@ namespace AutoColony.Connections
                 {
                     "world.drafted", "world.pawnPosition", "world.attackOrders",
                     "world.blueprints", "world.labourAvailable", "learning.threatMemory",
-                    "world.reach"
+                    "world.reach", "plan.approachField"
                 }
             },
 
@@ -194,7 +195,7 @@ namespace AutoColony.Connections
                     "raidsSurvived", "shelteredBeds", "steel", "tamedAnimals", "usableMaterial",
                     "wood", "workingGenerators"
                 },
-                affects = new[] { "world.blueprints", "world.churn", "world.designations" }
+                affects = new[] { "world.blueprints", "world.churn", "world.designations", "plan.approachField" }
             },
 
             new Touch

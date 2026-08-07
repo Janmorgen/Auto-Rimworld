@@ -91,6 +91,7 @@ namespace AutoColony.Modules
             if (++quietPasses >= FortifyEveryNPasses)
             {
                 quietPasses = 0;
+                SurveyApproaches(ctx);
                 MaintainDefenses(ctx);
             }
         }
@@ -205,6 +206,7 @@ namespace AutoColony.Modules
 
                 if (HostilesWithin(ctx, 60, 45))
                 {
+                    if (passesSinceContact > 0) Defence.ApproachField.MarkStale();
                     passesSinceContact = 0;
                     return true;
                 }
@@ -1489,6 +1491,103 @@ namespace AutoColony.Modules
 
         static readonly List<float> candidateChords = new List<float>();
         static readonly List<Pawn> candidatePawns = new List<Pawn>();
+
+        /// <summary>
+        /// Where this map funnels anybody walking in, recomputed when the answer could have moved.
+        ///
+        /// Reported and nothing more. The whole point of measuring first is that the decision this
+        /// eventually feeds — turrets, cover, traps, a funnel wall — should be argued against real
+        /// numbers rather than against my expectation of them, and today gave three separate
+        /// reasons to distrust that expectation.
+        ///
+        /// The counts go in the line, not only the verdict. A survey that walks nothing produces
+        /// exactly the same silence as a map nobody can cross, and telling those apart afterwards
+        /// is impossible — which is how an inert read shipped twice this morning.
+        /// </summary>
+        void SurveyApproaches(DirectorContext ctx)
+        {
+            if (!Defence.ApproachField.IsStale) return;
+
+            var walker = ctx.state.ableColonists.Count > 0 ? ctx.state.ableColonists[0] : null;
+            if (walker == null) return;
+
+            Defence.ApproachSurvey.Run(ctx.map, ctx.Origin, walker,
+                                       ctx.GeneInt(Genes.DefenceApproachSpacing));
+
+            float threshold = ctx.Gene(Genes.DefenceChokeThreshold);
+
+            // The outermost bottleneck, not the busiest cell.
+            //
+            // Every route ends at the base, so the base carries all of them and wins the peak by
+            // construction — the first survey reported "100% concentration, 0 cells from the
+            // base", which is true and says nothing. Concentration decays outward from the
+            // destination, so the number that means something is how far out it stays high: the
+            // furthest cell still carrying at least the threshold share is the chokepoint a
+            // colony could actually stand at.
+            string line = string.Format(
+                "approach: {0} edge cells sampled, {1} with a route",
+                Defence.ApproachField.Sampled, Defence.ApproachField.RoutesFound);
+
+            int routes = Defence.ApproachField.RoutesFound;
+            if (routes <= 0)
+                line += " — nothing walks in; the mountain is the wall";
+            if (routes > 0)
+            {
+                int needed = (int)(threshold * routes);
+                if (needed < 1) needed = 1;
+
+                var origin = ctx.Origin;
+                var best = IntVec3.Invalid;
+                float bestOut = -1f;
+                int bestCrossings = 0;
+
+                foreach (var pair in Defence.ApproachField.AllCrossings())
+                {
+                    if (pair.Value < needed) continue;
+
+                    var cell = ctx.map.cellIndices.IndexToCell(pair.Key);
+                    float out_ = (cell - origin).LengthHorizontal;
+                    if (out_ <= bestOut) continue;
+
+                    bestOut = out_;
+                    best = cell;
+                    bestCrossings = pair.Value;
+                }
+
+                // Beyond the base's own footprint, or it is not a chokepoint but a doorstep.
+                //
+                // Two attempts at this measure were contaminated by their own destination. The
+                // first reported the origin at 100%, because every route ends there. The second
+                // reported the furthest qualifying cell and still called an open plain a natural
+                // chokepoint, because the *verdict* was computed from the origin's share while
+                // only the cell had been corrected. Concentration decays outward from the base;
+                // the question was always how far out it survives, and answering it needs a
+                // distance to compare against that the colony did not pick.
+                //
+                // The base's own extent is that distance, read off the rooms it has built.
+                float extent = 5f;
+                if (ctx.layout != null)
+                    for (int i = 0; i < ctx.layout.rooms.Count; i++)
+                    {
+                        float d = (ctx.layout.rooms[i].Center - origin).LengthHorizontal
+                                  + ctx.layout.rooms[i].width;
+                        if (d > extent) extent = d;
+                    }
+
+                bool realChoke = best.IsValid && bestOut > extent;
+                line += best.IsValid
+                    ? string.Format(
+                        " — the furthest cell still carrying {0} of {1} approaches is {2}, " +
+                        "{3:0} cells out against a base {4:0} cells across: {5}",
+                        bestCrossings, routes, best, bestOut, extent,
+                        realChoke
+                            ? "a chokepoint worth holding"
+                            : "they only converge on the doorstep, so this is open ground")
+                    : " — nothing outside the base carries enough approaches to stand at";
+            }
+
+            Chronicle.Record(ChronicleCategory.Threat, line);
+        }
 
         static int TicksToReach(Pawn pawn, Pawn patient)
         {

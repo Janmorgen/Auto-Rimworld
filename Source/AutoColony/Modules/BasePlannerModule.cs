@@ -495,6 +495,9 @@ namespace AutoColony.Modules
                     if (HasPendingConstructionIn(ctx.map, room))
                     {
                         room.wallsQueued = true;
+                        // The colony's own walls move where attackers walk, which is the whole
+                        // reason the field is worth having rather than surveying the terrain once.
+                        Defence.ApproachField.MarkStale();
                         continue;
                     }
 
@@ -504,6 +507,9 @@ namespace AutoColony.Modules
                     if (QueueShell(ctx, room) > 0)
                     {
                         room.wallsQueued = true;
+                        // The colony's own walls move where attackers walk, which is the whole
+                        // reason the field is worth having rather than surveying the terrain once.
+                        Defence.ApproachField.MarkStale();
                         Note("queued walls for " + room.role + " room");
                         return;
                     }

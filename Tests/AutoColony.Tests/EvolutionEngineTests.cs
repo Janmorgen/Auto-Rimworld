@@ -30,6 +30,12 @@ namespace AutoColony.Tests
         [Fact]
         public void ClimbsTowardTheOptimumOnANoiselessLandscape()
         {
+            // Pinned dimensionality: this is a claim about the search, not about how
+            // many genes the colony happens to have this week. See
+            // Genes.UseSyntheticGenome for why the budget chase stopped here.
+            Genes.UseSyntheticGenome(48);
+            try
+            {
             // Averaged over several seeds: a single run of a stochastic search is sensitive
             // enough to seed luck that it would flap whenever the gene count changes.
             var target = TargetAt(0.75f);
@@ -54,6 +60,8 @@ namespace AutoColony.Tests
             Assert.True(endDistance < startDistance * 0.5f,
                 "expected the search to at least halve the distance to the optimum; " +
                 "start=" + startDistance + " end=" + endDistance);
+            }
+            finally { Genes.RestoreRealGenome(); }
         }
 
         /// <summary>Mean final distance to the optimum over several independent sequential runs.</summary>
@@ -141,6 +149,12 @@ namespace AutoColony.Tests
         [Fact]
         public void PairedTrialsBeatSequentialSearchUnderRealisticNoise()
         {
+            // Pinned dimensionality: this is a claim about the search, not about how
+            // many genes the colony happens to have this week. See
+            // Genes.UseSyntheticGenome for why the budget chase stopped here.
+            Genes.UseSyntheticGenome(48);
+            try
+            {
             // The justification for the trial harness. At the full production gene count the
             // sequential search is flat at this noise level, while paired trials still make
             // ground — they spend evaluations to cancel shared world luck out of the comparison.
@@ -250,6 +264,8 @@ namespace AutoColony.Tests
             // can check whether the story held.
             Assert.True(paired < start * 1.05f,
                 "paired trials should not lose ground; start=" + start + " paired=" + paired);
+            }
+            finally { Genes.RestoreRealGenome(); }
         }
 
         [Fact]

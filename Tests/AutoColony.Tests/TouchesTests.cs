@@ -170,6 +170,16 @@ namespace AutoColony.Tests
                 // consumer is the reversing side asking whether it has been here before, and the
                 // worst a wrong answer does is leave a surplus bed standing.
                 "world.churn: BasePlannerModule, UpkeepModule",
+
+                // Two writers, and neither writes a value — both only mark the field stale.
+                // DefenseModule surveys and consumes it; BasePlannerModule invalidates it when
+                // the colony's own walls change where attackers would walk, which is the entire
+                // reason the field is recomputed rather than surveyed once at settling.
+                //
+                // Safe because staleness is monotonic: the worst either can do by racing is
+                // schedule a survey that was not needed, and a survey costs paths rather than
+                // changing anything. Nothing reads the field to decide yet, by design.
+                "plan.approachField: DefenseModule, BasePlannerModule",
             };
 
             foreach (var contested in Touches.ContestedEffects())

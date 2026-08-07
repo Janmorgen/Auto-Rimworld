@@ -155,6 +155,18 @@ namespace AutoColony.Learning
         /// that produced run 196's deadlock was not chosen, it was simply absent from two of the
         /// three callers.
         /// </summary>
+        /// <summary>
+        /// How far apart the approach survey samples the map edge, and how concentrated the
+        /// traffic has to be before the terrain counts as funnelling.
+        ///
+        /// Genes because neither is knowable: spacing trades survey cost against missing a
+        /// corridor between two samples, and the threshold is where "some terrain effect" becomes
+        /// "a chokepoint worth holding" — a judgement that depends on how many colonists there
+        /// are to hold it.
+        /// </summary>
+        public const string DefenceApproachSpacing = "defence.approachSpacing";
+        public const string DefenceChokeThreshold = "defence.chokeThreshold";
+
         public const string GatherReachStretch = "gather.reachStretch";
 
         /// <summary>
@@ -245,7 +257,35 @@ namespace AutoColony.Learning
         static readonly List<GeneSpec> specList = new List<GeneSpec>();
         static readonly Dictionary<string, GeneSpec> specMap = new Dictionary<string, GeneSpec>();
 
-        public static List<GeneSpec> All { get { return specList; } }
+        public static List<GeneSpec> All { get { return active ?? specList; } }
+
+        static List<GeneSpec> active;
+
+        /// <summary>
+        /// Run against a fixed, synthetic genome instead of the product's.
+        ///
+        /// For the tests that make claims about the *search* rather than about this colony —
+        /// "paired trials beat sequential under noise", "the climb halves the distance on a clean
+        /// landscape". Neither claim is about having exactly seventy-two genes, and both were
+        /// coupled to `Genes.All.Count` through the budget, so every gene the product gained
+        /// perturbed them. The per-gene budget was raised 20 -> 30 -> 40 -> 80 chasing that, and
+        /// then two defence genes made paired trials read as *worse* than sequential — which
+        /// cannot be true of the algorithm and was never about the algorithm.
+        ///
+        /// So the dimensionality is pinned and the assertions are left exactly as strong. This is
+        /// the fix the fourth failure was told to expect: restate what the test runs against,
+        /// rather than refund the budget a fifth time.
+        /// </summary>
+        public static void UseSyntheticGenome(int count)
+        {
+            var synthetic = new List<GeneSpec>(count);
+            for (int i = 0; i < count; i++)
+                synthetic.Add(new GeneSpec("synthetic." + i, 0f, 1f, 0.5f, "Synthetic", "Synthetic " + i));
+            active = synthetic;
+        }
+
+        /// <summary>Back to the colony's real genome.</summary>
+        public static void RestoreRealGenome() { active = null; }
 
         static Genes()
         {
@@ -335,6 +375,19 @@ namespace AutoColony.Learning
             Add(HuntBlastWeight, 1f, 8f, 3f, "Gathering",
 
                 "How much worse an incendiary blast is than a plain one");
+
+
+            Add(DefenceApproachSpacing, 8f, 40f, 20f, "Defense",
+
+
+                "Cells between edge samples when surveying where attackers walk in");
+
+
+            Add(DefenceChokeThreshold, 0.3f, 0.9f, 0.5f, "Defense",
+
+
+                "Share of approaches through one cell before the terrain counts as a chokepoint");
+
 
 
             Add(GatherReachStretch, 0f, 120f, 60f, "Gathering",
