@@ -58,12 +58,27 @@ namespace AutoColony.Rooms
         /// </summary>
         public static float Score(SiteFeatures f, SiteWeights w)
         {
+            return Score(f, w, 1f);
+        }
+
+        /// <summary>
+        /// The same, told how far a colony will let itself sprawl before distance dominates.
+        ///
+        /// A ceiling of 1 is the old behaviour exactly, so a genome that has never heard of this
+        /// sites rooms as it always did.
+        /// </summary>
+        public static float Score(SiteFeatures f, SiteWeights w, float sprawlCeiling)
+        {
             if (f.buildable < 0.8f) return float.NegativeInfinity;
 
             float score = 0f;
 
             // Close to the rest of the colony: shorter walks, shared walls, less to defend.
-            score -= Cost(f.fromOrigin, 40f) * w.compactness;
+            //
+            // The only term here that keeps rising past its knee, because it is the only one
+            // paid on every trip rather than being a benefit that is simply gone once you are
+            // far enough away. See the three-argument Cost.
+            score -= Cost(f.fromOrigin, 40f, sprawlCeiling) * w.compactness;
 
             // Evenly placed among what already exists. This is what a store room wants and
             // almost nothing else does.
@@ -82,12 +97,49 @@ namespace AutoColony.Rooms
         /// <summary>
         /// Distance as a cost in 0..1, flattening beyond the point where further distance stops
         /// making a practical difference.
+        ///
+        /// Correct for the terms that express a *benefit* of being near something. Once a
+        /// workshop is forty cells from the store it draws on, it has lost the advantage of
+        /// adjacency, and being four hundred cells away is not meaningfully worse than a
+        /// hundred — the benefit was gone either way.
+        ///
+        /// Wrong for distance from the base itself, which is paid on every trip for the life of
+        /// the colony. See the overload.
         /// </summary>
         public static float Cost(float distance, float far)
         {
             if (distance <= 0f) return 0f;
             if (far <= 0f) return 1f;
             return distance >= far ? 1f : distance / far;
+        }
+
+        /// <summary>
+        /// Distance as a cost that keeps rising past the knee, bounded by a ceiling.
+        ///
+        /// Run 189 sited a 9x9 Storage room at x=34 while the rest of the base sat between x=133
+        /// and x=146 — a hundred cells out, so every haul into it is a two-hundred-cell round
+        /// trip, for ever. It was allowed because the flat version returns 1.0 at forty cells and
+        /// 1.0 at four hundred: past the knee the scorer is perfectly indifferent to distance,
+        /// and "wants to be near rock" then decided, the rock being a hundred cells away.
+        ///
+        /// A sprawling base is not only untidy. It is slower to build, because a wall a hundred
+        /// cells out costs the walk there and back; and it is slower to reach a casualty across.
+        /// Run 189 also lost Speedy to "0.4 hours of walking against 0.2 hours left" — a doctor
+        /// twenty-four minutes away from a colonist with twelve minutes to live.
+        ///
+        /// The ceiling exists so one term cannot swamp the rest. Uncapped, a site four hundred
+        /// cells out would score ten against every other term's one, and compactness would decide
+        /// every room in every colony on its own. Where to put that ceiling is a strategy — how
+        /// much sprawl a colony will tolerate to sit on a resource — so it is the genome's.
+        /// </summary>
+        public static float Cost(float distance, float far, float ceiling)
+        {
+            if (distance <= 0f) return 0f;
+            if (far <= 0f) return 1f;
+            if (ceiling < 1f) ceiling = 1f;
+
+            float cost = distance / far;
+            return cost > ceiling ? ceiling : cost;
         }
 
         /// <summary>

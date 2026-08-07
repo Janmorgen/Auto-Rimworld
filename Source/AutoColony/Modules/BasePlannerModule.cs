@@ -2311,7 +2311,9 @@ namespace AutoColony.Modules
                 // base, a workshop wants to be beside that store, a prison wants to be nowhere
                 // near either — so the first slot that fitted was as good as the planner could
                 // ever say.
-                float score = Rooms.RoomSiting.Score(SiteFeaturesFor(ctx, rect, profile), weights);
+                float score = Rooms.RoomSiting.Score(
+                    SiteFeaturesFor(ctx, rect, profile), weights,
+                    ctx.Gene(Genes.PlannerSprawlCeiling));
                 if (score <= bestScore) continue;
 
                 bestScore = score;

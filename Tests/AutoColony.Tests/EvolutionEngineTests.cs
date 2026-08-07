@@ -164,7 +164,26 @@ namespace AutoColony.Tests
             // happen to exist today. A test that has to be retuned by hand whenever a gene is
             // added is a test that argues against adding genes, and moving numbers into the
             // genome is how this project gets them off the bottom rung of the ladder.
-            int epochs = 20 * Genes.All.Count;
+            // Forty a gene, raised from twenty and measured rather than guessed.
+            //
+            // At 64 genes and twenty a gene, paired beat sequential by 2% against a required 5%
+            // and this failed — the CORE claim this time, not the secondary bar removed earlier,
+            // so the temptation to loosen it was the wrong instinct and the measurement settles
+            // it instead:
+            //
+            //     20 epochs a gene   paired 0.1389 vs sequential 0.1417 — 2%, fails
+            //     30 epochs a gene   passes
+            //     40 epochs a gene   passes
+            //     80 epochs a gene   passes
+            //
+            // So the advantage of paired trials is real and grows with budget: cancelling shared
+            // world luck out of a comparison takes evaluations, and the more dimensions there
+            // are the more it takes before the benefit shows. Twenty a gene stopped being enough
+            // somewhere between 61 genes and 64, which is a fact about the search rather than
+            // about this change.
+            //
+            // Forty rather than thirty, so the next few genes do not put it back on the line.
+            int epochs = 40 * Genes.All.Count;
 
             var start = StartDistance();
             float sequential = SequentialRun(0.02f, 8, epochs);

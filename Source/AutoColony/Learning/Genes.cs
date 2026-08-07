@@ -105,6 +105,7 @@ namespace AutoColony.Learning
         /// </summary>
         public const string PlannerPatienceCeiling = "planner.patienceCeiling";
         public const string PlannerPendingPerColonist = "planner.pendingPerColonist";
+        public const string PlannerSprawlCeiling = "planner.sprawlCeiling";
         public const string WorkNeedWeight = "work.needWeight";
         public const string WorkSpread = "work.spread";
         public const string WorkBands = "work.bands";
@@ -226,6 +227,8 @@ namespace AutoColony.Learning
             Add(PlannerPatienceCeiling, 2f, 20f, 6f, "Planner", "Longest a goal may hold the plan, days");
             Add(PlannerPendingPerColonist, 5f, 60f, 20f, "Planner",
                 "Outstanding construction one colonist may be carrying");
+            Add(PlannerSprawlCeiling, 1f, 6f, 3f, "Planner",
+                "How far a room may sit from the base before distance dominates siting");
 
             Add(BaseRoomSize, 4f, 11f, 7f, "Base", "Planned room interior size");
             Add(BaseSpareBeds, 0f, 5f, 1f, "Base", "Spare beds kept ready");
