@@ -474,7 +474,7 @@ namespace AutoColony.Modules
                 if (bought.Count == 0)
                 {
                     NoteTrader(trader, WhyNothing(offered, unaffordable, refused,
-                                                  dearest, ctx.state.silver) +
+                                                  dearest, ctx.state.silver, wants) +
                                        (string.IsNullOrEmpty(whyNoSale)
                                             ? "" : "; and could not sell to cover it — " + whyNoSale));
                     return;
@@ -650,11 +650,37 @@ namespace AutoColony.Modules
         /// answers: stock nothing can fix, price a richer colony could, and a refusal that
         /// means the trade code itself is wrong.
         /// </summary>
+        /// <summary>
+        /// What the colony was asking for, for the refusal that says nobody stocked it.
+        ///
+        /// "This trader stocks none of what the colony is short of" is true and unusable. Run 196
+        /// spent nine days deadlocked on wood, watched two traders arrive and leave, and this
+        /// line is what the record holds about both — so whether wood was ever on the list, or
+        /// whether the colony walked past its one way out of the deadlock without asking, is a
+        /// question the chronicle cannot answer either way.
+        ///
+        /// The same fix this file's four-way split already made once: a refusal has to name the
+        /// thing refused, or it sends the reader to look in the wrong place.
+        /// </summary>
+        static string Naming(List<Want> wants)
+        {
+            if (wants == null || wants.Count == 0) return "and it wanted nothing";
+
+            var sb = new System.Text.StringBuilder("wanted ");
+            for (int i = 0; i < wants.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(wants[i].label);
+            }
+            return sb.ToString();
+        }
+
         static string WhyNothing(int offered, int unaffordable, int refused,
-                                 float dearest, int silver)
+                                 float dearest, int silver, List<Want> wants)
         {
             if (offered == 0)
-                return "this trader stocks none of what the colony is short of";
+                return "this trader stocks none of what the colony is short of (" +
+                       Naming(wants) + ")";
 
             if (refused > 0)
                 return refused + " line(s) the game would not let the colony buy — the trade " +

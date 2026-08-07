@@ -115,9 +115,19 @@ somewhere else.
 Four distinct reasons nothing was bought, and they must not share a sentence:
 
 - nothing the colony is short of
-- this trader stocks none of what it is short of
+- this trader stocks none of what it is short of — **and the message must name what that was**
 - nobody who can reach them and talk
 - it is short and the trader has it and it cannot afford it
 
 Collapsing these into one message cost real debugging time. Each names a different thing to fix,
 and the third is a reachability problem that looks nothing like the fourth.
+
+The second one needed the same treatment a second time. Run 196 spent nine days deadlocked on
+wood — walls need it, the map had none within reach, and a trader is the only other source — and
+watched two traders arrive and leave. All the record holds is *"this trader stocks none of what
+the colony is short of"*, which cannot distinguish a trader who had no wood from a colony that
+never asked for any. **[live, run 196]**
+
+Splitting the causes was not enough; a refusal has to name the thing refused. The wants come from
+`plan.Needs`, so what the colony can ask for is whatever its goals currently declare — which
+makes "was it on the list" a real question with a real answer, and not one the log could reach.
