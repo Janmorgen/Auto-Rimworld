@@ -445,6 +445,22 @@ namespace AutoColony.Connections
 
             new Consequence
             {
+                from = "world.drafted",
+                to = "daysOfFood",
+                confidence = Confidence.Observed,
+                evidence = "run 173 and run 174 — both lost with NeedFood at -32 and -26 beside " +
+                           "23.0 and 30.7 days of food in store. Run 173 held its colonists " +
+                           "drafted at a rally point for two days against a siege it correctly " +
+                           "judged unwinnable. Confirmed from Humanlike.xml rather than " +
+                           "inferred: the drafted branch of the think tree holds only " +
+                           "JobGiver_MoveToStandable and JobGiver_Orders and sits above " +
+                           "JobGiver_GetFood, including above the starving branch. A drafted " +
+                           "colonist does not eat. Fourth instance of this edge, which makes " +
+                           "it a property of drafting rather than three separate bugs"
+            },
+
+            new Consequence
+            {
                 from = "plan.goals",
                 to = "world.workPriorities",
                 confidence = Confidence.Observed,
