@@ -176,6 +176,33 @@ namespace AutoColony.Modules
                     return false;
                 }
 
+                // A circle said these were close; a walk says whether they can arrive.
+                //
+                // Run 206 withdrew from ten infestation insects sealed in rock at `danger None`,
+                // stood down for hunger, withdrew again, and flipped four times an hour from day
+                // 4 20h with roomsEver still 0 at day 5. Every one of those withdrawals was
+                // correct by the radius and absurd on the ground.
+                //
+                // Unreachable is not far away, and the two must not share a number — so the
+                // question asked here is how many hours until anything could actually stand next
+                // to somebody, and no route at all answers "not a threat" rather than "very far".
+                float contact = HoursUntilContact(ctx);
+                if (contact < 0f && HostilesWithin(ctx, 60, 45))
+                {
+                    if (!unreachableNoted)
+                    {
+                        unreachableNoted = true;
+                        Chronicle.Record(ChronicleCategory.Threat, string.Format(
+                            "{0} hostiles on the map and no route from any of them to the base — " +
+                            "not standing anybody to. A radius would have called this an attack; " +
+                            "walls and rock are the reason it is not one",
+                            ctx.state.hostilePawns));
+                    }
+                    passesSinceContact++;
+                    return false;
+                }
+                if (contact >= 0f) unreachableNoted = false;
+
                 if (HostilesWithin(ctx, 60, 45))
                 {
                     passesSinceContact = 0;
@@ -287,6 +314,9 @@ namespace AutoColony.Modules
         }
 
         bool heldPastEatingNoted;
+
+        /// <summary>Said once per spell, so a sealed infestation does not fill the log.</summary>
+        bool unreachableNoted;
 
         /// <summary>
         /// Colonists stood down to eat, held until the game says they are no longer hungry.
@@ -1348,6 +1378,118 @@ namespace AutoColony.Modules
         /// visible: RimWorld charges a missing part to MoveSpeed, so a one-legged doctor reads
         /// as the slow walker they are without this having to know what a leg is.
         /// </summary>
+        /// <summary>
+        /// Real path length in cells between two cells, or -1 if there is no route.
+        ///
+        /// The one call in this file that asks the game to walk it rather than measuring the
+        /// chord. Hostiles are given `PassDoors` because raiders open doors and insects chew
+        /// them — denying that would answer a different question and answer it reassuringly.
+        ///
+        /// The path is released back to the pool on every exit. RimWorld pools these and a leaked
+        /// one is a slow, silent memory fault of exactly the kind this project cannot debug from
+        /// a chronicle.
+        /// </summary>
+        static float PathCells(Map map, Pawn walker, IntVec3 to)
+        {
+            if (map == null || walker == null || !walker.Spawned || !to.IsValid)
+                return Reach.Unreachable;
+
+            PawnPath path = null;
+            try
+            {
+                // Asked for this pawn rather than for a mode I chose. An insect cannot open a
+                // door and a raider can, so the same wall is a barrier to one and a delay to the
+                // other — and guessing a single TraverseMode for both would have answered a
+                // question nobody asked. The game already knows which each of them is.
+                var parms = TraverseParms.For(walker, Danger.Deadly, TraverseMode.ByPawn, false);
+                if (!map.reachability.CanReach(walker.Position, to, PathEndMode.OnCell, parms))
+                    return Reach.Unreachable;
+
+                path = map.pathFinder.FindPathNow(walker.Position, to, walker, null);
+                if (path == null || !path.Found) return Reach.Unreachable;
+
+                return path.NodesLeftCount;
+            }
+            catch (Exception) { return Reach.Unreachable; }
+            finally { if (path != null) path.ReleaseToPool(); }
+        }
+
+        /// <summary>
+        /// Hours until the nearest hostile could actually be standing next to somebody.
+        ///
+        /// Replaces a radius with a walk, and the difference is the whole of run 206: ten
+        /// infestation insides at `danger None`, close by the chord and sealed in rock by the
+        /// path. `Reach.Unreachable` comes back for that, and unreachable is never imminent.
+        ///
+        /// Affordable because a path is never shorter than the chord between its ends. Candidates
+        /// are sorted by chord and walked in order, and the search stops as soon as the next
+        /// chord already exceeds the best real path — usually one or two paths, never all of them.
+        /// </summary>
+        static float HoursUntilContact(DirectorContext ctx)
+        {
+            var s = ctx.state;
+            var map = ctx.map;
+            if (map == null || s.hostilePawns <= 0) return Reach.Unreachable;
+
+            var hostiles = map.mapPawns.AllPawnsSpawned;
+            var origin = ctx.Origin;
+
+            // Chord first, cheapest thing on the map, and it bounds everything below.
+            candidateChords.Clear();
+            candidatePawns.Clear();
+            for (int i = 0; i < hostiles.Count; i++)
+            {
+                var p = hostiles[i];
+                if (p == null || p.Dead || !p.Spawned) continue;
+                if (p.Faction == null || !p.Faction.HostileTo(Faction.OfPlayer)) continue;
+
+                candidateChords.Add((p.Position - origin).LengthHorizontal);
+                candidatePawns.Add(p);
+            }
+            if (candidatePawns.Count == 0) return Reach.Unreachable;
+
+            // Insertion sort by chord. The list is a handful of pawns and this avoids allocating.
+            for (int i = 1; i < candidatePawns.Count; i++)
+            {
+                float chord = candidateChords[i];
+                var pawn = candidatePawns[i];
+                int j = i - 1;
+                while (j >= 0 && candidateChords[j] > chord)
+                {
+                    candidateChords[j + 1] = candidateChords[j];
+                    candidatePawns[j + 1] = candidatePawns[j];
+                    j--;
+                }
+                candidateChords[j + 1] = chord;
+                candidatePawns[j + 1] = pawn;
+            }
+
+            float bestCells = Reach.Unreachable;
+            float bestSpeed = 1f;
+
+            for (int i = 0; i < candidatePawns.Count; i++)
+            {
+                // Everything after this is further in a straight line than the best real path,
+                // so it cannot win however the walls fall.
+                if (!Reach.CouldBeat(candidateChords[i], bestCells)) break;
+
+                var p = candidatePawns[i];
+                float cells = PathCells(map, p, origin);
+                if (cells < 0f) continue;
+
+                if (bestCells < 0f || cells < bestCells)
+                {
+                    bestCells = cells;
+                    bestSpeed = CombatAssessment.SafeStat(p, StatDefOf.MoveSpeed, 4.6f);
+                }
+            }
+
+            return Reach.Hours(bestCells, bestSpeed);
+        }
+
+        static readonly List<float> candidateChords = new List<float>();
+        static readonly List<Pawn> candidatePawns = new List<Pawn>();
+
         static int TicksToReach(Pawn pawn, Pawn patient)
         {
             if (pawn == null || patient == null) return 0;

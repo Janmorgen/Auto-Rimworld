@@ -75,6 +75,7 @@ namespace AutoColony.Connections
             "world.attackOrders",     // an explicit order to attack, as opposed to standing armed
             "world.blueprints",       // construction placed for colonists to build
             "world.churn",            // things two modules keep putting back and taking away
+            "world.reach",            // whether a thing can actually be walked to, and in how long
             "world.designations",     // mine, cut, harvest, strip-roof
             "world.labourAvailable",  // hands free to do ordinary work, which drafting removes
             "learning.threatMemory",  // what a kind of fight has cost, carried between colonies
@@ -108,7 +109,8 @@ namespace AutoColony.Connections
                 affects = new[]
                 {
                     "world.drafted", "world.pawnPosition", "world.attackOrders",
-                    "world.blueprints", "world.labourAvailable", "learning.threatMemory"
+                    "world.blueprints", "world.labourAvailable", "learning.threatMemory",
+                    "world.reach"
                 }
             },
 

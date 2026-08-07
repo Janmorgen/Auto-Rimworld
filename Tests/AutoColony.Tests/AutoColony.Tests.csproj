@@ -41,6 +41,7 @@
     <Compile Include="../../Source/AutoColony/Core/HuntPolicy.cs" Link="Production/HuntPolicy.cs" />
     <Compile Include="../../Source/AutoColony/Core/Churn.cs" Link="Production/Churn.cs" />
     <Compile Include="../../Source/AutoColony/Core/GatherReach.cs" Link="Production/GatherReach.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Reach.cs" Link="Production/Reach.cs" />
     <Compile Include="../../Source/AutoColony/Core/HuntRisk.cs" Link="Production/HuntRisk.cs" />
     <Compile Include="../../Source/AutoColony/Core/MedicChoice.cs" Link="Production/MedicChoice.cs" />
     <Compile Include="../../Source/AutoColony/Core/RetreatCargo.cs" Link="Production/RetreatCargo.cs" />

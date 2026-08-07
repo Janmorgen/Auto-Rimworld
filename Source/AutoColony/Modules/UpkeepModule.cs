@@ -934,6 +934,63 @@ namespace AutoColony.Modules
 
         static bool walledInNoted;
 
+        /// <summary>A colonist who is not in the pocket, to measure the far side from.</summary>
+        static Pawn FreeWalker(DirectorContext ctx)
+        {
+            var all = ctx.state.ableColonists;
+            var trapped = ctx.state.cutOff;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var p = all[i];
+                if (p == null || !p.Spawned) continue;
+                if (trapped != null && trapped.Contains(p)) continue;
+                return p;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// How far the base still is from the far side of this blocker, by path.
+        ///
+        /// The number that turns "a way out" into "the best way out". Measured from the cell
+        /// beyond the wall rather than from the wall itself, because that is where the colonist
+        /// stands once it is gone, and measured by walking because a chord across the base is not
+        /// a route round it.
+        ///
+        /// float.MaxValue for a far side that leads nowhere — which is not a way out at all but a
+        /// second pocket, and must lose to every real candidate rather than merely score badly.
+        /// </summary>
+        static float CellsHomeFromBeyond(DirectorContext ctx, Pawn walker, Thing blocker,
+                                         HashSet<IntVec3> pocket)
+        {
+            if (walker == null || blocker == null) return float.MaxValue;
+
+            var map = ctx.map;
+            var origin = ctx.Origin;
+
+            for (int d = 0; d < 4; d++)
+            {
+                var beyond = blocker.Position + GenAdj.CardinalDirections[d];
+                if (!beyond.InBounds(map) || pocket.Contains(beyond)) continue;
+                if (!beyond.Walkable(map)) continue;
+
+                PawnPath path = null;
+                try
+                {
+                    var parms = TraverseParms.For(walker, Danger.Deadly, TraverseMode.ByPawn, false);
+                    if (!map.reachability.CanReach(beyond, origin, PathEndMode.OnCell, parms))
+                        continue;
+
+                    path = map.pathFinder.FindPathNow(beyond, origin, walker, null);
+                    if (path == null || !path.Found) continue;
+                    return path.NodesLeftCount;
+                }
+                catch (Exception) { }
+                finally { if (path != null) path.ReleaseToPool(); }
+            }
+            return float.MaxValue;
+        }
+
         /// <summary>
         /// Find the cell between where they are and where the food is, and order it removed.
         ///
@@ -973,19 +1030,44 @@ namespace AutoColony.Modules
 
             // Player-built first: the colony taking down its own wall is cheap, immediate, and
             // is the mistake being corrected. Rock is somebody else's problem and slower to cut.
+            // Best-fit rather than first-fit, and "best" is measured by walking.
+            //
+            // This took the first blocker in each pass that led anywhere, so which wall came out
+            // depended on the order a flood fill happened to visit the pocket edge. Every one of
+            // them opens *a* way out; they do not open equally good ones. A thin wall onto a long
+            // detour round the back of the base loses to the one that opens straight onto it, and
+            // nothing here could tell the two apart.
+            //
+            // So each candidate is scored by how far the colony still is on the far side, by
+            // path rather than by chord, and the cheapest wins. Same machinery as the threat
+            // reach: ask the game to walk it.
+            var walker = FreeWalker(ctx);
             for (int pass = 0; pass < 2; pass++)
             {
+                Thing bestThing = null;
+                float bestBeyond = float.MaxValue;
+
+                for (int i = 0; i < edge.Count; i++)
+                {
+                    var candidate = edge[i];
+                    if (candidate == null || candidate.Destroyed) continue;
+
+                    bool isRock = candidate.Faction != Faction.OfPlayer;
+                    if (pass == 0 && isRock) continue;
+                    if (pass == 1 && !isRock) continue;
+                    if (isRock && !(candidate is Mineable)) continue;
+                    if (!LeadsSomewhereUseful(ctx, pawn, candidate, seen)) continue;
+
+                    float beyond = CellsHomeFromBeyond(ctx, walker, candidate, seen);
+                    if (beyond < bestBeyond) { bestBeyond = beyond; bestThing = candidate; }
+                }
+
                 for (int i = 0; i < edge.Count; i++)
                 {
                     var thing = edge[i];
-                    if (thing == null || thing.Destroyed) continue;
+                    if (thing != bestThing) continue;
 
                     bool mine = thing.Faction != Faction.OfPlayer;
-                    if (pass == 0 && mine) continue;
-                    if (pass == 1 && !mine) continue;
-                    if (mine && !(thing is Mineable)) continue;
-
-                    if (!LeadsSomewhereUseful(ctx, pawn, thing, seen)) continue;
 
                     // Take the roof off first, if there is one over them.
                     //
@@ -1005,10 +1087,10 @@ namespace AutoColony.Modules
                     if (!ordered) continue;
 
                     Chronicle.Record(ChronicleCategory.Build, string.Format(
-                        "{0} the {1} at {2} to let {3} out — it is the only thing between them " +
-                        "and the rest of the colony",
+                        "{0} the {1} at {2} to let {3} out — {4:0} cells home on the far side, " +
+                        "the shortest of the {5} ways out of this pocket",
                         mine ? "mining" : "taking down", thing.def.label ?? thing.def.defName,
-                        thing.Position, pawn.LabelShortCap));
+                        thing.Position, pawn.LabelShortCap, bestBeyond, edge.Count));
                     return true;
                 }
             }
