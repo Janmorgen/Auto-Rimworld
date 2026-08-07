@@ -83,8 +83,30 @@ Four days, three rooms planned, none closed, and the goal saying so continuously
 The colony could see it needed a refuge, said so every pass, refused every fight it should have
 refused — and a withdrawal with nowhere enclosed to withdraw *to* is standing somewhere else.
 
-Perception is no longer the binding constraint here. Construction throughput is: #63 (rooms take
-days to start) and #42 (a flat cap of 60 regardless of how many hands exist).
+Perception is no longer the binding constraint here. Construction throughput was: #42 (a flat cap
+of 60 regardless of how many hands exist), #67 (a distance cost that could not tell forty-one
+cells from four hundred), and #63 (a buildability measure that could not see a forest, because a
+tree is a Plant and not an edifice).
+
+**All three fixed, and verified together in run 193.** **[live, run 193]**
+
+```
+day 0 13h  the Kitchen room is working
+day 3 09h  the Research room is working
+day 4 03h  the Bedroom room is working
+day 5 18h  the Workshop room is working
+```
+
+First room at day 0 hour 13, four by day 5. The mechanism is visible in what the planner now
+accepts as a site:
+
+| run | clearing needed | rooms |
+|---|---|---|
+| 191, before | `clearing 56 obstructions` | none by day 4 |
+| 193, after | `clearing 5, 4, 5, 6 obstructions` | four by day 5 |
+
+Fifty-six of eighty-one cells became four to six. The scorer can see the trees, so it stops
+choosing woods to build in.
 
 Worth stating plainly because it is easy to keep improving the wrong half: every fix to the
 bleeding response this session was correct and none of them would have saved these colonies.
