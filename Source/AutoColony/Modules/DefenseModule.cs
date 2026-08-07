@@ -1085,7 +1085,8 @@ namespace AutoColony.Modules
 
             float required = CasualtyPolicy.RequiredAdvantage(
                 learned, fieldable.Count,
-                ctx.state.colonistsDowned, hasRefuge, canRecover);
+                ctx.state.colonistsDowned, hasRefuge, canRecover,
+                ctx.Gene(Genes.DefenseScarcityCaution));
 
             bool winnable = threat <= 0f || strength / threat >= required;
 

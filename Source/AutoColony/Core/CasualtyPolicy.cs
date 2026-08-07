@@ -70,8 +70,39 @@ namespace AutoColony
         /// </summary>
         public static float EngagementCaution(int ableFighters, int downedColonists)
         {
-            if (downedColonists <= 0 || ableFighters <= 0) return 1f;
-            return 1f + (float)downedColonists / ableFighters;
+            return EngagementCaution(ableFighters, downedColonists, 0f);
+        }
+
+        /// <summary>
+        /// The same, told how much a colony this small should fear losing one.
+        ///
+        /// The two-argument form is 1.0 until somebody is already down, so a colony of three
+        /// demanded exactly the margin a colony of twelve demanded. The fights that end colonies
+        /// begin with nobody down: by the time the casualty term rises, three are on the floor
+        /// and the arithmetic has arrived after the event it was meant to prevent.
+        ///
+        /// Losing one of three costs a third of the labour, a third of the defence, and a third
+        /// of whoever can tend the other two. Losing one of ten costs a tenth. The stake differs
+        /// enormously and the bar could not say so — which is #51 seen from the engagement side,
+        /// and what twenty-two blood-loss deaths across eight colonies in one session were
+        /// mostly made of.
+        ///
+        /// Scarcity is one over the hands available, so it falls away naturally as a colony
+        /// grows and needs no threshold anywhere. How much it is worth is the genome's to argue
+        /// with, because how badly a colony should fear being small is a strategy rather than a
+        /// fact.
+        /// </summary>
+        public static float EngagementCaution(int ableFighters, int downedColonists,
+                                              float scarcityWeight)
+        {
+            if (ableFighters <= 0) return 1f;
+
+            float caution = 1f;
+            if (downedColonists > 0) caution += (float)downedColonists / ableFighters;
+
+            if (scarcityWeight > 0f) caution += scarcityWeight / ableFighters;
+
+            return caution;
         }
 
         /// <summary>
@@ -117,6 +148,15 @@ namespace AutoColony
                                               int downedColonists, bool hasRefuge,
                                               bool canRecoverCasualties)
         {
+            return RequiredAdvantage(geneRatio, ableFighters, downedColonists, hasRefuge,
+                                     canRecoverCasualties, 0f);
+        }
+
+        /// <summary>The same, with the genome's view of how much being few is worth fearing.</summary>
+        public static float RequiredAdvantage(float geneRatio, int ableFighters,
+                                              int downedColonists, bool hasRefuge,
+                                              bool canRecoverCasualties, float scarcityWeight)
+        {
             float required = geneRatio;
 
             if (hasRefuge && required < MinimumToLeaveCover)
@@ -137,7 +177,7 @@ namespace AutoColony
                 required = MinimumWithoutMedicalCapacity;
             }
 
-            return required * EngagementCaution(ableFighters, downedColonists);
+            return required * EngagementCaution(ableFighters, downedColonists, scarcityWeight);
         }
     }
 }
