@@ -1376,17 +1376,34 @@ namespace AutoColony.Modules
                     //
                     // Unreachable and too-slow want different work: one is a pathing or a
                     // hostile problem, the other is a distance problem.
+                    // Three causes, and the message used to give two of them the same words.
+                    //
+                    // Nine of the eleven times this has fired across the session it said "no
+                    // route to them at all", which made unreachability look like the whole
+                    // story. It is not: NearestWalkHours returns the same -1 when nobody could
+                    // path to the casualty AND when there was nobody to send in the first
+                    // place, and those want opposite work — one is a wall or a fire, the other
+                    // is a colony with everybody already on the floor.
+                    //
+                    // Counting an empty list as "no route" is the same fault as counting an
+                    // instrument that never ran as "nothing to report", which this session has
+                    // now made six separate times.
                     float walk = NearestWalkHours(fighters, patient);
+                    int couldGo = 0;
+                    for (int f = 0; f < fighters.Count; f++)
+                        if (fighters[f] != null && fighters[f] != patient) couldGo++;
+
+                    string why = couldGo == 0
+                        ? "there is nobody left standing to send"
+                        : walk < 0f
+                            ? "no route to them at all, from any of the " + couldGo + " who could go"
+                            : string.Format("{0:0.0} hours of walking", walk);
+
                     Chronicle.Record(ChronicleCategory.Health, string.Format(
-                        "nobody can {0} {1} before they bleed out ({2} against {3:0.0} hours " +
+                        "nobody can reach {0} before they bleed out ({1} against {2:0.0} hours " +
                         "left) — keeping everyone in the line, because a doctor who arrives to " +
                         "a corpse has cost the fight a fighter and saved nothing",
-                        walk < 0f ? "reach" : "get to",
-                        patient.LabelShortCap,
-                        walk < 0f
-                            ? "no route to them at all"
-                            : string.Format("{0:0.0} hours of walking", walk),
-                        deadline / 2500f));
+                        patient.LabelShortCap, why, deadline / 2500f));
                 }
                 return null;
             }
