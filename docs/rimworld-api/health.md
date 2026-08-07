@@ -30,9 +30,27 @@ anybody left standing:
     run 174  four down on day 0 from a boomalope blast, two bled out, two burned
 
 Every one of those is *everybody down together*, after which bleeding is unanswerable however
-good the tending logic is. So the leverage is upstream — not being overwhelmed in a single
-engagement — which is where #50 (a door before day three) and #55 (elective fights taken on thin
-margins) sit, rather than anywhere in this file.
+good the tending logic is.
+
+**Confirmed rather than inferred, in run 185.** The "cannot reach the casualty" message used to
+say "no route to them at all" for two different situations — nobody could path to them, and
+there was nobody to send — because the helper returns the same sentinel for both. Nine of eleven
+occurrences said "no route", which made unreachability look like the whole story. Split apart,
+the first case to fire said: **[live, run 185]**
+
+```
+nobody can reach Kooky before they bleed out
+  (there is nobody left standing to send against 2.7 hours left)
+```
+
+Three colonists down, the fourth a colonist who had joined that hour with Medicine 0, held back
+to tend, and all four dead within five hours. Not a pathing problem. Not a medicine problem —
+that colony died holding 21.4 days of food and scoring 1.00 on Infrastructure, Room quality and
+Food security, with Survival at 0.00.
+
+So the leverage is upstream — not being overwhelmed in a single engagement — which is where #50
+(a refuge before the first pack) and #55 (elective fights taken on thin margins) sit, rather than
+anywhere in this file.
 
 Worth stating plainly because it is easy to keep improving the wrong half: every fix to the
 bleeding response this session was correct and none of them would have saved these colonies.
