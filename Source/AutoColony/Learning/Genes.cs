@@ -104,6 +104,7 @@ namespace AutoColony.Learning
         /// everything else rots — so it is a gene and says so.
         /// </summary>
         public const string PlannerPatienceCeiling = "planner.patienceCeiling";
+        public const string PlannerPendingPerColonist = "planner.pendingPerColonist";
         public const string WorkNeedWeight = "work.needWeight";
         public const string WorkSpread = "work.spread";
         public const string WorkBands = "work.bands";
@@ -223,6 +224,8 @@ namespace AutoColony.Learning
             Add(PlannerPatienceSlack, 1f, 3f, 1.5f, "Planner", "Slack on an estimated wait");
             Add(PlannerDemotionFraction, 0.25f, 2f, 1f, "Planner", "Stand-down as a fraction of the wait");
             Add(PlannerPatienceCeiling, 2f, 20f, 6f, "Planner", "Longest a goal may hold the plan, days");
+            Add(PlannerPendingPerColonist, 5f, 60f, 20f, "Planner",
+                "Outstanding construction one colonist may be carrying");
 
             Add(BaseRoomSize, 4f, 11f, 7f, "Base", "Planned room interior size");
             Add(BaseSpareBeds, 0f, 5f, 1f, "Base", "Spare beds kept ready");

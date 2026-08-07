@@ -54,8 +54,27 @@ namespace AutoColony.Modules
 
         public override int IntervalTicks { get { return 3750; } }
 
-        /// <summary>Stop queueing work when this much construction is already outstanding.</summary>
-        const int MaxPendingConstruction = 60;
+        /// <summary>
+        /// Outstanding construction per pair of hands, before the planner stops queueing more.
+        ///
+        /// This was a flat sixty, and sixty is a great deal of work for two colonists and very
+        /// little for ten. The quantity it means is not a count of blueprints at all — it is how
+        /// far ahead of itself the colony is allowed to get, and that depends entirely on who is
+        /// there to build.
+        ///
+        /// Run 187 is the case for changing it. Day 0 hour 3: "planner standing down — 66
+        /// construction outstanding against a cap of 60". Four days later, three rooms planned
+        /// and not one of them closed, a refuge goal that had named the gap in every focus line
+        /// since hour zero, and three colonists dead of blood loss in a withdrawal to nowhere.
+        /// Every judgement that colony made was right; it could not build fast enough to act on
+        /// any of them.
+        ///
+        /// Twenty a colonist, so a colony of three sees exactly the sixty it saw before and a
+        /// bigger one is no longer throttled to a beginner's pace. The number is a gene because
+        /// how far ahead to run is a strategy — a cautious genome finishes what it starts, a
+        /// bold one queues a base and hopes.
+        /// </summary>
+        const int DefaultPendingPerColonist = 20;
 
         /// <summary>Blueprints placed in a single pass, to spread the cost over time.</summary>
         const int MaxPlacementsPerPass = 30;
@@ -421,7 +440,7 @@ namespace AutoColony.Modules
             if (!layout.established && !TryEstablish(ctx)) return;
 
             var s = ctx.state;
-            if (s.pendingBlueprints + s.pendingFrames > MaxPendingConstruction)
+            if (s.pendingBlueprints + s.pendingFrames > PendingCap(ctx))
             {
                 NoteBacklogStandDown(ctx);
                 return;
@@ -4010,6 +4029,21 @@ namespace AutoColony.Modules
         /// the building nobody is doing. So the two are reported differently, and the second
         /// says so plainly.
         /// </summary>
+        /// <summary>Hands that can actually build, never zero so the cap cannot collapse.</summary>
+        static int Hands(DirectorContext ctx)
+        {
+            int able = ctx.state.ableColonists != null ? ctx.state.ableColonists.Count : 0;
+            return able < 1 ? 1 : able;
+        }
+
+        /// <summary>How much outstanding construction this colony is allowed to be carrying.</summary>
+        static int PendingCap(DirectorContext ctx)
+        {
+            int perColonist = (int)ctx.Gene(Genes.PlannerPendingPerColonist);
+            if (perColonist < 1) perColonist = DefaultPendingPerColonist;
+            return perColonist * Hands(ctx);
+        }
+
         void NoteBacklogStandDown(DirectorContext ctx)
         {
             var s = ctx.state;
@@ -4024,13 +4058,15 @@ namespace AutoColony.Modules
             if (backlogStandDowns != 1 && backlogStandDowns != 8 && backlogStandDowns != 40) return;
 
             Chronicle.Record(ChronicleCategory.Build, string.Format(
-                "planner standing down — {0} construction outstanding against a cap of {1}{2}",
-                backlog, MaxPendingConstruction,
+                "planner standing down — {0} construction outstanding against a cap of {1} " +
+                "for {3} able{2}",
+                backlog, PendingCap(ctx),
                 backlogStandDowns == 1
                     ? ", so no new room is opened until it comes down"
                     : ", and it has not come down in " + backlogStandDowns + " passes — nobody " +
                       "is building what is already queued, so nothing here will open a room " +
-                      "again until that is answered"));
+                      "again until that is answered",
+                Hands(ctx)));
         }
 
     }
