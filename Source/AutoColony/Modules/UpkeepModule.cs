@@ -337,14 +337,47 @@ namespace AutoColony.Modules
                 var hediff = hediffs[h];
                 if (hediff == null || hediff.def == null) continue;
                 if (hediff.def.lethalSeverity <= 0f) continue;
-                if (hediff.Part == null) continue;                        // whole-body: no surgery for it
-                if (!hediff.Part.def.canSuggestAmputation) continue;
 
+                // Losing is asked BEFORE whether anything can be cut, and that order is the
+                // whole fix.
+                //
+                // It used to skip a whole-body infection, or one in a part no surgeon would take
+                // off, before ever working out whether the colonist was winning — so a colonist
+                // dying of something with no surgical answer produced no line at all. Run 182
+                // lost Rhae to Infection (extreme) over thirty hours at health 0.90 and the
+                // record goes straight from "Disease: Infection" to the death, with silence
+                // between.
+                //
+                // A colony that cannot say "this is killing somebody and I have nothing for it"
+                // is not making a mistake — it is making no statement, which reads identically
+                // to nothing being wrong.
                 var immunizable = hediff.TryGetComp<HediffComp_Immunizable>();
                 if (immunizable == null || immunizable.FullyImmune) continue;
 
                 float towardsDeath = hediff.Severity / hediff.def.lethalSeverity;
                 if (towardsDeath <= immunizable.Immunity) continue;       // winning; leave the limb on
+
+                bool wholeBody = hediff.Part == null;
+                if (wholeBody || !hediff.Part.def.canSuggestAmputation)
+                {
+                    // Nothing surgical answers this. Said once per colonist per disease, and put
+                    // in the roadmap so its age is visible rather than only its existence.
+                    if (surgeryNoted.Add(pawn.thingIDNumber ^ 0x3C3C))
+                    {
+                        Chronicle.Record(ChronicleCategory.Health, string.Format(
+                            "{0} is losing to {1} ({2:P0} towards lethal, immunity {3:P0}) and " +
+                            "there is no surgical answer — it is {4}, so the race is medicine " +
+                            "and rest against the clock and nothing the colony builds changes it",
+                            pawn.LabelShortCap, hediff.def.label, towardsDeath,
+                            immunizable.Immunity,
+                            wholeBody ? "whole-body" : "in the " + hediff.Part.Label +
+                                        ", which is not a part anything can take off"));
+
+                        CapabilityGaps.Report("treating " + hediff.def.label, "surgery", 1f, 0f,
+                                              ctx.state.tick);
+                    }
+                    continue;
+                }
 
                 if (HasBill(pawn, remove, hediff.Part)) continue;
 
