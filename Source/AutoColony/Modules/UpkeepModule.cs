@@ -175,12 +175,30 @@ namespace AutoColony.Modules
                     unhandled.Count > 0 ? unhandled[0].mood : 0f);
             }
 
+            // The roadmap, beside the defects, because they are the same kind of statement made
+            // at two levels: a defect is something the colony has not got round to, a capability
+            // gap is something no amount of getting round to would fix. Printed with how long it
+            // has stood, since that is the part nothing could see — run 170 carried "no herbal
+            // medicine" for thirteen days and the sentence looked the same on day 13 as day 0.
+            var gaps = CapabilityGaps.All();
+            string outOfReach = "";
+            for (int i = 0; i < gaps.Count; i++)
+            {
+                var g = gaps[i];
+                outOfReach += (outOfReach.Length > 0 ? ", " : "; out of reach: ")
+                    + g.capability + " (" + g.gatedBy + " "
+                    + g.needed.ToString("0.#") + " vs " + g.best.ToString("0.#") + ", "
+                    + (CapabilityGaps.StandingFor(g.capability, ctx.state.tick) / 60000f)
+                        .ToString("0.0") + "d)";
+            }
+
             string report = string.Format(
-                "upkeep — means {0:0.00} ({1} material), {2} defects{3}",
+                "upkeep — means {0:0.00} ({1} material), {2} defects{3}{4}",
                 means, ctx.state.usableMaterial, defectCount,
                 unhandled.Count > 0
                     ? "; cannot fix yet: " + string.Join(", ", unhandled.ToArray())
-                    : "");
+                    : "",
+                outOfReach);
 
             if (report == lastReport) return;
             lastReport = report;
