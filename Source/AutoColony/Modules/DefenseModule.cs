@@ -73,6 +73,9 @@ namespace AutoColony.Modules
 
             StandDown(ctx);
 
+            // Nobody bleeds to death standing up while a doctor is free.
+            SendBleedersToBed(ctx);
+
             // Fighting a front that has not arrived yet is still firefighting. Standing down on
             // `firesNearBase` alone would call it off on the very pass it was ordered, since a
             // front the colony went out to meet is by definition not near the base.
@@ -1767,6 +1770,77 @@ namespace AutoColony.Modules
             }
             catch (Exception) { return 1f; }
         }
+
+        /// <summary>
+        /// Send a colonist who is bleeding toward death to a bed, so somebody can tend them.
+        ///
+        /// Run 193 day 11: the colony won its fight cleanly — three sent, nobody down, one still
+        /// bleeding — and lost Ivanna eleven hours later with Doctor at 7.0, the highest
+        /// priority in the colony, and twenty-six medicine of which twenty-five were stockpiled.
+        /// Nobody tended her once.
+        ///
+        /// The whole reason is one word in the vitals: "down 0". She walked away from the fight
+        /// upright and only collapsed at the end, and RimWorld's tending job wants a patient in
+        /// a bed — an upright pawn keeps working until they fall over. Every part of the health
+        /// chain built here keys on Downed: the rescue needs victim.Downed, the retreat carry
+        /// needs colonistsDowned, the reserved medic only runs inside a fight. The one state
+        /// none of them covers is upright, bleeding, working, and hours from death.
+        ///
+        /// The colony saw it the whole time. colonistsBleedingOut counted her in every vitals
+        /// line and ticksToFirstBloodLoss held her deadline. The sense was present and no
+        /// consumer acted on it outside a fight.
+        ///
+        /// Gated on the deadline rather than on bleeding at all, because ordering somebody to bed
+        /// interrupts whatever they are doing and a colony that naps on every graze is worse off.
+        /// How close is close enough is the genome's to argue with.
+        ///
+        /// Only outside a fight. During one the line matters more, and a colonist told to lie
+        /// down mid-raid is a colonist not shooting.
+        /// </summary>
+        void SendBleedersToBed(DirectorContext ctx)
+        {
+            var colonists = ctx.state.allColonists;
+            if (colonists == null) return;
+
+            int within = (int)(ctx.Gene(Genes.HealthBleedToBedHours) * 2500f);
+            if (within < 1) return;
+
+            for (int i = 0; i < colonists.Count; i++)
+            {
+                var pawn = colonists[i];
+                if (pawn == null || pawn.Dead) continue;
+                if (pawn.Downed) continue;              // the rescue path owns those
+
+                // Forgotten once they stop bleeding, or the second wound of a colony's life
+                // goes unremarked — the same fault as the bool that hid a thirteen-day gap.
+                if (!Bleeding(pawn)) { bledToBedNoted.Remove(pawn.thingIDNumber); continue; }
+
+                try
+                {
+                    if (pawn.InBed()) continue;
+
+                    int ticks = HealthUtility.TicksUntilDeathDueToBloodLoss(pawn);
+                    if (ticks > within) continue;       // a graze, not a clock
+
+                    var bed = RestUtility.FindBedFor(pawn, pawn, false, false, null);
+                    if (bed == null) continue;
+
+                    var job = JobMaker.MakeJob(JobDefOf.LayDown, bed);
+                    if (!pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc)) continue;
+
+                    if (bledToBedNoted.Add(pawn.thingIDNumber))
+                        Chronicle.Record(ChronicleCategory.Health, string.Format(
+                            "{0} is bleeding and still on their feet, {1:0.0} hours from dying of " +
+                            "it — sent to bed, because tending wants a patient lying down and an " +
+                            "upright colonist works until they fall over",
+                            pawn.LabelShortCap, ticks / 2500f));
+                }
+                catch (Exception) { }
+            }
+        }
+
+        /// <summary>Said once per colonist per spell, cleared when they stop bleeding.</summary>
+        readonly HashSet<int> bledToBedNoted = new HashSet<int>();
 
         void StandDown(DirectorContext ctx)
         {

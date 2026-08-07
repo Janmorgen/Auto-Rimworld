@@ -151,6 +151,7 @@ namespace AutoColony.Learning
         public const string HuntWoundsPerHealth = "hunt.woundsPerHealth";
         public const string DefenseBleedingAsCasualty = "defense.bleedingAsCasualty";
         public const string DefenseScarcityCaution = "defense.scarcityCaution";
+        public const string HealthBleedToBedHours = "health.bleedToBedHours";
 
         /// <summary>
         /// Where colonists stand to fight, as a set of competing preferences rather than a rule.
@@ -275,6 +276,8 @@ namespace AutoColony.Learning
                 "How much of a casualty a colonist still bleeding after a fight counts as");
             Add(DefenseScarcityCaution, 0f, 3f, 1f, "Defense",
                 "How much a colony should fear a fight for being few in number");
+            Add(HealthBleedToBedHours, 0f, 36f, 14f, "Defense",
+                "Hours from bleeding to death within which a colonist is sent to bed");
             Add(CombatCoverWeight, 0f, 8f, 4f, "Combat positioning", "Value of cover");
             Add(CombatStandoffWeight, 0f, 2f, 0.3f, "Combat positioning", "Value of holding a range");
             Add(CombatPreferredRange, 2f, 30f, 12f, "Combat positioning", "Range to fight at");
