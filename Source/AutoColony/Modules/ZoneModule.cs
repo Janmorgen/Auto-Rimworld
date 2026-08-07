@@ -76,7 +76,7 @@ namespace AutoColony.Modules
             var second = new Zone_Growing(map.zoneManager);
             map.zoneManager.RegisterZone(second);
             second.SetPlantDefToGrow(crop);
-            ctx.Credit(BanditId, crop.defName);
+            ctx.Credit(BanditId, crop.defName, "Food security");
             for (int i = 0; i < cells.Count; i++) second.AddCell(cells[i]);
 
             Chronicle.Record(ChronicleCategory.Economy, string.Format(
@@ -690,7 +690,7 @@ namespace AutoColony.Modules
                 if (crop != null)
                 {
                     growZone.SetPlantDefToGrow(crop);
-                    ctx.Credit(BanditId, crop.defName);
+                    ctx.Credit(BanditId, crop.defName, "Food security");
                 }
             }
 

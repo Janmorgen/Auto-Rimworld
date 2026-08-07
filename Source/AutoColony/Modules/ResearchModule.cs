@@ -83,7 +83,7 @@ namespace AutoColony.Modules
                 if (current == directed) return;
 
                 rm.SetCurrentProject(directed);
-                ctx.Credit(BanditId, directed.defName);
+                ctx.Credit(BanditId, directed.defName, "Research");
                 Chronicle.Record(ChronicleCategory.Research, string.Format(
                     "researching {0} because the plan needs it for {1}",
                     directed.defName,
@@ -98,7 +98,7 @@ namespace AutoColony.Modules
             if (pick == null) return;
 
             rm.SetCurrentProject(pick);
-            ctx.Credit(BanditId, pick.defName);
+            ctx.Credit(BanditId, pick.defName, "Research");
             Note("started research '" + pick.defName + "'");
         }
 

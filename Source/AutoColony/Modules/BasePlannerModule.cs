@@ -859,7 +859,7 @@ namespace AutoColony.Modules
             var reserved = ReserveRoom(ctx, role);
             if (reserved != null)
             {
-                ctx.Credit(BanditId, role.ToString());
+                ctx.Credit(BanditId, role.ToString(), "Room quality");
                 Note("reserved a new " + role + " room");
             }
         }
@@ -1136,7 +1136,7 @@ namespace AutoColony.Modules
                 room.furnitureQueued = false;   // furnished for its new purpose on a later pass
                 room.roleChangedTick = Find.TickManager.TicksGame;
 
-                ctx.Credit(BanditId, role.ToString());
+                ctx.Credit(BanditId, role.ToString(), "Room quality");
                 Chronicle.Record(ChronicleCategory.Build, string.Format(
                     "repurposed the {0} room as a {1} — the shell is already standing, and " +
                     "building another one would have cost about {2} units of material it did not need",

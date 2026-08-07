@@ -14,10 +14,25 @@ namespace AutoColony
         public string banditId = "";
         public string arm = "";
 
+        /// <summary>
+        /// The score term this choice bears on, or empty for the whole score.
+        ///
+        /// Every decision was credited with the epoch total, so a choice about where a bed goes
+        /// was judged on Food security, Research and seven other terms it has nothing to do
+        /// with. The evaluator already computes them separately — Mood 0.47, Conduct 0.50,
+        /// Defense 0.54 — and crediting a decision with the one it actually moves is the same
+        /// signal with most of the noise taken out.
+        ///
+        /// Empty keeps the old behaviour rather than guessing. A wrong term is worse than a
+        /// noisy one: it teaches something false about which lever does what.
+        /// </summary>
+        public string term = "";
+
         public void ExposeData()
         {
             Scribe_Values.Look(ref banditId, "b", "");
             Scribe_Values.Look(ref arm, "a", "");
+            Scribe_Values.Look(ref term, "t", "");
         }
     }
 
@@ -134,7 +149,7 @@ namespace AutoColony
             return b;
         }
 
-        public void CreditLater(string banditId, string arm)
+        public void CreditLater(string banditId, string arm, string term = "")
         {
             if (string.IsNullOrEmpty(banditId) || string.IsNullOrEmpty(arm)) return;
             // One credit per arm per epoch; repeats would just scale the same signal.
@@ -144,6 +159,7 @@ namespace AutoColony
             var pc = new PendingCredit();
             pc.banditId = banditId;
             pc.arm = arm;
+            pc.term = term ?? "";
             pendingCredits.Add(pc);
         }
 
@@ -411,6 +427,23 @@ namespace AutoColony
 
         // ---------------------------------------------------------------- epochs
 
+        /// <summary>
+        /// What a choice is judged on: the term it bears on, or the whole score.
+        ///
+        /// Falls back to the total whenever the term is unnamed or unrecognised, so a typo
+        /// degrades to the old behaviour rather than silently crediting zero — which would teach
+        /// the bandit that the arm is terrible and is the worst failure available here.
+        /// </summary>
+        static float ScoreFor(PendingCredit pc, float total, List<ScoreTerm> breakdown)
+        {
+            if (pc == null || string.IsNullOrEmpty(pc.term) || breakdown == null) return total;
+
+            for (int i = 0; i < breakdown.Count; i++)
+                if (breakdown[i].name == pc.term) return breakdown[i].raw;
+
+            return total;
+        }
+
         void BeginEpoch(int tick)
         {
             epochStart = EpochStart.From(lastMetrics);
@@ -460,7 +493,7 @@ namespace AutoColony
             for (int i = 0; i < pendingCredits.Count; i++)
             {
                 var pc = pendingCredits[i];
-                BanditFor(pc.banditId).Update(pc.arm, score);
+                BanditFor(pc.banditId).Update(pc.arm, ScoreFor(pc, score, breakdown));
             }
             pendingCredits.Clear();
 
@@ -719,7 +752,7 @@ namespace AutoColony
             for (int i = 0; i < pendingCredits.Count; i++)
             {
                 var pc = pendingCredits[i];
-                BanditFor(pc.banditId).Update(pc.arm, score);
+                BanditFor(pc.banditId).Update(pc.arm, ScoreFor(pc, score, breakdown));
             }
             pendingCredits.Clear();
 

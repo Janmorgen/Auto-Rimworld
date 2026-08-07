@@ -48,9 +48,16 @@ namespace AutoColony
         /// Records that a discrete choice was made, so the epoch's fitness can be credited
         /// back to it when the epoch closes. See <see cref="AutoColonyDirector.CreditLater"/>.
         /// </summary>
-        public void Credit(string banditId, string arm)
+        /// <summary>
+        /// Record a discrete choice for crediting when the epoch is scored.
+        ///
+        /// `term` names the score term the choice bears on, so the bandit learns from the signal
+        /// it actually moves rather than from nine others averaged in. Omit it and the choice is
+        /// judged on the whole score, which is where every caller started.
+        /// </summary>
+        public void Credit(string banditId, string arm, string term = "")
         {
-            if (director != null) director.CreditLater(banditId, arm);
+            if (director != null) director.CreditLater(banditId, arm, term);
         }
 
         /// <summary>
