@@ -50,6 +50,23 @@ The colony can **sell what it has spare to fund what it needs, inside a single s
 on cloth and short of food with no silver is a solvable position, not a refusal. Missing that
 scopes the whole capability to "buy if we happen to have money" and throws away most of its value.
 
+**Verified in run 181, and it took twenty runs to see it.** The colony held zero silver, needed
+33 days of food against a 25-day winter, and did this: **[live, run 181]**
+
+```
+day 7 08h  bought 144 venison, 262 raw fungus, 78 hare meat from Sammy,
+           paying with 449 steel — Phoenix negotiating at Social 4, on 0 silver
+day 7 09h  bought 11 venison, 20 raw fungus, paying with 36 steel
+day 7 15h  bought 11 venison, 20 raw fungus, paying with 36 steel
+day 7 16h  bought 4 venison, 8 raw fungus, paying with 15 steel
+```
+
+Note the shrinking payments — 449, then 36, then 15. That is the surplus guard draining the free
+pool down to its reserve and stopping, not a runaway. Only wood, steel and cloth are ever
+offered, and only `held − plan.Needs.For(x) − reserve`, so a wall waiting on steel keeps its
+steel. Anything the director tracks no need for is not sold at all, because the failure mode of
+guessing there is selling the beds.
+
 Prices move with the negotiator's Social skill —
 [prices & social skill](../rimworld/trading.md#prices--social-skill) — so choosing who talks is
 part of the trade, and choosing someone who **can reach the trader** is the other part.
