@@ -612,6 +612,17 @@ namespace AutoColony
         /// <summary>Degrees below the comfortable floor, 0 when it is not cold.</summary>
         public float coldShortfall;
 
+        /// <summary>
+        /// How far below comfortable the coldest part of the year ahead gets, and how many days
+        /// until it starts. Zero and zero on a map that never gets cold.
+        ///
+        /// Separate from <see cref="coldShortfall"/> rather than replacing it, because the two
+        /// answer different questions and both are wanted: a heater is about the room right now,
+        /// a parka is about the quadrum after this one.
+        /// </summary>
+        public float coldShortfallComing;
+        public int daysUntilCold;
+
         /// <summary>Degrees above the comfortable ceiling, 0 when it is not hot.</summary>
         public float heatExcess;
 
@@ -1624,6 +1635,7 @@ namespace AutoColony
                 if (s.coldShortfall < 0f) s.coldShortfall = 0f;
                 s.heatExcess = s.outdoorTemperature - ComfortableMax;
                 if (s.heatExcess < 0f) s.heatExcess = 0f;
+                CaptureColdAhead(s, map);
 
                 // Against each colonist's own tolerance, which already includes what they are
                 // wearing. A colony in parkas is not underdressed at -20; a colony in shirts is.
@@ -1935,6 +1947,64 @@ namespace AutoColony
             if (s.nearestFuelDistance == 0 || nearest < s.nearestFuelDistance)
                 s.nearestFuelDistance = nearest;
         }
+
+        /// <summary>
+        /// How cold the year gets, and how long until it does.
+        ///
+        /// `coldShortfall` is a thermometer, and a thermometer is the wrong instrument for a
+        /// decision whose remedy takes days. Run 195 showed the whole failure in one reading:
+        /// day 21, outdoor temperature 15C against a ComfortableMin of 16, so the shortfall had
+        /// been exactly zero all summer and went positive that morning — at which point RimWorld
+        /// raised "Need warm clothes" and the colony began tailoring its first parka, with
+        /// fourteen growing days left and fifteen barren ones behind them.
+        ///
+        /// The same mistake `growingSeasonNow` made about fields, in the field next door. It was
+        /// fixed there by asking the game about the year rather than the morning, and the same
+        /// call answers this — so this is not new perception, it is an existing sense being
+        /// extended to the decision that needed it.
+        ///
+        /// Two numbers rather than one, because a flag cannot be compared against a deadline:
+        /// *how cold it gets* sizes the wardrobe, and *how long until then* is what a remedy has
+        /// to beat. That distinction is the one the bleeding clock already draws — a count of
+        /// who is hurt cannot tell you whether help arrives in time.
+        /// </summary>
+        static void CaptureColdAhead(ColonyState s, Map map)
+        {
+            try
+            {
+                float worst = float.MaxValue;
+                int worstTwelfth = -1;
+
+                var now = GenLocalDate.Twelfth(map);
+                for (int ahead = 0; ahead < GenDate.TwelfthsPerYear; ahead++)
+                {
+                    var t = Twelfth(((int)now + ahead) % GenDate.TwelfthsPerYear);
+                    float avg = GenTemperature.AverageTemperatureAtTileForTwelfth(map.Tile, t);
+                    if (avg < worst) { worst = avg; worstTwelfth = ahead; }
+                }
+
+                if (worstTwelfth < 0) return;
+
+                s.coldShortfallComing = ComfortableMin - worst;
+                if (s.coldShortfallComing < 0f) s.coldShortfallComing = 0f;
+
+                // Days until the cold twelfth begins, counting what is left of this one. Zero
+                // means it is already here, which is a real answer and not a missing one.
+                int intoTwelfth = GenLocalDate.DayOfTwelfth(map);
+                s.daysUntilCold = worstTwelfth == 0
+                    ? 0
+                    : worstTwelfth * GenDate.DaysPerTwelfth - intoTwelfth;
+                if (s.daysUntilCold < 0) s.daysUntilCold = 0;
+            }
+            catch (System.Exception)
+            {
+                // A map with no world tile behind it, in a test fixture. Leaving both at their
+                // defaults reads as "no cold coming", which is the same answer the thermometer
+                // gives on a temperate map and keeps every consumer on its existing behaviour.
+            }
+        }
+
+        static Twelfth Twelfth(int index) { return (Twelfth)index; }
 
         /// <summary>
         /// Walk the year ahead and find where the growing stops and starts again.

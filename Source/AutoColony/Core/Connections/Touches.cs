@@ -151,7 +151,8 @@ namespace AutoColony.Connections
                 module = "ProductionModule",
                 reads = new[]
                 {
-                    "coldShortfall", "colonists", "heatExcess", "pendingBlueprints", "pendingFrames"
+                    "coldShortfall", "coldShortfallComing", "colonists", "daysUntilCold",
+                    "heatExcess", "pendingBlueprints", "pendingFrames"
                 },
                 affects = new[] { "world.bills" }
             },

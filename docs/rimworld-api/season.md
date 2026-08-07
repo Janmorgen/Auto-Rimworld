@@ -71,3 +71,36 @@ Maps seen while driving colonies, as `growing days left` / `barren days ahead`:
 A target computed as `barrenDays × margin` needs the margin to be a **ratio near 1.3**, not a
 count of days. Passing a days-valued gene into that parameter produced a demand for 150 days of
 food on a 25-day winter (#58, and [disagreements.md](disagreements.md#units)).
+
+## Temperature the colony has not reached yet
+
+```csharp
+GenTemperature.AverageTemperatureAtTileForTwelfth(map.Tile, twelfth);
+GenTemperature.TwelfthsInAverageTemperatureRange(map.Tile, min, max);
+GenLocalDate.Twelfth(map);
+GenLocalDate.DayOfTwelfth(map);
+```
+**[compiles]**
+
+The second one drives the growing forecast; the first answers the same question for cold, and
+walking all twelve gives both *how cold it gets* and *how many days until then*.
+
+**Two numbers, not one.** A remedy that takes days cannot be steered by a flag — the deadline is
+half the answer. This is the same distinction the bleeding clock draws in
+[health.md](health.md#the-bleeding-clock): a count of who is hurt cannot say whether help arrives
+in time.
+
+**Watched failing, run 195.** `ComfortableMin` is 16C. The colony sat under a thermometer all
+summer, so its warm-clothes branch was false every pass, went true for the first time on the
+morning the outdoor temperature touched 15C, and started its first parka on day 21 — fourteen
+growing days from a fifteen-day barren quadrum. **[live, run 195]**
+
+```
+day 21 00h  VITALS  colonists 4  food 5.3d  15C      → alert: "Need warm clothes"
+            14d growing left, then 15d barren
+```
+
+Nothing was broken. Every number was correct and the decision was reading the wrong one, which
+is the `present read as future` row of goal.md's fault table and the same mistake
+`growingSeasonNow` made about fields before the forecast replaced it. Worth stating because the
+fix is not new perception: the call was already in `ColonyState`, serving a different consumer.

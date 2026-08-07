@@ -65,6 +65,18 @@ namespace AutoColony.Learning
         public const string ProductionBuffer = "production.bufferFactor";
 
         /// <summary>
+        /// How many days before the cold arrives the colony starts dressing for it.
+        ///
+        /// A gene rather than a constant because the honest number is the one thing here that is
+        /// not cheaply measurable: it is the wardrobe's work divided by tailoring throughput, and
+        /// nothing measures tailoring throughput yet. Sensed would be better than given and
+        /// discovered better still — until then this is the parameter that used to be the words
+        /// "a parka takes two minutes of work to make" buried in a comment, which is strictly
+        /// worse than a number evolution can argue with.
+        /// </summary>
+        public const string ProductionColdLeadDays = "production.coldLeadDays";
+
+        /// <summary>
         /// How much a room being depended on, and how much a room being busy, raise the priority
         /// of fixing something wrong with it.
         ///
@@ -262,6 +274,9 @@ namespace AutoColony.Learning
             // quietly costing five mood a head a night to save walls the colony could afford.
             // Still a gene: evolution may raise it if it finds a reason.
             Add(BaseBedsPerRoom, 1f, 4f, 1f, "Base", "Beds per bedroom");
+
+            Add(ProductionColdLeadDays, 2f, 30f, 12f, "Production",
+                "Days before the cold arrives that the colony starts dressing for it");
 
             Add(UpkeepChurnTolerance, 1f, 4f, 2f, "Upkeep",
                 "Times a thing may change hands in one room before the reverser stands down");

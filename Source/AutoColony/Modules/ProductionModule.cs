@@ -333,7 +333,22 @@ namespace AutoColony.Modules
         /// </summary>
         static float ApparelWanted(ThingDef product, DirectorContext ctx, int colonists)
         {
+            // The cold that matters is the cold the wardrobe has to be ready for, not the cold
+            // outside the window. Run 195 read the window: ComfortableMin is 16C, day 21 came in
+            // at 15C, so this branch was false every pass of the first three weeks and true for
+            // the first time on the morning RimWorld raised "Need warm clothes" — fourteen
+            // growing days from a fifteen-day barren quadrum, with one parka to its name.
+            //
+            // The comment below used to carry the assumption that made that safe: "winter
+            // arrives eventually and a parka takes two minutes of work to make". Two minutes is
+            // the bench time for one garment by one tailor who is standing at the bench with the
+            // cloth already there. It is not the time to clothe a colony, and it was doing the
+            // work of a deadline without being measured against one.
             float cold = ctx.state.coldShortfall;
+            if (ctx.state.coldShortfallComing > cold &&
+                ctx.state.daysUntilCold <= ctx.Gene(Genes.ProductionColdLeadDays))
+                cold = ctx.state.coldShortfallComing;
+
             float heat = ctx.state.heatExcess;
 
             float coldInsulation = SafeStat(product, StatDefOf.Insulation_Cold);
