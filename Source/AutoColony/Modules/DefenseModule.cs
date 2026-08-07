@@ -1300,11 +1300,25 @@ namespace AutoColony.Modules
                 if (!tooLateNoted)
                 {
                     tooLateNoted = true;
+
+                    // Two different answers, and printing them the same way made one of them
+                    // read as nonsense. Run 170 logged "-1.0 hours of walking against 14.2
+                    // left", which is a sentinel meaning NOBODY COULD REACH HER AT ALL, dressed
+                    // up as a duration — and beside "14.2 left" it reads as though the walk was
+                    // short and something else went wrong. Kristina was lost that hour.
+                    //
+                    // Unreachable and too-slow want different work: one is a pathing or a
+                    // hostile problem, the other is a distance problem.
+                    float walk = NearestWalkHours(fighters, patient);
                     Chronicle.Record(ChronicleCategory.Health, string.Format(
-                        "nobody can reach {0} before they bleed out ({1:0.0} hours of walking " +
-                        "against {2:0.0} left) — keeping everyone in the line, because a doctor " +
-                        "who arrives to a corpse has cost the fight a fighter and saved nothing",
-                        patient.LabelShortCap, NearestWalkHours(fighters, patient),
+                        "nobody can {0} {1} before they bleed out ({2} against {3:0.0} hours " +
+                        "left) — keeping everyone in the line, because a doctor who arrives to " +
+                        "a corpse has cost the fight a fighter and saved nothing",
+                        walk < 0f ? "reach" : "get to",
+                        patient.LabelShortCap,
+                        walk < 0f
+                            ? "no route to them at all"
+                            : string.Format("{0:0.0} hours of walking", walk),
                         deadline / 2500f));
                 }
                 return null;
