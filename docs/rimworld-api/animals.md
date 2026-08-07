@@ -166,3 +166,31 @@ Candidate filter that matches what is actually huntable **[compiles]**:
 animal.RaceProps.Animal && animal.Faction == null &&
 animal.RaceProps.foodType != FoodTypeFlags.None
 ```
+
+## Winning the fight and losing nobody are different questions
+
+Colony strength is a sum. A melee animal is not fought by a sum — it walks up to exactly one
+colonist, and that colonist is alone with it however many guns are pointed at its back.
+
+Run 197 read the same animal twice, a day apart: **[live, run 197]**
+
+```
+day 15 12h  passed over Megasloth (280, measured 221)  [strength 396, need 1.6x]
+day 16 13h  hunting  ... Megasloth (280, measured 221) [strength 531]
+day 16 15h  DEATH  Bite (megasloth teeth) — Blackrose (health 0.99, mood 0.74)
+```
+
+The arithmetic was right about the fight. Revenge was near-certain and correctly priced —
+`manhunterOnDamageChance` 0.50 across roughly seven wounds at `baseHealthScale` 3.6 is about
+0.99 — so ~219 of expected retaliation went in against 531 of strength, a 2.4x margin, and the
+colony did win: the sloth died and the field was held. Blackrose met 221 by herself at full
+health and did not get a second reading.
+
+Nothing in the decision could distinguish *the colony wins* from *everyone comes back*. The bar
+now also asks whether the **best single colonist** clears the animal, because the colony cannot
+choose who gets reached — if even the best would lose the exchange, somebody is being sent to die
+whatever the total says. The margin is a gene, since it prices grief against food.
+
+Note this is orthogonal to `HuntRisk`'s session aggregation. That fixed *many small fights add
+up*; this is *one fight nobody can take alone*, and a colony can pass the first and fail the
+second, which is exactly what run 197 did.

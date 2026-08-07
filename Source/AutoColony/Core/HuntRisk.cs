@@ -141,6 +141,40 @@ namespace AutoColony
             return area * (incendiaryWeight < 1f ? 1f : incendiaryWeight);
         }
 
+        /// <summary>
+        /// Whether anybody in the colony survives meeting this animal alone.
+        ///
+        /// Colony strength is a sum and a melee animal is not fought by a sum. Three colonists
+        /// shooting at one megasloth is three guns against one target, so the colony wins — and
+        /// the megasloth walks up to exactly one of them, and that person is on their own.
+        /// Summing answers "do we win" and this answers "does anybody die winning", and only the
+        /// first was ever being asked.
+        ///
+        /// Run 197 shows both readings of the same animal a day apart: **[live, run 197]**
+        ///
+        ///     day 15 12h  passed over Megasloth (280, measured 221)  [strength 396]
+        ///     day 16 13h  hunting  ... Megasloth (280, measured 221) [strength 531]
+        ///     day 16 15h  DEATH  Bite (megasloth teeth) — Blackrose (health 0.99, mood 0.74)
+        ///
+        /// The colony grew stronger, the sum cleared the bar, and the arithmetic was right about
+        /// the fight: the sloth died and the colony held the field. Blackrose met 221 by herself
+        /// at full health and did not get a second reading. Nothing in the decision could tell
+        /// the difference between a fight the colony wins and a fight it survives intact.
+        ///
+        /// Deliberately about the *best* fighter rather than the average or the weakest. The
+        /// colony cannot choose who the animal reaches, so the question is not "would our best
+        /// win" — it is that if even the best would lose the exchange, somebody is being sent to
+        /// die whatever the total says.
+        /// </summary>
+        public static bool SurvivesContact(float bestSingleFighter, float animalThreat,
+                                           float margin)
+        {
+            if (animalThreat <= 0f) return true;      // nothing to meet
+            if (bestSingleFighter <= 0f) return false;
+            if (margin < 1f) margin = 1f;
+            return bestSingleFighter >= animalThreat * margin;
+        }
+
         public static float ExpectedRetaliation(List<float> chances, List<float> threats)
         {
             if (chances == null || threats == null) return 0f;

@@ -167,6 +167,16 @@ namespace AutoColony.Learning
         /// </summary>
         public const string HuntBlastWeight = "hunt.blastWeight";
 
+        /// <summary>
+        /// How far ahead one colonist must be of an animal before the colony will pick a fight
+        /// it knows somebody has to meet alone.
+        ///
+        /// A gene because it prices grief against food, which is a strategy question and not an
+        /// arithmetic one. At 1.0 the colony takes even fights and will sometimes bury the
+        /// winner; higher, and it goes hungry rather than send anybody to an even fight.
+        /// </summary>
+        public const string HuntContactMargin = "hunt.contactMargin";
+
         public const string MiningAggression = "mining.aggression";
         public const string ChopAggression = "chop.aggression";
         public const string HuntAggression = "hunt.aggression";
@@ -306,6 +316,11 @@ namespace AutoColony.Learning
 
             Add(GrowingCellsPerColonist, 10f, 200f, 60f, "Zones", "Growing cells per colonist");
             Add(StockpileCellsPerColonist, 10f, 120f, 40f, "Zones", "Stockpile cells per colonist");
+
+            Add(HuntContactMargin, 1f, 3f, 1.3f, "Gathering",
+
+                "How far ahead one colonist must be of an animal it will meet alone");
+
 
             Add(HuntBlastWeight, 1f, 8f, 3f, "Gathering",
 

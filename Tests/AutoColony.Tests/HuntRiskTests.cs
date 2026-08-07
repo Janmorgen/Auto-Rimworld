@@ -218,3 +218,66 @@ namespace AutoColony.Tests
         }
     }
 }
+
+namespace AutoColony.Tests
+{
+    /// <summary>
+    /// Blackrose, who met a megasloth alone at full health while the colony's summed strength
+    /// said the fight was comfortable. Run 197, day 16.
+    /// </summary>
+    public class SurvivesContactTests
+    {
+        /// <summary>Harmless prey is never refused by this — it has nothing to meet.</summary>
+        [Fact]
+        public void NothingToMeetIsAlwaysSurvivable()
+        {
+            Assert.True(HuntRisk.SurvivesContact(0f, 0f, 1.3f));
+            Assert.True(HuntRisk.SurvivesContact(50f, 0f, 3f));
+        }
+
+        /// <summary>
+        /// The observed case. Best single colonist about 177, megasloth measured 221 — losing at
+        /// any margin, however many guns are pointed at its back.
+        /// </summary>
+        [Fact]
+        public void TheMegaslothBeatsTheBestColonistTheColonyHas()
+        {
+            Assert.False(HuntRisk.SurvivesContact(177f, 221f, 1.3f));
+            Assert.False(HuntRisk.SurvivesContact(177f, 221f, 1.0f));
+        }
+
+        /// <summary>Clearly ahead is fine, and must be, or the colony hunts nothing.</summary>
+        [Fact]
+        public void SomebodyClearlyStrongerMayTakeIt()
+        {
+            Assert.True(HuntRisk.SurvivesContact(300f, 221f, 1.3f));
+            Assert.True(HuntRisk.SurvivesContact(100f, 50f, 1.3f));
+        }
+
+        /// <summary>
+        /// An even fight is refused at the default margin and allowed at 1.0 — which is the
+        /// whole point of the margin being a gene rather than a constant.
+        /// </summary>
+        [Fact]
+        public void TheMarginIsWhatSeparatesAnEvenFightFromASafeOne()
+        {
+            Assert.False(HuntRisk.SurvivesContact(221f, 221f, 1.3f));
+            Assert.True(HuntRisk.SurvivesContact(221f, 221f, 1.0f));
+        }
+
+        /// <summary>A margin below one cannot make the colony bolder than an even fight.</summary>
+        [Fact]
+        public void TheMarginNeverGoesBelowEven()
+        {
+            Assert.False(HuntRisk.SurvivesContact(100f, 221f, 0f));
+            Assert.False(HuntRisk.SurvivesContact(100f, 221f, -5f));
+        }
+
+        /// <summary>Nobody left standing meets nothing safely.</summary>
+        [Fact]
+        public void NobodyToSendSurvivesNothing()
+        {
+            Assert.False(HuntRisk.SurvivesContact(0f, 10f, 1.3f));
+        }
+    }
+}

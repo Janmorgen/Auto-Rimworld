@@ -380,6 +380,14 @@ namespace AutoColony.Modules
             // strategy is in general.
             float desperation = AcMath.Clamp01(urgency * 0.8f + aggression * 0.2f);
             blastWeight = ctx.Gene(Genes.HuntBlastWeight);
+            contactMargin = ctx.Gene(Genes.HuntContactMargin);
+
+            bestSingleFighter = 0f;
+            for (int i = 0; i < ctx.state.ableColonists.Count; i++)
+            {
+                float v = CombatAssessment.FightingValue(ctx.state.ableColonists[i]);
+                if (v > bestSingleFighter) bestSingleFighter = v;
+            }
             float strength = CombatAssessment.ColonyStrength(ctx.state);
 
             int radius = GatherReach.Radius(GatherRadius, urgency,
@@ -679,6 +687,21 @@ namespace AutoColony.Modules
             sessionChances.Add(chance);
             sessionThreats.Add(threat);
 
+            // A fight the colony wins is not the same as a fight it survives intact.
+            //
+            // Everything below reasons about the colony's summed strength, which is the right
+            // denominator for whether the animal dies and the wrong one for whether anybody dies
+            // killing it. A megasloth reaches one colonist, and that colonist is alone with it
+            // however many guns are pointed at its back.
+            if (chance > 0f && threat > 0f &&
+                !HuntRisk.SurvivesContact(bestSingleFighter, threat, contactMargin))
+            {
+                sessionChances.RemoveAt(sessionChances.Count - 1);
+                sessionThreats.RemoveAt(sessionThreats.Count - 1);
+                NoteUnmeetable(animal, threat);
+                return false;
+            }
+
             float retaliation = HuntRisk.ExpectedRetaliation(sessionChances, sessionThreats);
             if (CombatAssessment.ShouldHuntDangerous(strength, retaliation, desperation,
                                                      revengeFloor))
@@ -730,6 +753,24 @@ namespace AutoColony.Modules
 
         /// <summary>How much worse an incendiary blast is than a plain one. Set once a pass.</summary>
         float blastWeight = 1f;
+
+        /// <summary>The best single fighter the colony has, and the margin one of them needs.</summary>
+        float bestSingleFighter, contactMargin = 1f;
+
+        /// <summary>Said once per animal kind, so a standing refusal does not fill the log.</summary>
+        readonly HashSet<string> unmeetableNoted = new HashSet<string>();
+
+        void NoteUnmeetable(Pawn animal, float threat)
+        {
+            if (animal == null || !unmeetableNoted.Add(animal.def != null ? animal.def.defName : "?"))
+                return;
+
+            Chronicle.Record(ChronicleCategory.Hunt, string.Format(
+                "not hunting {0} — it is worth {1:0} in a fight and the best single colonist is " +
+                "{2:0}, so whoever it reaches is alone with something that beats them. The colony " +
+                "would win; that is a different question from whether everyone comes back",
+                animal.LabelShortCap, threat, bestSingleFighter));
+        }
 
         /// <summary>
         /// Blast hazard the colony has actually signed up for this pass, so the record carries it.
