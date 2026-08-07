@@ -133,12 +133,11 @@ namespace AutoColony
         /// on day 0 to two boomalopes, and run 196 lost Stephanie to Burn at day 10 hour 20 with
         /// nineteen fires burning and one colonist able to fight them. **[live, runs 174, 196]**
         /// </summary>
-        public static float BlastHazard(float radius, bool incendiary, float incendiaryWeight)
+        public static float BlastHazard(float hazard, bool incendiary, float incendiaryWeight)
         {
-            if (radius <= 0f) return 0f;
-            float area = radius * radius;
-            if (!incendiary) return area;
-            return area * (incendiaryWeight < 1f ? 1f : incendiaryWeight);
+            if (hazard <= 0f) return 0f;
+            if (!incendiary) return hazard;
+            return hazard * (incendiaryWeight < 1f ? 1f : incendiaryWeight);
         }
 
         /// <summary>

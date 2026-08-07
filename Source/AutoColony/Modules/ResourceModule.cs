@@ -755,12 +755,25 @@ namespace AutoColony.Modules
             var worker = animal.def.race.DeathActionWorker;
             if (worker == null || !worker.DangerousInMelee) return 0f;
 
-            float size = animal.def.race.baseBodySize;
-            if (size <= 0f) size = 1f;
+            // The magnitude is the part of the rating that is not fighting.
+            //
+            // Body size squared was the first attempt and it fails on exactly the animal that
+            // started this: a boomrat is baseBodySize 0.2, so its hazard came out at 0.12 and
+            // printed as "0" — while three of them set eighty-two fires in run 197 and nearly
+            // ended that colony on day 0. Fire is a spreading process; the igniter's waistline
+            // is not the thing that scales.
+            //
+            // animals.md already had the honest number and I did not use it. A boomalope rates
+            // 80 and measures 19 in a fight, and the note spells out why: "It is rated eighty
+            // because it explodes when killed." The gap between what the storyteller charges for
+            // the animal and what the animal can actually do to you *is* the explosion, already
+            // priced by the people who built it, on the same scale as every other threat here.
+            float rated = animal.kindDef != null ? animal.kindDef.combatPower : 0f;
+            float fights = CombatAssessment.MeasuredAnimalValue(animal);
+            float hazard = rated - fights;
+            if (hazard <= 0f) return 0f;      // rated no higher than it fights: nothing hidden
 
-            // Unknown dangerous deaths are assumed to burn. Both of the game's own are
-            // incendiary, and guessing the cheaper way round is how this cost two colonies.
-            return HuntRisk.BlastHazard(size, true, incendiaryWeight);
+            return HuntRisk.BlastHazard(hazard, true, incendiaryWeight);
         }
 
         /// <summary>How much worse an incendiary blast is than a plain one. Set once a pass.</summary>

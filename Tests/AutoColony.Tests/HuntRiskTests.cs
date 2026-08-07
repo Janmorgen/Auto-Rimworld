@@ -184,15 +184,19 @@ namespace AutoColony.Tests
             Assert.Equal(0f, HuntRisk.BlastHazard(-1f, true, 3f));
         }
 
-        /// <summary>Area, not radius — a blast covers a disc and the damage scales with it.</summary>
+        /// <summary>
+        /// The hazard passes through on the scale it arrives on, which is now the gap between
+        /// what the storyteller charges for the animal and what it can do in a fight.
+        ///
+        /// It squared a body size before, and that priced a boomrat's explosion at 0.12 — three
+        /// of which set eighty-two fires in run 197. A boomalope rates 80 and fights at 19; the
+        /// 61 between them is the explosion, already on the same scale as every other threat.
+        /// </summary>
         [Fact]
-        public void HazardScalesWithAreaNotRadius()
+        public void TheHazardIsTheGapBetweenRatedAndMeasured()
         {
-            float small = HuntRisk.BlastHazard(2f, false, 1f);
-            float big = HuntRisk.BlastHazard(4f, false, 1f);
-            Assert.Equal(4f, small);
-            Assert.Equal(16f, big);
-            Assert.Equal(4f, big / small);   // double the radius, four times the hazard
+            Assert.Equal(61f, HuntRisk.BlastHazard(80f - 19f, false, 1f));
+            Assert.Equal(45f, HuntRisk.BlastHazard(45f, false, 1f));
         }
 
         /// <summary>
@@ -202,8 +206,8 @@ namespace AutoColony.Tests
         [Fact]
         public void AnIncendiaryBlastCostsMoreThanAPlainOne()
         {
-            float plain = HuntRisk.BlastHazard(3f, false, 3f);
-            float fire = HuntRisk.BlastHazard(3f, true, 3f);
+            float plain = HuntRisk.BlastHazard(61f, false, 3f);
+            float fire = HuntRisk.BlastHazard(61f, true, 3f);
             Assert.True(fire > plain);
             Assert.Equal(plain * 3f, fire);
         }
@@ -212,9 +216,9 @@ namespace AutoColony.Tests
         [Fact]
         public void TheIncendiaryWeightNeverDiscountsFire()
         {
-            float plain = HuntRisk.BlastHazard(3f, false, 1f);
-            Assert.Equal(plain, HuntRisk.BlastHazard(3f, true, 0f));
-            Assert.Equal(plain, HuntRisk.BlastHazard(3f, true, -5f));
+            float plain = HuntRisk.BlastHazard(61f, false, 1f);
+            Assert.Equal(plain, HuntRisk.BlastHazard(61f, true, 0f));
+            Assert.Equal(plain, HuntRisk.BlastHazard(61f, true, -5f));
         }
     }
 }
