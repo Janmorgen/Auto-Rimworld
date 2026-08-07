@@ -890,20 +890,36 @@ namespace AutoColony
             {
                 // Candidates were judged against an identical world, so these scores are
                 // directly comparable and need no noise margin.
+                // Against the incumbent's score IN THIS ROUND, not its score from another epoch.
+                //
+                // This compared winnerScore with evolution.incumbentScore and announced that
+                // 0.671 "beat" 0.713, which is false and looked like the search adopting a worse
+                // strategy. It was not: SpawnCandidates makes the incumbent candidate one, so in
+                // round 1's identical world the incumbent scored 0.657 and the best mutant 0.671,
+                // and the adoption was right. The two numbers I printed were measured in
+                // different epochs over different spans under different conditions, and printing
+                // them side by side as a comparison is the fault this project keeps finding in
+                // other people's code and has now produced in its own.
+                //
+                // Candidate one is the incumbent replayed, which is the only figure directly
+                // comparable to the winner's.
+                var roundScores = TrainingSession.Scores;
+                float incumbentHere = roundScores != null && roundScores.Count > 0
+                    ? roundScores[0] : float.NaN;
+
                 Chronicle.Record(ChronicleCategory.Learning, string.Format(
-                    "training round ends — a candidate scoring {0:0.000} beat the incumbent's " +
-                    "{1:0.000} and is adopted; generation {2}",
-                    winnerScore, evolution.incumbentScore, evolution.Incumbent.generation));
+                    "training round ends — the best candidate scored {0:0.000} against the " +
+                    "incumbent's {1:0.000} in the same world, and is adopted; generation {2}",
+                    winnerScore, incumbentHere, evolution.Incumbent.generation));
 
                 evolution.AdoptWinner(winner, winnerScore, lastMetrics.day);
                 ContributeToArchive();
             }
             else
             {
-                Chronicle.Record(ChronicleCategory.Learning, string.Format(
-                    "training round ends — no candidate beat the incumbent at {0:0.000}, which " +
-                    "keeps the plan. A round that changes nothing is a result, not a wasted one",
-                    evolution.incumbentScore));
+                Chronicle.Record(ChronicleCategory.Learning,
+                    "training round ends with no candidate to adopt, which keeps the plan. " +
+                    "A round that changes nothing is a result, not a wasted one");
             }
 
             TrainingSession.End();
