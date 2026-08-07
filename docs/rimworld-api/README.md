@@ -63,3 +63,23 @@ RimWorld 1.6.4871, base game, no DLC. Assemblies under
 `/run/media/deck/SD512/steamapps/common/RimWorld/RimWorldLinux_Data/Managed`, defs under
 `Data/Core/Defs`. Everything here is version-specific; a game update invalidates it and the
 probe is how it gets re-established rather than re-remembered.
+
+## `[compiles]` is weaker evidence than it looks
+
+The marking convention distinguishes `[read]`, `[live]`, `[compiles]` and `[assumed]`, and
+`[compiles]` was being treated as near-proof. It is not. A read can compile, run every tick and
+find nothing.
+
+Hunting an exploding animal was priced off `def.GetCompProperties<CompProperties_Explosive>()`.
+That compiles. It also returns null for every animal in the game, because a boomalope's explosion
+is not a comp — it is
+`<race><deathAction><workerClass>DeathActionWorker_BigExplosion</workerClass></deathAction></race>`,
+reached as `def.race.DeathActionWorker.DangerousInMelee`. **[compiles, and verified non-empty]**
+
+The failure is invisible by construction: an animal that never explodes and an animal whose
+explosion is never detected produce identical logs. It was caught by a colony, not by a compiler
+— run 197 hunted three boomrats in its first hour and set eighty-two fires.
+
+So: **a read that can return "nothing" needs a number in the record that says how often it did.**
+Where a value is only ever reported when non-zero, an inert read is silent forever. That is why
+the hunt line now names the blast hazard it accepted even though nothing acts on the figure.

@@ -510,7 +510,11 @@ namespace AutoColony.Modules
                     taken.Count > 0 ? Describe(taken) : "nothing",
                     inFlight,
                     declined.Count > 0 ? "; passed over " + Describe(declined) : "",
-                    CombatAssessment.Explain(strength, largestDeclined, desperation)));
+                    CombatAssessment.Explain(strength, largestDeclined, desperation) +
+                    (sessionBlast > 0f
+                        ? ", and " + sessionBlast.ToString("0")
+                          + " of what it took blows up when it dies"
+                        : "")));
             }
 
             return done;
@@ -538,6 +542,7 @@ namespace AutoColony.Modules
             // the colony is already carrying, and anything taken this pass is added on top.
             sessionChances.Clear();
             sessionThreats.Clear();
+            sessionBlast = 0f;
 
             released.Clear();
 
@@ -676,7 +681,11 @@ namespace AutoColony.Modules
 
             float retaliation = HuntRisk.ExpectedRetaliation(sessionChances, sessionThreats);
             if (CombatAssessment.ShouldHuntDangerous(strength, retaliation, desperation,
-                                                     revengeFloor)) return true;
+                                                     revengeFloor))
+            {
+                sessionBlast += blast;
+                return true;
+            }
 
             sessionChances.RemoveAt(sessionChances.Count - 1);
             sessionThreats.RemoveAt(sessionThreats.Count - 1);
@@ -684,26 +693,54 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
-        /// Read off the def rather than off a name. Anything the game gives an explosive comp is
-        /// treated the same way, so a mod's exploding beast is priced without this code having
-        /// heard of it — and a boomalope is not special-cased anywhere.
+        /// Ask the game whether dying near this animal is dangerous, and how big it is.
+        ///
+        /// The first attempt at this read `CompProperties_Explosive` and was **inert**: it
+        /// compiled, returned null for every animal in the game, and shipped. A boomalope carries
+        /// no such comp — what it carries is
+        /// `&lt;deathAction&gt;&lt;workerClass&gt;DeathActionWorker_BigExplosion&lt;/workerClass&gt;`,
+        /// and the boomrat the same with SmallExplosion. Compiling is not evidence that a read
+        /// finds anything, and this one was caught only because run 197 hunted three boomrats in
+        /// its first hour and set eighty-two fires.
+        ///
+        /// `DangerousInMelee` is RimWorld's own answer to the question, which is better than
+        /// either number in animals.md because it is neither a measurement nor a rating: the game
+        /// is saying that being next to this thing when it dies is the hazard. Nothing here names
+        /// an animal or a worker, so a mod's exploding beast is priced without this code having
+        /// heard of it.
+        ///
+        /// Magnitude comes from body size because that is what the game's own explosion scales
+        /// with — boomalope 2.0 against boomrat 0.2, which is the difference between one fire and
+        /// a burnt colony, and is exactly the distinction a flat hazard would have lost.
         /// </summary>
         static float BlastHazardOf(Pawn animal, float incendiaryWeight)
         {
-            if (animal == null || animal.def == null) return 0f;
+            if (animal == null || animal.def == null || animal.def.race == null) return 0f;
 
-            var comp = animal.def.GetCompProperties<CompProperties_Explosive>();
-            if (comp == null) return 0f;
+            var worker = animal.def.race.DeathActionWorker;
+            if (worker == null || !worker.DangerousInMelee) return 0f;
 
-            bool incendiary = comp.explosiveDamageType != null &&
-                              comp.explosiveDamageType.defName.IndexOf(
-                                  "Flame", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            float size = animal.def.race.baseBodySize;
+            if (size <= 0f) size = 1f;
 
-            return HuntRisk.BlastHazard(comp.explosiveRadius, incendiary, incendiaryWeight);
+            // Unknown dangerous deaths are assumed to burn. Both of the game's own are
+            // incendiary, and guessing the cheaper way round is how this cost two colonies.
+            return HuntRisk.BlastHazard(size, true, incendiaryWeight);
         }
 
         /// <summary>How much worse an incendiary blast is than a plain one. Set once a pass.</summary>
         float blastWeight = 1f;
+
+        /// <summary>
+        /// Blast hazard the colony has actually signed up for this pass, so the record carries it.
+        ///
+        /// Reported rather than kept internal because the first version of the read this feeds
+        /// was inert — it compiled, found nothing on any animal in the game, and was
+        /// indistinguishable in the log from a colony that never met an exploding animal. A
+        /// number that stays at zero forever is a question somebody eventually asks; silence is
+        /// not.
+        /// </summary>
+        float sessionBlast;
 
         static float ThreatOf(Pawn animal)
         {
