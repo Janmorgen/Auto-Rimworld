@@ -74,6 +74,7 @@ namespace AutoColony.Connections
             "world.pawnPosition",     // where a drafted colonist is sent
             "world.attackOrders",     // an explicit order to attack, as opposed to standing armed
             "world.blueprints",       // construction placed for colonists to build
+            "world.churn",            // things two modules keep putting back and taking away
             "world.designations",     // mine, cut, harvest, strip-roof
             "world.labourAvailable",  // hands free to do ordinary work, which drafting removes
             "learning.threatMemory",  // what a kind of fight has cost, carried between colonies
@@ -190,7 +191,7 @@ namespace AutoColony.Connections
                     "raidsSurvived", "steel", "tamedAnimals", "usableMaterial", "wood",
                     "workingGenerators"
                 },
-                affects = new[] { "world.blueprints", "world.designations" }
+                affects = new[] { "world.blueprints", "world.churn", "world.designations" }
             },
 
             new Touch
@@ -264,10 +265,10 @@ namespace AutoColony.Connections
                 reads = new[]
                 {
                     "allColonists", "buildingsWantingFuel", "colonistBeds", "colonists",
-                    "cutOff", "fuelOnHand", "fuelStanding", "fuelStarved", "usableMaterial",
-                    "wood", "workingGenerators"
+                    "cutOff", "fuelOnHand", "fuelStanding", "fuelStarved", "shelteredBeds",
+                    "usableMaterial", "wood", "workingGenerators", "world.churn"
                 },
-                affects = new[] { "world.blueprints", "world.designations" }
+                affects = new[] { "world.blueprints", "world.churn", "world.designations" }
             }
         };
 
@@ -317,6 +318,33 @@ namespace AutoColony.Connections
                            "table then draws one stool per colonist from SeatWhatNeedsSeating. " +
                            "A remedy whose own backlog re-triggers it. Fixed in 23dc388 by " +
                            "tallying colony-scoped wants colony-wide"
+            },
+
+            // The same effect written by two modules that each think they own it. Third
+            // recurrence, and the first fix that does not name what they disagree about.
+            new Consequence
+            {
+                from = "world.blueprints",
+                to = "world.churn",
+                confidence = Confidence.Observed,
+                evidence = "run 195 — 4 beds for 3 colonists with \"1 of 4 beds are inside a " +
+                           "room\". BasePlannerModule tops a room up to its bed count and " +
+                           "UpkeepModule uninstalls what it reads as surplus, and the two have " +
+                           "now been made to agree on the number (9a) and on the region (#64, " +
+                           "twice) and gone on sawing. Recorded at the planner's single " +
+                           "placement site so the next contested effect is caught without " +
+                           "anyone predicting which one it will be"
+            },
+
+            new Consequence
+            {
+                from = "world.churn",
+                to = "world.blueprints",
+                confidence = Confidence.Observed,
+                evidence = "run 195 — past the tolerance the reversing side stands down and " +
+                           "leaves the surplus, which is the cheap way to be wrong: a spare bed " +
+                           "costs material, and standing down on the other side costs somebody " +
+                           "sleeping on the ground"
             },
 
             new Consequence

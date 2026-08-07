@@ -158,6 +158,18 @@ namespace AutoColony.Tests
                 // pulls out as surplus, twice a day, an oscillation whose own code comment
                 // records two previous repairs.
                 "world.blueprints: DefenseModule, BasePlannerModule, PowerModule, UpkeepModule",
+
+                // The record of the argument, written by both sides of it — which is correct and
+                // is the point. Two writers here is not contention over a resource: the planner
+                // says "I put one here", upkeep says "I took one out", and neither reading is
+                // usable without the other. A one-sided record cannot tell a colony changing its
+                // mind from two modules sawing, which is the whole distinction being drawn.
+                //
+                // Worth stating why this pair is safe where the world.blueprints pair is not.
+                // Nothing reads world.churn to decide what the base should look like; the only
+                // consumer is the reversing side asking whether it has been here before, and the
+                // worst a wrong answer does is leave a surplus bed standing.
+                "world.churn: BasePlannerModule, UpkeepModule",
             };
 
             foreach (var contested in Touches.ContestedEffects())

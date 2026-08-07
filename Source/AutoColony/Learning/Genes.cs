@@ -116,6 +116,19 @@ namespace AutoColony.Learning
         public const string BaseStonePreference = "base.stonePreference";
         public const string BaseBedsPerRoom = "base.bedsPerRoom";
 
+        /// <summary>
+        /// How many times the colony will let the same thing change hands in the same room
+        /// before whoever is about to reverse it again stands down, and how long a quiet spell
+        /// has to be before the argument is forgotten.
+        ///
+        /// Both are genes rather than constants because neither number is knowable in advance:
+        /// too low and a colony that legitimately changes its mind twice is frozen out of ever
+        /// correcting itself, too high and it pays for the sawing that the tolerance exists to
+        /// stop. Evolution can price that trade where guessing cannot.
+        /// </summary>
+        public const string UpkeepChurnTolerance = "upkeep.churnTolerance";
+        public const string UpkeepChurnMemoryDays = "upkeep.churnMemoryDays";
+
         // ---- zones ------------------------------------------------------------------
         public const string GrowingCellsPerColonist = "growing.cellsPerColonist";
         public const string StockpileCellsPerColonist = "stockpile.cellsPerColonist";
@@ -249,6 +262,11 @@ namespace AutoColony.Learning
             // quietly costing five mood a head a night to save walls the colony could afford.
             // Still a gene: evolution may raise it if it finds a reason.
             Add(BaseBedsPerRoom, 1f, 4f, 1f, "Base", "Beds per bedroom");
+
+            Add(UpkeepChurnTolerance, 1f, 4f, 2f, "Upkeep",
+                "Times a thing may change hands in one room before the reverser stands down");
+            Add(UpkeepChurnMemoryDays, 0.5f, 4f, 2f, "Upkeep",
+                "Quiet spell after which an argument about a room is forgotten, days");
 
             Add(GrowingCellsPerColonist, 10f, 200f, 60f, "Zones", "Growing cells per colonist");
             Add(StockpileCellsPerColonist, 10f, 120f, 40f, "Zones", "Stockpile cells per colonist");

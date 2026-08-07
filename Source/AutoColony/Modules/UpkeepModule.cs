@@ -1688,7 +1688,25 @@ namespace AutoColony.Modules
             // A bed is only surplus once everyone has one. Watched live: beds stuck at 1 for
             // three colonists across an entire epoch, with the other two beds lying in the room
             // as uninstalled crates.
-            if (ctx.state.colonistBeds <= ctx.state.colonists) return false;
+            //
+            // And "one" has to mean a bed that shelters somebody, which is a number the colony
+            // already keeps and this was not reading. Run 195 at day 13 stood at four beds for
+            // three colonists with `1 of 4 beds are inside a room` — the other three standing in
+            // the open against the outside of a finished wall, where RimWorld scores sleeping in
+            // them as sleeping outdoors. Against colonistBeds that is a surplus of one and this
+            // pulled a bed; against shelteredBeds the colony is two short and nothing is spare.
+            //
+            // The colony had the right number the whole time. ShelterGoal reads shelteredBeds
+            // and said so continuously — worst mood 0.02, the goal holding the plan, and this
+            // line removing beds underneath it. A sense nothing is short of, that one decision
+            // was not asking for.
+            //
+            // Deliberately one-sided: NeedsAnEmergencyBed keeps reading colonistBeds, because a
+            // bed under open sky is still somewhere to lay a bleeding colonist and be tended,
+            // and refusing to place one on the grounds that it would not shelter anybody is the
+            // wrong trade when the alternative is the ground. Unsheltered counts for lying in;
+            // it does not count for discharging the need.
+            if (ctx.state.shelteredBeds <= ctx.state.colonists) return false;
 
             // Counted over the planner's own footprint, not the game's room.
             //
@@ -1769,6 +1787,42 @@ namespace AutoColony.Modules
             // replacement rooms are still going up.
             // Only the beds beyond the target come out, and only ones actually standing — a
             // blueprint counts toward the total but there is nothing there to uninstall.
+            // Whether this argument has been had before, and how many times.
+            //
+            // Twice now the answer to the bed coming out and going back in has been to find the
+            // attribute the two sides disagreed about and make them read it from one place —
+            // first the target number, then the region it was counted over. Both were correct
+            // and neither held, because the list of things two modules can disagree about is not
+            // something anybody enumerated: run 195 stood at four beds with one of them inside a
+            // room at all, so most of them were outside the region either side counts over.
+            //
+            // This does not try to find the third attribute. It refuses to keep paying for the
+            // disagreement whatever the disagreement turns out to be, and says so, which is also
+            // the only way the *next* pair of modules gets caught without being predicted first.
+            //
+            // Standing down leaves the colony holding a surplus bed. That is the right way round
+            // to fail: the cost of stopping here is one bed's worth of material sitting in a room
+            // that did not want it, and the cost of stopping on the other side is somebody
+            // sleeping on the ground. Between a colony that wastes and a colony that sleeps out,
+            // and with no way to tell which module is right, keep the bed.
+            if (planned != null)
+            {
+                int memory = Churn.MemoryTicks(ctx.Gene(Genes.UpkeepChurnMemoryDays));
+                int tolerance = AcMath.Clamp(ctx.GeneInt(Genes.UpkeepChurnTolerance), 1, 4);
+                string what = AcDefs.Bed != null ? AcDefs.Bed.defName : "Bed";
+
+                if (Churn.IsSawing(what, planned.PlaceKey, tolerance, ctx.state.tick, memory))
+                {
+                    Chronicle.Record(ChronicleCategory.Build, string.Format(
+                        "leaving the surplus bed in the {0} — {1}, so something else keeps " +
+                        "putting it back and the colony is paying construction for the argument " +
+                        "rather than for a bed",
+                        planned.role,
+                        Churn.Explain(what, planned.PlaceKey, ctx.state.tick, memory)));
+                    return false;
+                }
+            }
+
             int surplus = counted - target;
             int from = beds.Count - surplus;
             if (from < 0) from = 0;   // the surplus is blueprints, which nobody can uninstall
@@ -1776,7 +1830,15 @@ namespace AutoColony.Modules
             for (int i = from; i < beds.Count; i++)
             {
                 if (PlacementUtil.MarkedForDeconstruction(ctx.map, beds[i])) continue;
-                if (PlacementUtil.TryUninstall(ctx.map, beds[i])) return true;
+                if (PlacementUtil.TryUninstall(ctx.map, beds[i]))
+                {
+                    if (planned != null)
+                        Churn.Record(
+                            AcDefs.Bed != null ? AcDefs.Bed.defName : "Bed",
+                            planned.PlaceKey, false, ctx.state.tick,
+                            Churn.MemoryTicks(ctx.Gene(Genes.UpkeepChurnMemoryDays)));
+                    return true;
+                }
             }
             return false;
         }

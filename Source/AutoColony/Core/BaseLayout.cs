@@ -71,6 +71,17 @@ namespace AutoColony
         public bool wallsQueued;
 
         /// <summary>
+        /// A stable name for this room's place on the map, for anything keeping a record about
+        /// it across passes.
+        ///
+        /// Lives here rather than in either module that uses it, because the whole point of
+        /// <see cref="Churn"/> is that two modules recognise they are arguing about the same
+        /// room, and two modules deriving "the same room" separately is the exact mistake that
+        /// produced the argument. One derivation or none.
+        /// </summary>
+        public int PlaceKey { get { return minX * 4096 + minZ; } }
+
+        /// <summary>
         /// The Space band the room scored when its walls closed, before any furniture went in.
         ///
         /// Space is decided by the walls and nothing else, but the *measurement* is not: cells

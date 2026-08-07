@@ -117,10 +117,10 @@ measurement standing in for the thing it was supposed to track:
 |---|---|---|
 | **duplicated quantity** | one fact computed in two places, disagreeing | fuel radius; dry-hopper accumulation; readiness; fieldable strength |
 | **wrong scope** | the right question asked at the wrong level | a colony's want tallied once per room |
-| **contested ownership** | two systems acting on one thing | upkeep placing a table the planner also furnishes |
+| **contested ownership** | two systems acting on one thing | upkeep placing a table the planner also furnishes. Twice repaired by finding the attribute the two sides disagreed about — first the target number, then the region — and twice recurring, because the supply of attributes is not something anybody enumerated. `Churn` stops paying for the argument without naming it |
 | **lagging signal** | a remedy driven by a symptom that cannot clear until the remedy lands | AteWithoutTable ordering tables for days |
 | **history read as state** | a tally of events reported where the current answer was wanted | `check30.sh` counting every "pen is closed" ever printed, while the game showed *Pen not enclosed* |
-| **proxy for the real thing** | a measurable stand-in that stops tracking what it stood for | beds counted as shelter, roofing counted as cover, a gather circle counted as the world |
+| **proxy for the real thing** | a measurable stand-in that stops tracking what it stood for | beds counted as shelter, roofing counted as cover, a gather circle counted as the world. Run 195 day 13: four beds for three colonists, three of them standing in the open against the outside of a finished wall, so the surplus rule pulled a bed while the colony was two short of anywhere to sleep. `shelteredBeds` existed the whole time and `ShelterGoal` was reading it — the sense was there and one decision was not asking for it |
 | **present read as future** | a snapshot used where a forecast was needed | `growingSeasonNow` from today's temperature, so a colony farms through summer and starves in fall |
 | **remedy slower than the deadline** | the right answer, arriving after the thing it answers | run 173 held worst mood at 0.00 for six hours with the focus on Comfort — whose remedy is psychoid tea, gated on research that takes days. The colonist broke in hours, attacked a megasloth, and two died |
 

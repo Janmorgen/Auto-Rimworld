@@ -3683,6 +3683,15 @@ namespace AutoColony.Modules
                         placed = true;
                         placementFailures.Remove(def);
                         placedThisPass++;
+
+                        // Every placement the planner ever makes passes through here, which is
+                        // the reason the record is taken at this line and not in the bed code.
+                        // The bed is only the argument that happened to be visible; anything
+                        // another module can take back out can be sawed at the same way, and an
+                        // instrument that has to be remembered at each new call site is one that
+                        // will be missing from whichever pair deadlocks next.
+                        Churn.Record(def.defName, room.PlaceKey, true, ctx.state.tick,
+                                     Churn.MemoryTicks(ctx.Gene(Genes.UpkeepChurnMemoryDays)));
                     }
                     else
                     {
