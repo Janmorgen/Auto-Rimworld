@@ -1140,9 +1140,52 @@ namespace AutoColony.Modules
             {
                 var room = rooms[i];
                 if (room.furnitureQueued && ShellComplete(ctx.map, room)) continue;
+
+                // Reserved is not the same as under way, and the cap only means to throttle
+                // the second.
+                //
+                // The limit exists so the colony does not spread three pairs of hands across
+                // five half-built rooms. A rect with nothing queued in it consumes no hands at
+                // all — it is a line on a map — and counting it as work in flight makes a slow
+                // start block every other room for as long as it takes to begin.
+                //
+                // Run 176: Kitchen and Bedroom sited at hour zero of day zero, "waiting on the
+                // Kitchen room" still printing on day 3, the Kitchen finally working on day 4,
+                // and the Bedroom still without walls on day 8. Run 168 on a comparable colony
+                // had two rooms finished by day 2. Whatever makes a start slow, the cap should
+                // not be turning it into a stall of everything else.
+                //
+                // Deliberately not a fix for the slow start itself, which is a separate question
+                // and still open. This says only that a rect nobody has begun is not the thing
+                // the throttle is for.
+                if (NothingQueuedIn(ctx.map, room)) continue;
+
                 count++;
             }
             return count;
+        }
+
+        /// <summary>
+        /// True when no blueprint or frame stands anywhere in the room's footprint.
+        ///
+        /// The same walk <see cref="GoalPlanner"/> uses to estimate how long a room has left,
+        /// asked as a yes-or-no: is any of this room actually under construction.
+        /// </summary>
+        static bool NothingQueuedIn(Map map, PlannedRoom room)
+        {
+            try
+            {
+                foreach (var cell in room.Rect)
+                {
+                    if (!cell.InBounds(map)) continue;
+
+                    var things = cell.GetThingList(map);
+                    for (int i = 0; i < things.Count; i++)
+                        if (things[i] is Frame || things[i] is Blueprint) return false;
+                }
+            }
+            catch (Exception) { return false; }   // cannot tell: treat it as work, as before
+            return true;
         }
 
         /// <summary>
