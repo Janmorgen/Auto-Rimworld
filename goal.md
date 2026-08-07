@@ -122,6 +122,7 @@ measurement standing in for the thing it was supposed to track:
 | **history read as state** | a tally of events reported where the current answer was wanted | `check30.sh` counting every "pen is closed" ever printed, while the game showed *Pen not enclosed* |
 | **proxy for the real thing** | a measurable stand-in that stops tracking what it stood for | beds counted as shelter, roofing counted as cover, a gather circle counted as the world |
 | **present read as future** | a snapshot used where a forecast was needed | `growingSeasonNow` from today's temperature, so a colony farms through summer and starves in fall |
+| **remedy slower than the deadline** | the right answer, arriving after the thing it answers | run 173 held worst mood at 0.00 for six hours with the focus on Comfort — whose remedy is psychoid tea, gated on research that takes days. The colonist broke in hours, attacked a megasloth, and two died |
 
 When a fault doesn't fit these, name the new class and add a row. The table is a record of
 what this director actually gets wrong, which is worth more than a list of what might go wrong.
