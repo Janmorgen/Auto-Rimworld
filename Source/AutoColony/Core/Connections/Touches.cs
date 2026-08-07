@@ -478,6 +478,21 @@ namespace AutoColony.Connections
             new Consequence
             {
                 from = "plan.goals",
+                to = "colonistsBleedingOut",
+                confidence = Confidence.Observed,
+                evidence = "run 161-179, eighteen deaths across seven preserved colonies: " +
+                           "fourteen of blood loss, and every fatal case was everybody down at " +
+                           "once, after which no tending reaches anyone. Four colonies lost by " +
+                           "day two. ShelterGoal was satisfied by beds and said nothing about " +
+                           "whether a shell was closed, so the goal layer could report shelter " +
+                           "complete while the colony had nowhere to withdraw to. RefugeGoal " +
+                           "now asks the stricter question, sharing BasePlannerModule.Enclosed " +
+                           "with DefenseModule.Refuge so the two cannot disagree"
+            },
+
+            new Consequence
+            {
+                from = "plan.goals",
                 to = "world.workPriorities",
                 confidence = Confidence.Observed,
                 evidence = "run 166 day 2 — the plan's focus was 'Shelter everyone, 0 beds for " +

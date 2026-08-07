@@ -68,6 +68,80 @@ namespace AutoColony.Goals
     // ------------------------------------------------------------------ short term
 
     /// <summary>
+    /// Somewhere the colony can close a door and be behind it.
+    ///
+    /// Split from ShelterGoal rather than folded into it, because they are two questions and
+    /// this project has paid four times this session for letting one number answer two: the
+    /// roster that stood in for who could be fielded, the food total that counted what would
+    /// rot, the average mood that hid the colonist about to break, the able count that included
+    /// the drafted. Beds are about sleeping out; a refuge is about being overrun.
+    ///
+    /// They want the same room, and that is the point — a sealed bedroom satisfies both. What
+    /// differs is when each is done. Shelter is done when everyone has a bed inside. This is
+    /// done when the shell is actually closed, which is a stricter and later test, and the one
+    /// that decides whether a manhunter pack ends the colony.
+    ///
+    /// Eighteen deaths across seven colonies in one session: fourteen of blood loss, and every
+    /// fatal case was everybody down at once, after which no amount of tending reaches them.
+    /// Four of those colonies were lost by day two. The bleeding response is not what failed —
+    /// it was rebuilt this session and works. Having nowhere to stand is what failed.
+    ///
+    /// Asks BasePlannerModule.Enclosed rather than testing enclosure itself, so this and
+    /// DefenseModule.Refuge cannot come to disagree about what closed means.
+    /// </summary>
+    public class RefugeGoal : ColonyGoal
+    {
+        public const string Id = "Somewhere to hold";
+        public override string Name { get { return Id; } }
+        public override GoalHorizon Horizon { get { return GoalHorizon.ShortTerm; } }
+
+        // The same room Shelter is already asking for. A refuge is not a different building,
+        // it is the building finished to a stricter standard.
+        public override RoomRole? WantsRoom { get { return RoomRole.Bedroom; } }
+
+        public override bool Satisfied(DirectorContext ctx)
+        {
+            return Sealed(ctx) > 0;
+        }
+
+        public override float Urgency(DirectorContext ctx)
+        {
+            if (ctx.state.colonists == 0) return 0f;
+            return Sealed(ctx) > 0 ? 0f : 1f;
+        }
+
+        /// <summary>How many planned rooms are roofed and genuinely closed.</summary>
+        static int Sealed(DirectorContext ctx)
+        {
+            if (ctx.layout == null || ctx.layout.rooms == null || ctx.map == null) return 0;
+
+            int count = 0;
+            for (int i = 0; i < ctx.layout.rooms.Count; i++)
+            {
+                var room = ctx.layout.rooms[i];
+                var centre = room.Center;
+                if (!centre.InBounds(ctx.map)) continue;
+                if (ctx.map.roofGrid == null || !ctx.map.roofGrid.Roofed(centre)) continue;
+                if (!Modules.BasePlannerModule.Enclosed(ctx.map, room)) continue;
+                count++;
+            }
+            return count;
+        }
+
+        public override string Explain(DirectorContext ctx)
+        {
+            int sealedRooms = Sealed(ctx);
+            if (sealedRooms > 0)
+                return sealedRooms + " room(s) the colony can close a door and be behind";
+
+            return ctx.layout != null && ctx.layout.rooms != null && ctx.layout.rooms.Count > 0
+                ? ctx.layout.rooms.Count + " room(s) planned and not one of them closed — " +
+                  "roofed is not enclosed, and only enclosed keeps anything out"
+                : "no room planned yet, so nowhere to withdraw to when something arrives";
+        }
+    }
+
+    /// <summary>
     /// Everyone has somewhere to sleep — indoors.
     ///
     /// This asked for beds and got beds. Run 140 reached day 7 with four of them, fourteen

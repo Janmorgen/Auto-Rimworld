@@ -3122,7 +3122,16 @@ namespace AutoColony.Modules
         /// with its walls closed is complete for the planner's purposes — but not of one that
         /// leaks into the map, which is the case the edge test could not see.
         /// </summary>
-        static bool Enclosed(Map map, PlannedRoom room)
+        /// <summary>
+        /// Whether this room is genuinely closed — one RimWorld room across the whole interior,
+        /// touching no map edge.
+        ///
+        /// Public because RefugeGoal asks the same question and the two must not come to answer
+        /// it differently. Refuge() in DefenseModule already learned what a second opinion costs:
+        /// run 138 withdrew two colonists into a roofed three-walled gap and the manhunter walked
+        /// in after them.
+        /// </summary>
+        public static bool Enclosed(Map map, PlannedRoom room)
         {
             try
             {

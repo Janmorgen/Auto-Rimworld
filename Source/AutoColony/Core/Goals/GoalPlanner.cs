@@ -153,6 +153,7 @@ namespace AutoColony.Goals
             new RepelRaidGoal(),
             new FeedColonyGoal(),
 
+            new RefugeGoal(),
             new ShelterGoal(),
             new StorageGoal(),
             new FarmGoal(),
