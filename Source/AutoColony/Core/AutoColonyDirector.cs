@@ -832,12 +832,30 @@ namespace AutoColony
                 return;
             }
 
+            // The verdict, which is the only thing the round existed to produce.
+            //
+            // A round announced itself, named what each of four candidates changed, and then
+            // ended in silence — no winner, no promotion, nothing. Every part of the experiment
+            // was legible except its result, so watching a round taught nothing about which
+            // strategy the colony now plays. Fifth instance of the same fault in training today.
             if (winner != null)
             {
                 // Candidates were judged against an identical world, so these scores are
                 // directly comparable and need no noise margin.
+                Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                    "training round ends — a candidate scoring {0:0.000} beat the incumbent's " +
+                    "{1:0.000} and is adopted; generation {2}",
+                    winnerScore, evolution.incumbentScore, evolution.Incumbent.generation));
+
                 evolution.AdoptWinner(winner, winnerScore, lastMetrics.day);
                 ContributeToArchive();
+            }
+            else
+            {
+                Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                    "training round ends — no candidate beat the incumbent at {0:0.000}, which " +
+                    "keeps the plan. A round that changes nothing is a result, not a wasted one",
+                    evolution.incumbentScore));
             }
 
             TrainingSession.End();
