@@ -1727,7 +1727,7 @@ namespace AutoColony.Modules
             Learning.ThreatMemory.Save();
 
             Chronicle.Record(ChronicleCategory.Threat, string.Format(
-                "{0} cost {1:0.00} health across {2} sent{3}{5} — {4}",
+                "{0} cost {1:0.00} health across {2} sent{3}{4} — {5}",
                 fightKind, damage, committed,
                 casualties > 0 ? ", " + casualties + " down" : " and nobody went down",
                 // "nobody went down" is true and was the whole story, beside a fight that had
