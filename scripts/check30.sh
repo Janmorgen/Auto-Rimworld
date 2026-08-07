@@ -133,6 +133,18 @@ focus=$(echo "$focusline" | sed 's/.*towards — //')
 [ -n "$focusat" ] && [ "$focusat" != "$nowat" ] && focus="$focus  (said at $focusat)"
 death=$(grep "COLONY LOST\|final score" "$CH" 2>/dev/null | tail -1)
 
+# Say "too early" rather than printing a row of empty fields.
+#
+# A check run seconds after a restart finds no VITALS line yet and used to emit
+# "lean:  | focus:  |  |" — which reads exactly like a colony that has stopped doing
+# anything, and sent me to check whether the game had died. It had not. Fifth time today
+# an instrument has produced output that was true and looked like something else.
+if [ -z "$vitals" ]; then
+  lines=$(wc -l < "$CH" 2>/dev/null || echo 0)
+  vitals="no vitals yet — chronicle has $lines lines, so the colony has started and has not
+reached its first vitals pass"
+fi
+
 echo "CHECK30| $running | $frame | died: $died taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | roomsEver: $rooms pen: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
 
 # ---------------------------------------------------------------- goal.md
