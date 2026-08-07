@@ -259,3 +259,14 @@ higher than it fights has nothing hidden and contributes nothing.
 Caught only because the figure is printed every pass whether or not it bites, which is the same
 instrumentation that caught the inert read. A check that speaks only when it fires cannot be
 distinguished from one that is broken.
+
+**Verified, run 201.** The same animal under the two magnitudes: **[live, runs 200-201]**
+
+```
+run 200  hunting ... Boomrat (55) ... and   0 of what it took blows up when it dies
+run 201  hunting ... Boomrat (55) ... and 141 of what it took blows up when it dies
+```
+
+Nothing else changed. Body size squared priced a boomrat's explosion at nothing; the gap between
+what the storyteller charges and what the animal fights at prices it at 141, which is a number
+the session bar can actually refuse.
