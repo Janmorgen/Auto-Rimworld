@@ -48,6 +48,20 @@ to tend, and all four dead within five hours. Not a pathing problem. Not a medic
 that colony died holding 21.4 days of food and scoring 1.00 on Infrastructure, Room quality and
 Food security, with Survival at 0.00.
 
+**Corrected by run 189: both causes are real.** On the strength of that single firing this note
+said the nine earlier "no route" readings were almost certainly the same case. Run 189 produced
+one of each within the same hour: **[live, run 189]**
+
+```
+nobody can reach Speedy  (0.4 hours of walking against 0.2 hours left)
+nobody can reach Erisen  (there is nobody left standing to send against 1.9 hours left)
+```
+
+Speedy's is a distance problem and a near miss — a doctor twenty-four minutes away from a
+colonist with twelve minutes left. So the leverage is both: fewer casualties at once, and shorter
+walks to reach them. The second is why #67 matters beyond tidiness, since a base sited across a
+hundred cells makes every internal distance longer.
+
 So the leverage is upstream — not being overwhelmed in a single engagement — which is where #50
 (a refuge before the first pack) and #55 (elective fights taken on thin margins) sit, rather than
 anywhere in this file.
