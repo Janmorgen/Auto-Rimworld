@@ -55,9 +55,9 @@ namespace AutoColony
         /// it actually moves rather than from nine others averaged in. Omit it and the choice is
         /// judged on the whole score, which is where every caller started.
         /// </summary>
-        public void Credit(string banditId, string arm, string term = "")
+        public void Credit(string banditId, string arm, string term = "", int horizonTicks = 0)
         {
-            if (director != null) director.CreditLater(banditId, arm, term);
+            if (director != null) director.CreditLater(banditId, arm, term, horizonTicks);
         }
 
         /// <summary>

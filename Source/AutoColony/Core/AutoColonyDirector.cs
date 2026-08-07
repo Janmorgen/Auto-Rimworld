@@ -28,11 +28,27 @@ namespace AutoColony
         /// </summary>
         public string term = "";
 
+        /// <summary>
+        /// The tick from which this choice can fairly be judged, or 0 for "any time".
+        ///
+        /// A drafting call resolves in hours, a research pick takes days, a room pays off over a
+        /// fortnight — and all three were scored at the same epoch boundary, so the slow ones were
+        /// judged before they had landed. An epoch that closes while the thing a choice set in
+        /// motion is still happening says nothing about that choice; it says what the weather was
+        /// like meanwhile.
+        ///
+        /// So a choice waits for its own horizon and is credited at the first epoch close after
+        /// it. Held credits survive into the next epoch rather than being cleared with it, which
+        /// is the whole point and is why BeginEpoch no longer wipes the list.
+        /// </summary>
+        public int dueTick;
+
         public void ExposeData()
         {
             Scribe_Values.Look(ref banditId, "b", "");
             Scribe_Values.Look(ref arm, "a", "");
             Scribe_Values.Look(ref term, "t", "");
+            Scribe_Values.Look(ref dueTick, "d", 0);
         }
     }
 
@@ -149,7 +165,7 @@ namespace AutoColony
             return b;
         }
 
-        public void CreditLater(string banditId, string arm, string term = "")
+        public void CreditLater(string banditId, string arm, string term = "", int horizonTicks = 0)
         {
             if (string.IsNullOrEmpty(banditId) || string.IsNullOrEmpty(arm)) return;
             // One credit per arm per epoch; repeats would just scale the same signal.
@@ -160,6 +176,16 @@ namespace AutoColony
             pc.banditId = banditId;
             pc.arm = arm;
             pc.term = term ?? "";
+
+            // Bounded, so a choice cannot wait for ever and quietly stop teaching anything. Three
+            // epochs is long enough for research, which is the slowest thing here.
+            if (horizonTicks > 0)
+            {
+                int cap = 3 * Math.Max(1, AutoColonyMod.Settings.epochDays) * GenDate.TicksPerDay;
+                if (horizonTicks > cap) horizonTicks = cap;
+                pc.dueTick = (Find.TickManager != null ? Find.TickManager.TicksGame : 0) + horizonTicks;
+            }
+
             pendingCredits.Add(pc);
         }
 
@@ -444,11 +470,39 @@ namespace AutoColony
             return total;
         }
 
+        /// <summary>
+        /// Credit the choices whose horizon has elapsed, and keep the rest for the next epoch.
+        ///
+        /// The held ones are the point. A choice judged before the thing it set in motion has
+        /// happened is scored on everything except itself, which is worse than not scoring it —
+        /// it teaches the bandit something confident and wrong.
+        /// </summary>
+        void CreditWhatIsDue(int tick, float score, List<ScoreTerm> breakdown)
+        {
+            int held = 0;
+            for (int i = pendingCredits.Count - 1; i >= 0; i--)
+            {
+                var pc = pendingCredits[i];
+                if (pc.dueTick > tick) { held++; continue; }
+
+                BanditFor(pc.banditId).Update(pc.arm, ScoreFor(pc, score, breakdown));
+                pendingCredits.RemoveAt(i);
+            }
+
+            if (held > 0)
+                Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                    "{0} choice(s) held over — what they set in motion has not finished, so this " +
+                    "epoch's score is not about them",
+                    held));
+        }
+
         void BeginEpoch(int tick)
         {
             epochStart = EpochStart.From(lastMetrics);
             accumulator.ResetFor(lastMetrics);
-            pendingCredits.Clear();
+            // Deliberately not cleared. A choice whose horizon runs past this boundary is waiting
+            // to be judged by the epoch that actually contains its outcome, and wiping the list
+            // here would throw away exactly the credits worth keeping.
 
             int lengthTicks = Math.Max(1, AutoColonyMod.Settings.epochDays) * GenDate.TicksPerDay;
             nextEpochTick = tick + lengthTicks;
@@ -489,13 +543,7 @@ namespace AutoColony
             lastScore = score;
             lastBreakdown = breakdown;
 
-            // Credit every discrete choice made during the epoch with the epoch's outcome.
-            for (int i = 0; i < pendingCredits.Count; i++)
-            {
-                var pc = pendingCredits[i];
-                BanditFor(pc.banditId).Update(pc.arm, ScoreFor(pc, score, breakdown));
-            }
-            pendingCredits.Clear();
+            CreditWhatIsDue(tick, score, breakdown);
 
             if (TrainingSession.Active)
             {
@@ -749,12 +797,10 @@ namespace AutoColony
             lastScore = score;
             lastBreakdown = breakdown;
 
-            for (int i = 0; i < pendingCredits.Count; i++)
-            {
-                var pc = pendingCredits[i];
-                BanditFor(pc.banditId).Update(pc.arm, ScoreFor(pc, score, breakdown));
-            }
-            pendingCredits.Clear();
+            // The colony is over, so everything is due whatever its horizon — there is no
+            // later epoch to wait for, and a choice that helped cause the end should be credited
+            // with it rather than discarded.
+            CreditWhatIsDue(int.MaxValue, score, breakdown);
 
             AcLog.Message("Colony lost on day " + lastMetrics.day + ". Strategy scored " +
                           score.ToString("0.000") + "; recorded so the search learns from it.");

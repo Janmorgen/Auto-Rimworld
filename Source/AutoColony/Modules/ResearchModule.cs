@@ -19,6 +19,54 @@ namespace AutoColony.Modules
         public const string BanditId = "research";
 
         public override string Name { get { return "Research"; } }
+        /// <summary>
+        /// How long before a research pick can fairly be judged.
+        ///
+        /// Measured off the project rather than chosen: what is left to research, over the rate
+        /// the colony is actually accumulating points. A pick judged at the next epoch boundary
+        /// is judged on whether the weather was kind, because the project it started will not
+        /// have finished — research is the slowest thing this director does and the one most
+        /// certain to be scored before it lands.
+        ///
+        /// Falls back to one epoch when no rate has been observed, which is the old behaviour and
+        /// is right for a colony that is not researching at all.
+        /// </summary>
+        static int ResearchHorizon(DirectorContext ctx)
+        {
+            var project = Find.ResearchManager != null ? Find.ResearchManager.GetProject() : null;
+            if (project == null) return 0;
+
+            float remaining = project.CostApparent - Find.ResearchManager.GetProgress(project);
+            if (remaining <= 0f) return 0;
+
+            // Points per day, from what this colony has actually managed rather than from a
+            // table. Two samples and the gap between them — the same shape the food and
+            // construction meters use, and the reason a colony with no researcher gets a horizon
+            // of zero rather than an optimistic guess.
+            int now = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            float points = ctx.state.researchPoints;
+
+            if (lastRateTick <= 0 || now <= lastRateTick)
+            {
+                lastRateTick = now;
+                lastRatePoints = points;
+                return 0;                       // no rate yet: not derivable, so do not pretend
+            }
+
+            float perDay = (points - lastRatePoints) / ((now - lastRateTick) / 60000f);
+            lastRateTick = now;
+            lastRatePoints = points;
+
+            // A rate of zero means nobody is researching. That is not infinite patience; it is
+            // no reason to hold the credit at all.
+            if (perDay <= 0.01f) return 0;
+
+            return (int)(remaining / perDay * 60000f);
+        }
+
+        static int lastRateTick;
+        static float lastRatePoints;
+
         public override int IntervalTicks { get { return 5000; } }
 
         readonly List<string> candidateKeys = new List<string>();
@@ -83,7 +131,7 @@ namespace AutoColony.Modules
                 if (current == directed) return;
 
                 rm.SetCurrentProject(directed);
-                ctx.Credit(BanditId, directed.defName, "Research");
+                ctx.Credit(BanditId, directed.defName, "Research", ResearchHorizon(ctx));
                 Chronicle.Record(ChronicleCategory.Research, string.Format(
                     "researching {0} because the plan needs it for {1}",
                     directed.defName,
@@ -98,7 +146,7 @@ namespace AutoColony.Modules
             if (pick == null) return;
 
             rm.SetCurrentProject(pick);
-            ctx.Credit(BanditId, pick.defName, "Research");
+            ctx.Credit(BanditId, pick.defName, "Research", ResearchHorizon(ctx));
             Note("started research '" + pick.defName + "'");
         }
 
