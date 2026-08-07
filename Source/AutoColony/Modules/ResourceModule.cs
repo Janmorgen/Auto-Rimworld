@@ -118,6 +118,7 @@ namespace AutoColony.Modules
                     "conditions have passed; gathering resumes");
             }
 
+            wanting.Clear();
             int chopped = MaybeChopWood(ctx, origin);
             int mined = MaybeMine(ctx, origin);
             int hunted = MaybeHunt(ctx, origin);
@@ -143,10 +144,21 @@ namespace AutoColony.Modules
                     Chronicle.Record(ChronicleCategory.Economy, string.Format(
                         "gathering: marked {0} trees, {1} rock, {2} animals within {3} cells of the base",
                         chopped, mined, hunted, GatherRadius));
-                else
+                else if (wanting.Count == 0)
                     Chronicle.Record(ChronicleCategory.Economy,
-                        "gathering: nothing left marked — every target is at its stock level, or " +
-                        "there is nothing in range to mark");
+                        "gathering: nothing left to mark — every target is at its stock level");
+                else
+                    // The other half of what used to be one sentence joined by "or".
+                    //
+                    // "every target is at its stock level, or there is nothing in range to mark"
+                    // covered a colony that needs nothing and a colony whose reachable map is
+                    // stripped bare, and those want opposite work: the first is fine, the second
+                    // is a radius that is too small or a map that is finished. The gatherers knew
+                    // which it was — each returns 0 for both — and the caller could not see it.
+                    Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                        "gathering: still wanting {0} and nothing within {1} cells to mark — " +
+                        "this is not a shortage of hands and no work priority answers it",
+                        string.Join(", ", wanting.ToArray()), GatherRadius));
             }
         }
 
@@ -170,6 +182,7 @@ namespace AutoColony.Modules
             // actual demand rather than a number anybody picked.
             target = AcMath.Max(target, ctx.state.fuelWanted);
             if (ctx.state.wood >= target) return 0;
+            wanting.Add("wood");
 
             float aggression = ctx.Gene(Genes.ChopAggression);
             int budget = (int)(MaxPerPass * (0.2f + aggression));
@@ -215,6 +228,8 @@ namespace AutoColony.Modules
             bool needSteel = ctx.state.steel < target;
             bool needComponents = ctx.state.components < componentTarget;
             if (!needSteel && !needComponents) return 0;
+            wanting.Add(needSteel && needComponents ? "steel and components"
+                      : needSteel ? "steel" : "components");
 
             float aggression = ctx.Gene(Genes.MiningAggression);
             int budget = (int)(MaxPerPass * (0.2f + aggression));
@@ -276,6 +291,7 @@ namespace AutoColony.Modules
             float foodTarget = ctx.FoodDaysWanted;
             float daysOfFood = ctx.state.daysOfFood;
             if (daysOfFood >= foodTarget) return 0;
+            wanting.Add("food");
 
             // 0 when comfortably stocked, 1 when the larder will be empty before anything
             // decided now can reach it. Measured against the food left after the hunt-haul-
@@ -528,6 +544,9 @@ namespace AutoColony.Modules
 
         readonly Dictionary<string, int> released = new Dictionary<string, int>();
         readonly List<Designation> standing = new List<Designation>();
+
+        /// <summary>What this pass wanted, so "found none" reads differently from "needed none".</summary>
+        readonly List<string> wanting = new List<string>();
 
         readonly List<Pawn> candidates = new List<Pawn>();
         readonly Dictionary<string, int> taken = new Dictionary<string, int>();
