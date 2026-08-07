@@ -51,7 +51,10 @@ namespace AutoColony.Connections
     ///
     /// Incomplete by construction, and honestly so: a module is listed once its reads and
     /// affects have been derived from its source, never from memory of what it probably does.
-    /// Ten of sixteen are done. The rest are absent rather than guessed.
+    /// All sixteen are done, each derived from its source rather than from memory of what it
+    /// probably does — which mattered: ColonistPolicyModule looked read-only under one grep and
+    /// turns out to create and label allowed areas, and PowerModule was missing from a
+    /// hand-written list of blueprint writers until the test named it.
     ///
     /// It has already paid for itself. <see cref="ContestedEffects"/> over the first six turned
     /// up four things written by more than one module, and the fourth was a live fault nobody
@@ -81,7 +84,11 @@ namespace AutoColony.Connections
             "world.stockpileFilters", // what a stockpile will accept
             "world.tradeDeals",       // silver and goods across a trader's counter
             "world.researchProject",  // what the colony is currently studying
-            "plan.capabilityGaps"     // things the colony wants and cannot have, and for how long
+            "plan.capabilityGaps",    // things the colony wants and cannot have, and for how long
+            "world.equipment",        // what a colonist is carrying and wearing
+            "world.forbidden",        // what colonists are allowed to touch
+            "world.prisonerPolicy",   // guest status and how a prisoner is treated
+            "world.allowedAreas"      // where colonists may go
         };
 
         public static readonly Touch[] Modules =
@@ -184,6 +191,57 @@ namespace AutoColony.Connections
                     "workingGenerators"
                 },
                 affects = new[] { "world.blueprints", "world.designations" }
+            },
+
+            new Touch
+            {
+                module = "IncidentModule",
+                reads = new[] { "danger" },
+                affects = new[] { "world.designations" }
+            },
+
+            new Touch
+            {
+                module = "PrisonerModule",
+                reads = new[] { "ableColonists", "colonistsDowned", "daysOfFood", "prisoners" },
+                affects = new[] { "world.prisonerPolicy" }
+            },
+
+            new Touch
+            {
+                module = "EquipmentModule",
+                reads = new[] { "ableColonists", "colonistsDowned" },
+                affects = new[] { "world.equipment", "world.forbidden" }
+            },
+
+            new Touch
+            {
+                module = "ItemPolicyModule",
+                reads = new[] { "danger", "hostilePawns" },
+                affects = new[] { "world.forbidden" }
+            },
+
+            new Touch
+            {
+                module = "ColonistPolicyModule",
+                reads = new[]
+                {
+                    "allColonists", "colonistsDowned", "conditions", "hostilesNearBase"
+                },
+                affects = new[] { "world.allowedAreas" }
+            },
+
+            // Reads the world and changes none of it, which is what its name promises and what
+            // its source confirms: workSettings.GetPriority and guest.ExclusiveInteractionMode
+            // are both comparisons. A first pass declared it as writing both, because a grep for
+            // "workSettings" cannot tell a read from a write, and the contested-effect detector
+            // duly reported two conflicts that did not exist. Deriving from source rather than
+            // from a pattern match is the difference, and the file says so for this reason.
+            new Touch
+            {
+                module = "PlayerObservationModule",
+                reads = new[] { "allColonists" },
+                affects = new string[0]
             },
 
             new Touch

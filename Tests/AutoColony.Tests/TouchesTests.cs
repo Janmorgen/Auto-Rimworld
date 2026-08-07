@@ -127,7 +127,20 @@ namespace AutoColony.Tests
             var known = new HashSet<string>
             {
                 "world.bills: WorkPriorityModule, ProductionModule",
-                "world.designations: ResourceModule, BasePlannerModule, UpkeepModule",
+                // Four now. Resource mines for steel and hunts; BasePlanner clears boulders out
+                // of wall lines; Incident answers events; Upkeep mines a boulder out of a room.
+                // None can double-designate — every one checks DesignationAt or DesignationOn —
+                // but all four draw down the same miner and hunter hours and none of them sizes
+                // its budget against the others' queues. Suspected contention on labour, not on
+                // cells, and still unsettled by a run.
+                "world.designations: ResourceModule, BasePlannerModule, IncidentModule, UpkeepModule",
+
+                // Equipment unforbids a weapon so somebody will pick it up; ItemPolicy forbids
+                // and unforbids by danger and by what the plan wants. Both write the same flag on
+                // the same things, and the ordering between them is not stated anywhere. Nothing
+                // has been seen to go wrong, and this is the pair to look at first if a colonist
+                // ever stands next to a weapon it will not take.
+                "world.forbidden: EquipmentModule, ItemPolicyModule",
                 "world.labourAvailable: DefenseModule, WorkPriorityModule",
 
                 // Three writers, and the third changes the answer. The note above used to read
