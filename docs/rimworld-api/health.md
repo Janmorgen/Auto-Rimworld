@@ -202,3 +202,26 @@ a product.
 Fitting a peg leg needs one wood log and no research, and a slower colonist beats a bedridden
 one. The tier ladder — peg leg, prosthetic, bionic, archotech, each replacing the last — is in
 [prosthetics.md](../rimworld/prosthetics.md#the-four-tiers). **[live]**
+
+## Surgery has two inputs, and only one was guarded
+
+The amputation decision carried four guards — is the disease winning, is the part one the game
+would suggest removing, is the room clean, is a bill already queued — and every one of them
+answers *when* to cut. None asked whether the colony could.
+
+RimWorld runs the operation with no medicine at all and prices it accordingly, the same way it
+prices a filthy floor. Run 197: **[live, run 197]**
+
+```
+day 13 04h  INCIDENT answered 'Surgery failed on Blackrose' with 'close'
+day 13 13h  INCIDENT answered 'Surgery failed on Blackrose' with 'close'
+            ... med 0 at both, and for the whole day either side
+```
+
+The gate now mirrors the cleanliness one exactly, including its threshold: hold unless the
+disease is past two fifths of lethal, past which bad odds beat none. Sharing the number is the
+point — an empty cupboard and a dirty table are the same kind of bad bet, and two separate
+constants for "how late is too late to be fussy" would drift apart.
+
+It also reports to `CapabilityGaps`, so a colony that cannot operate for want of medicine has
+that on the roadmap with a clock on it rather than only in a message.

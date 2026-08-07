@@ -393,6 +393,35 @@ namespace AutoColony.Modules
                 // Two fifths, and the room gets an emergency mop while the hold stands. If the
                 // colony cannot get a floor clean in the time it takes a disease to cross from
                 // 40% to lethal, the floor was never going to be the deciding factor.
+                // And nothing to operate with is the other half of the same question.
+                //
+                // Four guards were listed on this decision — the race, the part, the room, the
+                // duplicate bill — and every one of them is about *when* to cut. None asked
+                // whether the colony could. Medicine sets surgery success the same way
+                // cleanliness does, and RimWorld will happily run the operation with none: run
+                // 197 shows "Surgery failed on Blackrose" at day 13 04h and again at 13h, on a
+                // colony holding med 0 both times.
+                //
+                // Same threshold and same reasoning as the floor above, deliberately — an empty
+                // cupboard and a filthy table are the same kind of bad odds, and past the point
+                // where the disease wins anyway, bad odds beat none. Sharing the number means
+                // there is one answer to "how late is too late to be fussy" rather than two that
+                // can drift apart.
+                if (ctx.state.medicineCount <= 0 && towardsDeath < 0.4f)
+                {
+                    if (surgeryNoted.Add(pawn.thingIDNumber ^ 0x7E7E))
+                        Chronicle.Record(ChronicleCategory.Health, string.Format(
+                            "{0} is losing to {1} ({2:P0} towards lethal) and needs the {3} " +
+                            "amputated — holding the surgery until there is medicine, because " +
+                            "cutting with none is the same bad odds as cutting on a filthy floor " +
+                            "and this colony has failed that operation twice already",
+                            pawn.LabelShortCap, hediff.def.label, towardsDeath, hediff.Part.Label));
+
+                    CapabilityGaps.Report("surgery on " + pawn.LabelShortCap, "medicine",
+                                          1f, 0f, ctx.state.tick);
+                    continue;
+                }
+
                 float cleanliness = RoomCleanlinessAround(pawn);
                 if (cleanliness < 0f && towardsDeath < 0.4f)
                 {

@@ -266,8 +266,8 @@ namespace AutoColony.Connections
                 reads = new[]
                 {
                     "allColonists", "buildingsWantingFuel", "colonistBeds", "colonists",
-                    "cutOff", "fuelOnHand", "fuelStanding", "fuelStarved", "shelteredBeds",
-                    "usableMaterial", "wood", "workingGenerators", "world.churn"
+                    "cutOff", "fuelOnHand", "fuelStanding", "fuelStarved", "medicineCount",
+                    "shelteredBeds", "usableMaterial", "wood", "workingGenerators", "world.churn"
                 },
                 affects = new[] { "world.blueprints", "world.churn", "world.designations" }
             }
