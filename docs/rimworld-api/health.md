@@ -225,3 +225,24 @@ constants for "how late is too late to be fussy" would drift apart.
 
 It also reports to `CapabilityGaps`, so a colony that cannot operate for want of medicine has
 that on the roadmap with a clock on it rather than only in a message.
+
+## The chain is complete now, and it is still not enough
+
+Run 202 lost Daniels to blood loss with every part of the response working: **[live, run 202]**
+
+- the bleeding clock read, and named the deadline — *"8.3 hours from dying of it"*
+- `SendBleedersToBed` fired and put them in a bed
+- medicine stood at 30, with 25 of it stockpiled
+- `Doctor` was lifted to **7.0**, above Firefighter's 6.0, exactly as the rule intends
+
+That is the fourth consecutive colony — 199, 200, 201, 202 — lost to blood loss with nothing in
+the chain broken. Worth recording as a negative result rather than a puzzle, because the
+temptation each time is to add one more instrument to the best-instrumented part of this director.
+
+The conclusion higher up this file has now been tested about as hard as it can be: *every fix to
+the bleeding response was correct and none of them would have saved these colonies*. The binding
+constraint is **hands**. Every fatal case is several colonists down at once with too few left
+standing, and no amount of knowing about it changes the arithmetic.
+
+The leverage is upstream and already named — a refuge before the first pack (#50), a colony that
+grows past three (#51), and elective fights that do not cost people (#70).
