@@ -814,6 +814,17 @@ namespace AutoColony
             float winnerScore;
             bool roundComplete = TrainingSession.RecordTrialAndAdvance(score, out winner, out winnerScore);
 
+            // What this candidate actually scored, in the record.
+            //
+            // A trial announced itself and named how it differed from the incumbent, and then
+            // said nothing about how it did — so a round showed four candidates running and no
+            // way to tell which won, which is the one thing a round exists to establish. The
+            // scores are directly comparable because every candidate faced an identical world,
+            // so the number is meaningful on its own and worth printing next to the differences
+            // that produced it.
+            Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                "trial scored {0:0.000}", score));
+
             if (!roundComplete)
             {
                 // Roll the world back so the next candidate faces exactly the same situation.
