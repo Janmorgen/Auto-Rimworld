@@ -146,6 +146,17 @@ namespace AutoColony.Learning
         public const string StockpileCellsPerColonist = "stockpile.cellsPerColonist";
 
         // ---- raw resource gathering -------------------------------------------------
+        /// <summary>
+        /// How many extra cells the colony will search for a thing it has none of.
+        ///
+        /// Was the literal 60 inside the hunt's radius and nothing at all for chopping and
+        /// mining. A gene because it is a real trade with no right answer — a colony that ranges
+        /// far enough finds the trees and spends the day walking to them — and because the value
+        /// that produced run 196's deadlock was not chosen, it was simply absent from two of the
+        /// three callers.
+        /// </summary>
+        public const string GatherReachStretch = "gather.reachStretch";
+
         public const string MiningAggression = "mining.aggression";
         public const string ChopAggression = "chop.aggression";
         public const string HuntAggression = "hunt.aggression";
@@ -285,6 +296,11 @@ namespace AutoColony.Learning
 
             Add(GrowingCellsPerColonist, 10f, 200f, 60f, "Zones", "Growing cells per colonist");
             Add(StockpileCellsPerColonist, 10f, 120f, 40f, "Zones", "Stockpile cells per colonist");
+
+            Add(GatherReachStretch, 0f, 120f, 60f, "Gathering",
+
+                "Extra cells searched for a thing the colony has none of");
+
 
             Add(MiningAggression, 0f, 1f, 0.5f, "Gathering", "Mining aggression");
             Add(ChopAggression, 0f, 1f, 0.5f, "Gathering", "Tree felling aggression");

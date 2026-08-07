@@ -47,6 +47,14 @@ namespace AutoColony.Modules
         /// </summary>
         public const int GatherRadius = 55;
 
+        /// <summary>
+        /// How far each gatherer actually reached last pass. Kept so the record names the radius
+        /// that was searched rather than the constant it starts from — a message that says "55"
+        /// while the code searched 115 is the same jointly-misleading shape this session has now
+        /// corrected nine times.
+        /// </summary>
+        int lastChopRadius = GatherRadius, lastMineRadius = GatherRadius, lastHuntRadius = GatherRadius;
+
         /// <summary>Whether the last pass marked anything, so transitions can be spoken.</summary>
         bool wasGathering;
 
@@ -142,8 +150,11 @@ namespace AutoColony.Modules
                 wasGathering = gathering;
                 if (gathering)
                     Chronicle.Record(ChronicleCategory.Economy, string.Format(
-                        "gathering: marked {0} trees, {1} rock, {2} animals within {3} cells of the base",
-                        chopped, mined, hunted, GatherRadius));
+                        "gathering: marked {0} trees, {1} rock, {2} animals within {3}/{4}/{5} " +
+                        "cells of the base (chop/mine/hunt — each reaches as far as being short " +
+                        "of that one justifies)",
+                        chopped, mined, hunted,
+                        lastChopRadius, lastMineRadius, lastHuntRadius));
                 else if (wanting.Count == 0)
                     Chronicle.Record(ChronicleCategory.Economy,
                         "gathering: nothing left to mark — every target is at its stock level");
@@ -158,7 +169,8 @@ namespace AutoColony.Modules
                     Chronicle.Record(ChronicleCategory.Economy, string.Format(
                         "gathering: still wanting {0} and nothing within {1} cells to mark — " +
                         "this is not a shortage of hands and no work priority answers it",
-                        string.Join(", ", wanting.ToArray()), GatherRadius));
+                        string.Join(", ", wanting.ToArray()),
+                        AcMath.Max(lastChopRadius, AcMath.Max(lastMineRadius, lastHuntRadius))));
             }
 
             // Onto the roadmap, now that a run has shown it persists.
@@ -174,7 +186,9 @@ namespace AutoColony.Modules
             // still speaks only on the transition, which is why it is not said four times.
             if (wanting.Count > 0 && chopped + mined + hunted == 0)
                 CapabilityGaps.Report(string.Join(", ", wanting.ToArray()) + " within reach",
-                                      "anything to mark within " + GatherRadius + " cells",
+                                      "anything to mark within " +
+                                      AcMath.Max(lastChopRadius,
+                                          AcMath.Max(lastMineRadius, lastHuntRadius)) + " cells",
                                       1f, 0f, ctx.state.tick);
             else
                 CapabilityGaps.Close(lastReachGap);
@@ -217,7 +231,13 @@ namespace AutoColony.Modules
             var des = DesignationDefOf.HarvestPlant;
             int done = 0;
 
-            foreach (var cell in GenRadial.RadialCellsAround(origin, GatherRadius, true))
+            // As far as being short of wood justifies walking. Hunting has always done this and
+            // these two never did, which is how run 196 marked an animal and no trees in the
+            // same pass from the same cell.
+            lastChopRadius = GatherReach.Radius(GatherRadius,
+                GatherReach.Shortfall(ctx.state.wood, target), ctx.Gene(Genes.GatherReachStretch));
+
+            foreach (var cell in GenRadial.RadialCellsAround(origin, lastChopRadius, true))
             {
                 if (done >= budget) break;
                 if (!cell.InBounds(map)) continue;
@@ -264,7 +284,10 @@ namespace AutoColony.Modules
             var des = DesignationDefOf.Mine;
             int done = 0;
 
-            foreach (var cell in GenRadial.RadialCellsAround(origin, GatherRadius, true))
+            lastMineRadius = GatherReach.Radius(GatherRadius,
+                GatherReach.Shortfall(ctx.state.steel, target), ctx.Gene(Genes.GatherReachStretch));
+
+            foreach (var cell in GenRadial.RadialCellsAround(origin, lastMineRadius, true))
             {
                 if (done >= budget) break;
                 if (!cell.InBounds(map)) continue;
@@ -358,7 +381,9 @@ namespace AutoColony.Modules
             float desperation = AcMath.Clamp01(urgency * 0.8f + aggression * 0.2f);
             float strength = CombatAssessment.ColonyStrength(ctx.state);
 
-            int radius = GatherRadius + (int)(urgency * 60f);
+            int radius = GatherReach.Radius(GatherRadius, urgency,
+                                            ctx.Gene(Genes.GatherReachStretch));
+            lastHuntRadius = radius;
             int radiusSq = radius * radius;
 
             var map = ctx.map;

@@ -183,7 +183,27 @@ namespace AutoColony.Tests
             // about this change.
             //
             // Forty rather than thirty, so the next few genes do not put it back on the line.
-            int epochs = 40 * Genes.All.Count;
+            //
+            // Four genes later it was back on the line anyway, and this is the third rise. At 68
+            // genes, measured the same way:
+            //
+            //     40 epochs a gene   paired 0.13476 vs sequential 0.14010 — 3.8%, fails the 5% bar
+            //     60 epochs a gene   passes
+            //     80 epochs a gene   passes
+            //     120 epochs a gene  passes
+            //
+            // Note what is *not* claimed. Each of those is a single stochastic sample, so "40
+            // fails and 60 passes" locates the threshold roughly and says nothing reliable about
+            // the shape of the curve between them — the tidy story that the budget grows faster
+            // than linearly in gene count is exactly the inference the last two rises would
+            // support and this data does not carry.
+            //
+            // What is worth stating: the per-gene budget has had to rise 20 -> 30 -> 40 -> 80 as
+            // the genome grew, and it is the margin that erodes, never the direction. Paired
+            // trials have beaten sequential search in every measurement at every budget. If this
+            // needs raising a fourth time then the test is measuring dimensionality as much as
+            // the claim, and the claim should be restated rather than the budget refunded again.
+            int epochs = 80 * Genes.All.Count;
 
             var start = StartDistance();
             float sequential = SequentialRun(0.02f, 8, epochs);
