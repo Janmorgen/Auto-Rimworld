@@ -24,6 +24,15 @@ namespace AutoColony.Rooms
 
         /// <summary>Share of the footprint that can actually be built on, 0 to 1.</summary>
         public float buildable;
+
+        /// <summary>
+        /// Share of the footprint that must be cleared first — trees, boulders, ruins — 0 to 1.
+        ///
+        /// Distinct from <see cref="buildable"/>, which asks whether a blueprint can be placed
+        /// at all. A tree does not stop a blueprint; it stops the wall going up until somebody
+        /// has cut it, and eighty-one cells of forest is fifty-six jobs before the first wall.
+        /// </summary>
+        public float toClear;
     }
 
     /// <summary>How much each of those matters to a given role. Every field is a gene.</summary>
@@ -33,6 +42,9 @@ namespace AutoColony.Rooms
         public float evenness;
         public float partnerAffinity;
         public float resourceAffinity;
+
+        /// <summary>How much a site's clearing work counts against it.</summary>
+        public float openGround;
     }
 
     /// <summary>
@@ -90,6 +102,15 @@ namespace AutoColony.Rooms
 
             // Beside what it is for. A rock store belongs where the rock is.
             score -= Cost(f.toResource, 40f) * w.resourceAffinity;
+
+            // Ground that is already open.
+            //
+            // buildable answers whether a blueprint can be placed; this answers how much has to
+            // be cut down first, which is a different question and the one that decides when the
+            // room actually exists. Run 191 sited a 9x9 store on eighty-one cells of forest and
+            // spent three days before "clearing 56 obstructions" — a room the colony had named
+            // as its next need, waiting on nobody having noticed the trees.
+            score -= f.toClear * w.openGround;
 
             return score;
         }
@@ -172,8 +193,10 @@ namespace AutoColony.Rooms
         public const string Evenness = "evenness";
         public const string Partner = "partner";
         public const string Resource = "resource";
+        public const string OpenGround = "openGround";
 
-        public static readonly string[] Aspects = { Compactness, Evenness, Partner, Resource };
+        public static readonly string[] Aspects =
+            { Compactness, Evenness, Partner, Resource, OpenGround };
 
         /// <summary>Gene names for a role's dimensions, which differ hugely by purpose.</summary>
         public static string WidthKey(string role) { return "site." + role + ".width"; }

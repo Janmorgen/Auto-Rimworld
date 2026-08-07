@@ -2246,6 +2246,7 @@ namespace AutoColony.Modules
             weights.evenness = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Evenness));
             weights.partnerAffinity = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Partner));
             weights.resourceAffinity = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Resource));
+            weights.openGround = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.OpenGround));
 
             float bestScore = float.NegativeInfinity;
             var bestRect = CellRect.Empty;
@@ -2368,6 +2369,7 @@ namespace AutoColony.Modules
             var centre = rect.CenterCell;
 
             f.buildable = PlacementUtil.BuildableFraction(map, rect);
+            f.toClear = ClearingNeeded(map, rect);
             f.fromOrigin = (centre - ctx.layout.origin).LengthHorizontal;
 
             var rooms = ctx.layout.rooms;
@@ -2805,6 +2807,48 @@ namespace AutoColony.Modules
                     return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// How many cells of this footprint would have to be cleared before anything is built.
+        ///
+        /// The same question ClearFootprint answers by acting; asked here without acting, so the
+        /// scorer can prefer ground that is already open. Deliberately shares nothing but the
+        /// shape — a second definition of "in the way" would be the duplicated-quantity fault
+        /// this project has paid for repeatedly — so the two must be read together.
+        ///
+        /// Run 191: "clearing 56 obstructions from the Storage room's footprint before building
+        /// it", three days after the room was sited. Fifty-six of eighty-one cells. The scorer
+        /// had no idea, because BuildableFraction excludes only cells holding an edifice and a
+        /// tree is not an edifice — so a dense forest reads as perfectly buildable and then costs
+        /// fifty-six jobs before a single wall goes up.
+        /// </summary>
+        static float ClearingNeeded(Map map, CellRect rect)
+        {
+            int total = 0, blocked = 0;
+            try
+            {
+                foreach (var cell in rect)
+                {
+                    if (!cell.InBounds(map)) continue;
+                    total++;
+
+                    var edifice = cell.GetEdifice(map);
+                    if (edifice != null)
+                    {
+                        if (edifice.def.mineable && edifice.Faction == null) blocked++;
+                        else if (edifice.Faction != Faction.OfPlayer &&
+                                 edifice.def.building != null &&
+                                 edifice.def.building.IsDeconstructible) blocked++;
+                        continue;
+                    }
+
+                    if (cell.GetPlant(map) != null) blocked++;
+                }
+            }
+            catch (Exception) { return 0f; }
+
+            return total > 0 ? blocked / (float)total : 0f;
         }
 
         int ClearFootprint(DirectorContext ctx, PlannedRoom room)

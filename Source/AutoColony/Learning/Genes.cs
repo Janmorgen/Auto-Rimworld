@@ -354,6 +354,16 @@ namespace AutoColony.Learning
                                   "Room siting", role + " closeness to partner room"));
             Register(new GeneSpec("site." + role + ".resource", 0f, 3f, resource,
                                   "Room siting", role + " closeness to resource"));
+
+            // How much a role minds building on ground that has to be cleared first.
+            //
+            // Registered for every role at the same default rather than threaded through the
+            // signature, because no caller has an opinion yet and the search is better placed to
+            // form one per role than I am — a store on open grass and a workshop that does not
+            // mind a few trees are both defensible, and which is right is what the archive is
+            // for.
+            Register(new GeneSpec("site." + role + ".openGround", 0f, 3f, 1f,
+                                  "Room siting", role + " preference for ground already clear"));
             Register(new GeneSpec("site." + role + ".width", 5f, 13f, width,
                                   "Room siting", role + " width"));
             Register(new GeneSpec("site." + role + ".height", 5f, 13f, height,

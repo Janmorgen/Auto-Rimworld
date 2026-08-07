@@ -65,5 +65,45 @@ namespace AutoColony.Tests
             Assert.True(RoomSiting.Score(close, w, 3f) > RoomSiting.Score(sprawl, w, 3f),
                 "sitting on the rock a hundred cells out must not beat sitting at home");
         }
+
+        [Fact]
+        public void ForestGroundLosesToOpenGroundAllElseEqual()
+        {
+            // Run 191: "clearing 56 obstructions from the Storage room's footprint before
+            // building it", three days after siting, on eighty-one cells of forest. The scorer
+            // had no idea — BuildableFraction excludes cells holding an edifice, and a tree is
+            // not an edifice, so a wood counts as perfectly buildable and then costs fifty-six
+            // jobs before the first wall.
+            var open = new SiteFeatures { buildable = 1f, toClear = 0f };
+            var forest = new SiteFeatures { buildable = 1f, toClear = 0.69f };
+            var w = new SiteWeights { openGround = 1f };
+
+            Assert.True(RoomSiting.Score(open, w) > RoomSiting.Score(forest, w),
+                "eighty-one cells of trees must cost something");
+        }
+
+        [Fact]
+        public void AGenomeThatDoesNotMindTreesIsUnaffected()
+        {
+            // The weight runs to zero, and at zero clearing must not enter the score at all —
+            // otherwise every existing genome sites rooms differently for a reason it did not
+            // choose.
+            var forest = new SiteFeatures { buildable = 1f, toClear = 0.69f };
+            var w = new SiteWeights { openGround = 0f };
+
+            Assert.Equal(RoomSiting.Score(new SiteFeatures { buildable = 1f }, w),
+                         RoomSiting.Score(forest, w), 5);
+        }
+
+        [Fact]
+        public void ClearingIsSeparateFromBuildability()
+        {
+            // They are different questions and must stay so: a blueprint CAN be placed on a
+            // forested cell, which is why buildable is 1.0 there. What cannot happen is the wall
+            // going up before somebody cuts the tree.
+            var forest = new SiteFeatures { buildable = 1f, toClear = 1f };
+            Assert.NotEqual(float.NegativeInfinity,
+                            RoomSiting.Score(forest, new SiteWeights { openGround = 1f }));
+        }
     }
 }
