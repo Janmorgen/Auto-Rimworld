@@ -80,7 +80,8 @@ namespace AutoColony.Connections
             "world.growingZones",     // what a zone is set to sow
             "world.stockpileFilters", // what a stockpile will accept
             "world.tradeDeals",       // silver and goods across a trader's counter
-            "world.researchProject"   // what the colony is currently studying
+            "world.researchProject",  // what the colony is currently studying
+            "plan.capabilityGaps"     // things the colony wants and cannot have, and for how long
         };
 
         public static readonly Touch[] Modules =
@@ -182,7 +183,7 @@ namespace AutoColony.Connections
             {
                 module = "PowerModule",
                 reads = new string[0],
-                affects = new[] { "world.blueprints" }
+                affects = new[] { "world.blueprints", "plan.capabilityGaps" }
             },
 
             new Touch

@@ -24,6 +24,9 @@ namespace AutoColony.Modules
         /// <summary>Conduit blueprints per pass, so a long run is spread over several.</summary>
         const int MaxConduitsPerPass = 60;
 
+        /// <summary>Set while the no-generator state is standing, so it is stated once.</summary>
+        bool noGeneratorNoted;
+
         readonly List<Thing> sources = new List<Thing>();
         readonly List<Thing> orphans = new List<Thing>();
 
@@ -38,11 +41,39 @@ namespace AutoColony.Modules
             if (sources.Count == 0)
             {
                 if (orphans.Count > 0)
-                    Chronicle.Record(ChronicleCategory.Build, string.Format(
-                        "{0} buildings need power and the colony has no generator yet",
-                        orphans.Count));
+                {
+                    // Into the roadmap, and said once.
+                    //
+                    // This printed every pass for as long as the condition held — twenty-two
+                    // identical lines in run 178 — which is the shape the repeat detector exists
+                    // to catch, and it was catching a diagnostic rather than a fault. The state
+                    // is real and persistent: something wants power and there is no generator,
+                    // which no work priority answers, so it belongs in the list of things the
+                    // colony wants and cannot have rather than in the log twenty-two times.
+                    CapabilityGaps.Report("power", "a generator", 1f, 0f, ctx.state.tick);
+
+                    if (!noGeneratorNoted)
+                    {
+                        noGeneratorNoted = true;
+                        Chronicle.Record(ChronicleCategory.Build, string.Format(
+                            "{0} buildings need power and the colony has no generator yet",
+                            orphans.Count));
+                    }
+                }
+                else CapabilityGaps.Close("power");
                 return;
             }
+
+            if (CapabilityGaps.IsOpen("power"))
+            {
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "the colony has a generator at last, after {0:0.0} days of things wanting " +
+                    "power with nothing to give it",
+                    CapabilityGaps.StandingFor("power", ctx.state.tick) / 60000f));
+                CapabilityGaps.Close("power");
+            }
+            noGeneratorNoted = false;
+
             if (orphans.Count == 0) return;
 
             int placed = 0;
