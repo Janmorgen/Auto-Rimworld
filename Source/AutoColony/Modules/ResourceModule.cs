@@ -379,6 +379,7 @@ namespace AutoColony.Modules
             // Desperation is mostly about how empty the larder is, nudged by how bold the
             // strategy is in general.
             float desperation = AcMath.Clamp01(urgency * 0.8f + aggression * 0.2f);
+            blastWeight = ctx.Gene(Genes.HuntBlastWeight);
             float strength = CombatAssessment.ColonyStrength(ctx.state);
 
             int radius = GatherReach.Radius(GatherRadius, urgency,
@@ -657,6 +658,19 @@ namespace AutoColony.Modules
             float chance = RevengeChanceOf(animal, woundsPerHealth);
             float threat = chance > 0f ? CombatAssessment.ThreatValue(animal) : 0f;
 
+            // What killing it does to the map, which is certain rather than a roll.
+            //
+            // A boomalope's revenge chance is what this used to weigh, and its revenge is not
+            // what kills anybody — the explosion on death is, and hunting it means causing that.
+            // So the hazard enters at certainty, and an animal that carries one can never be
+            // free however harmless its bite. Harmless prey has no such comp and is untouched.
+            float blast = BlastHazardOf(animal, blastWeight);
+            if (blast > 0f)
+            {
+                chance = 1f;
+                threat += blast;
+            }
+
             sessionChances.Add(chance);
             sessionThreats.Add(threat);
 
@@ -668,6 +682,28 @@ namespace AutoColony.Modules
             sessionThreats.RemoveAt(sessionThreats.Count - 1);
             return false;
         }
+
+        /// <summary>
+        /// Read off the def rather than off a name. Anything the game gives an explosive comp is
+        /// treated the same way, so a mod's exploding beast is priced without this code having
+        /// heard of it — and a boomalope is not special-cased anywhere.
+        /// </summary>
+        static float BlastHazardOf(Pawn animal, float incendiaryWeight)
+        {
+            if (animal == null || animal.def == null) return 0f;
+
+            var comp = animal.def.GetCompProperties<CompProperties_Explosive>();
+            if (comp == null) return 0f;
+
+            bool incendiary = comp.explosiveDamageType != null &&
+                              comp.explosiveDamageType.defName.IndexOf(
+                                  "Flame", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+            return HuntRisk.BlastHazard(comp.explosiveRadius, incendiary, incendiaryWeight);
+        }
+
+        /// <summary>How much worse an incendiary blast is than a plain one. Set once a pass.</summary>
+        float blastWeight = 1f;
 
         static float ThreatOf(Pawn animal)
         {

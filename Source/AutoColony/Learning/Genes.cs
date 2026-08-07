@@ -157,6 +157,16 @@ namespace AutoColony.Learning
         /// </summary>
         public const string GatherReachStretch = "gather.reachStretch";
 
+        /// <summary>
+        /// How much worse an incendiary blast is than a plain one of the same size.
+        ///
+        /// A gene because the answer depends entirely on what the colony is made of and how many
+        /// hands it has to beat a fire out — a stone base with six colonists and a wooden one
+        /// with two are not running the same risk from the same boomalope, and no constant is
+        /// right for both.
+        /// </summary>
+        public const string HuntBlastWeight = "hunt.blastWeight";
+
         public const string MiningAggression = "mining.aggression";
         public const string ChopAggression = "chop.aggression";
         public const string HuntAggression = "hunt.aggression";
@@ -296,6 +306,11 @@ namespace AutoColony.Learning
 
             Add(GrowingCellsPerColonist, 10f, 200f, 60f, "Zones", "Growing cells per colonist");
             Add(StockpileCellsPerColonist, 10f, 120f, 40f, "Zones", "Stockpile cells per colonist");
+
+            Add(HuntBlastWeight, 1f, 8f, 3f, "Gathering",
+
+                "How much worse an incendiary blast is than a plain one");
+
 
             Add(GatherReachStretch, 0f, 120f, 60f, "Gathering",
 

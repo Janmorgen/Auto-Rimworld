@@ -167,3 +167,54 @@ namespace AutoColony.Tests
         }
     }
 }
+
+namespace AutoColony.Tests
+{
+    /// <summary>
+    /// The boomalope, which killed a colony on day 0 of run 174 and Stephanie on day 10 of
+    /// run 196, both times after the hunt priced its bite and not its death.
+    /// </summary>
+    public class BlastHazardTests
+    {
+        /// <summary>Ordinary prey carries no blast, so nothing here can ever refuse a deer.</summary>
+        [Fact]
+        public void AnAnimalThatDoesNotExplodeCostsNothing()
+        {
+            Assert.Equal(0f, HuntRisk.BlastHazard(0f, false, 3f));
+            Assert.Equal(0f, HuntRisk.BlastHazard(-1f, true, 3f));
+        }
+
+        /// <summary>Area, not radius — a blast covers a disc and the damage scales with it.</summary>
+        [Fact]
+        public void HazardScalesWithAreaNotRadius()
+        {
+            float small = HuntRisk.BlastHazard(2f, false, 1f);
+            float big = HuntRisk.BlastHazard(4f, false, 1f);
+            Assert.Equal(4f, small);
+            Assert.Equal(16f, big);
+            Assert.Equal(4f, big / small);   // double the radius, four times the hazard
+        }
+
+        /// <summary>
+        /// Fire is worse than concussion, and by a factor the strategy chooses. Nineteen fires
+        /// against one able colonist is a different event from one crater.
+        /// </summary>
+        [Fact]
+        public void AnIncendiaryBlastCostsMoreThanAPlainOne()
+        {
+            float plain = HuntRisk.BlastHazard(3f, false, 3f);
+            float fire = HuntRisk.BlastHazard(3f, true, 3f);
+            Assert.True(fire > plain);
+            Assert.Equal(plain * 3f, fire);
+        }
+
+        /// <summary>A weight below one would make fire cheaper than concussion. It cannot.</summary>
+        [Fact]
+        public void TheIncendiaryWeightNeverDiscountsFire()
+        {
+            float plain = HuntRisk.BlastHazard(3f, false, 1f);
+            Assert.Equal(plain, HuntRisk.BlastHazard(3f, true, 0f));
+            Assert.Equal(plain, HuntRisk.BlastHazard(3f, true, -5f));
+        }
+    }
+}

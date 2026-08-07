@@ -111,6 +111,36 @@ namespace AutoColony
         /// number <see cref="HuntPolicy.WorthHunting"/> should be judging, in place of the
         /// threat of whichever animal happens to be under consideration.
         /// </summary>
+        /// <summary>
+        /// What killing this animal does to the map, as opposed to what it does back to the
+        /// hunter.
+        ///
+        /// The gap this fills is the one `combatPower` was always covering for. A boomalope
+        /// fights at about nineteen and is rated eighty, and the difference is not that RimWorld
+        /// overrates its bite — it is that the thing explodes when it dies, and an explosion is
+        /// not damage per second from a weapon it is holding.
+        ///
+        /// **Certain, not a roll.** Revenge is a chance per wound and this is not: hunting an
+        /// animal means killing it, and killing this one means the blast. Feeding it through the
+        /// revenge arithmetic as a probability would price a certainty as a coin flip.
+        ///
+        /// Area rather than radius, because a blast covers a disc and the damage a colony takes
+        /// scales with what is inside it. Incendiary blasts are weighted separately because fire
+        /// spreads and a plain concussion does not — nineteen fires against one able colonist is
+        /// a different event from one crater.
+        ///
+        /// Twice fatal now, both times documented before the second: run 174 lost four colonists
+        /// on day 0 to two boomalopes, and run 196 lost Stephanie to Burn at day 10 hour 20 with
+        /// nineteen fires burning and one colonist able to fight them. **[live, runs 174, 196]**
+        /// </summary>
+        public static float BlastHazard(float radius, bool incendiary, float incendiaryWeight)
+        {
+            if (radius <= 0f) return 0f;
+            float area = radius * radius;
+            if (!incendiary) return area;
+            return area * (incendiaryWeight < 1f ? 1f : incendiaryWeight);
+        }
+
         public static float ExpectedRetaliation(List<float> chances, List<float> threats)
         {
             if (chances == null || threats == null) return 0f;

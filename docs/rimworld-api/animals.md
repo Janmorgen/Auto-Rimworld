@@ -95,6 +95,42 @@ Note the asymmetry in the director's own code: humanlike raiders are measured ra
 from `combatPower`, on the argument that a type-average cannot see what a pawn is carrying. That
 argument was never carried across to animals, and whether it should be is still open (#55).
 
+## Ask the def what it does when it dies
+
+```csharp
+def.GetCompProperties<CompProperties_Explosive>();   // null for anything that does not explode
+comp.explosiveRadius;
+comp.explosiveDamageType;                            // Flame means it starts fires
+```
+**[compiles]**
+
+This is the answer to the boomalope, and it is better than either number above because it is
+neither a measurement nor a rating — it is the mechanism. `combatPower` knew about the explosion
+only in the sense that somebody folded it into a raid-points figure; this *is* the explosion.
+
+**It cost a second colony before it was fixed.** Run 196 was starving at 1.9 days of food on a
+map with nothing left within its gather radius, so desperation was high and it hunted what it
+could reach: **[live, run 196]**
+
+```
+day 10 18h  gathering: marked 0 trees, 0 rock, 3 animals within 55 cells of the base
+day 10 19h  INCIDENT answered 'Boomalope revenge' with 'close'
+day 10 19h  FIRE     19 fires burning and 1 able colonists — past what they could beat out,
+                     so nobody is sent into it
+day 10 20h  DEATH    died of Burn — last seen as Stephanie (health 0.15, mood 0.23, downed)
+```
+
+Nineteen fires, one colonist able to fight them, and the fire logic did everything right — it
+correctly refused to send one person into nineteen fires, and correctly refused to claim a 154C
+room. The decision that lost the colonist was made an hour earlier, by a hunt that priced a
+boomalope's bite.
+
+**The hazard is certain, not a chance.** Revenge is a roll per wound; this is not. Hunting an
+animal means killing it, and killing this one means the blast — so it enters the session risk at
+certainty rather than as a probability, and an animal carrying one can never read as free however
+harmless its bite. Nothing in the code names a boomalope: anything the game gives an explosive
+comp is priced the same way, including a mod's.
+
 ## Stats available on animals
 
 `GetStatValue` works on animals for the same stats as colonists **[compiles]**:
