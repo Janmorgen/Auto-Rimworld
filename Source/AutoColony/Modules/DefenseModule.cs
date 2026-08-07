@@ -1770,6 +1770,21 @@ namespace AutoColony.Modules
 
         void StandDown(DirectorContext ctx)
         {
+            // Say when the medic is released, because the hold is said when it starts.
+            //
+            // This cleared the field without a word, so a threat that flickered produced
+            // "holding Blake back from the fight to tend them" four times in four hours and
+            // nothing in between — four identical lines that read as one decision repeated,
+            // when they were four decisions with the releases invisible. Run 192 was caught by
+            // the repeat detector doing exactly that.
+            //
+            // The other clearing site, in ChooseReservedMedic, has always announced the rejoin.
+            // Two ways out of the same state and only one of them spoke.
+            if (reservedMedic != null)
+            {
+                Chronicle.Record(ChronicleCategory.Health,
+                    "threat over; " + reservedMedic.LabelShortCap + " rejoins the line");
+            }
             reservedMedic = null;
             if (drafted.Count == 0) return;
 
