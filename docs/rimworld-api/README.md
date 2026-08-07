@@ -83,3 +83,30 @@ explosion is never detected produce identical logs. It was caught by a colony, n
 So: **a read that can return "nothing" needs a number in the record that says how often it did.**
 Where a value is only ever reported when non-zero, an inert read is silent forever. That is why
 the hunt line now names the blast hazard it accepted even though nothing acts on the figure.
+
+## Mod settings need RimWorld's own wrapper, or the whole file is ignored
+
+A settings file that looks entirely correct will be discarded in silence unless its root element
+is `SettingsBlock`. **[live, runs 213-214]**
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<SettingsBlock>
+  <ModSettings Class="AutoColony.AutoColonySettings">
+    <trainingMode>True</trainingMode>
+  </ModSettings>
+</SettingsBlock>
+```
+
+The hand-written template had `<ModSettings>` as the root, with no wrapper. RimWorld could not
+parse it and fell back to **every** default: training mode read as off despite the file saying
+`True`, and `epochDays` read as 10 against the file's 5.
+
+Two things made this expensive to find. The file was right in every respect a human checks —
+correct filename for the mod folder (`Mod_<folderName>_<modClassName>.xml`), correct class
+attribute, correct field names, correct values — and nothing anywhere reports that a settings
+file failed to parse. It presents as the feature not working rather than as a file not loading.
+
+The tell was a size difference: RimWorld's own write was 201 bytes against the template's 520,
+because **it persists only values that differ from their defaults**. A settings file much larger
+than what the game writes back is a file the game is not reading.
