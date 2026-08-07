@@ -506,12 +506,26 @@ namespace AutoColony.Upkeep
             // because its bench was built — and pulling it down is what made the goal want one
             // again. A room is not spare because the goal it serves is met; it is met because
             // the room is standing.
-            if (layout.CountRooms(planned.role) <= 1 &&
+            //
+            // Counted standing, not planned. A rectangle on the layout is not a room, and this
+            // counted both alike — so a colony that had drawn a second bedroom read as having
+            // two and gave away the one it had actually built. Run 197, day 4: **[live]**
+            //
+            //   day 4 12h  repurposed the Bedroom room as a Barn — the shell is already
+            //              standing, and building another one would have cost about 120 units
+            //   day 4 13h  sited the Bedroom room 6x6 at (150, 0, 115)
+            //   day 4 19h  focus: Shelter everyone [0 beds for 3 colonists]
+            //
+            // Twelve hours to turn the only shelter into a barn, site a replacement, and go on
+            // reporting nobody had anywhere to sleep. The material saved was 120; the room cost
+            // four days. This is the same correction as beds counted before they shelter anyone
+            // and food counted before it is butchered — the plan is not the thing.
+            if (layout.CountStandingRooms(map, planned.role) <= 1 &&
                 rolesWanted != null && rolesWanted.Contains(planned.role))
                 return false;
 
             // The original floor, kept for callers with no plan to consult.
-            if (layout.CountRooms(planned.role) <= 1 &&
+            if (layout.CountStandingRooms(map, planned.role) <= 1 &&
                 (planned.role == RoomRole.Kitchen || planned.role == RoomRole.Storage ||
                  planned.role == RoomRole.Bedroom || planned.role == RoomRole.Power))
                 return false;

@@ -229,6 +229,33 @@ namespace AutoColony
             return n;
         }
 
+        /// <summary>
+        /// How many rooms of this role actually stand — enclosed, by the game's own reckoning.
+        ///
+        /// A rectangle on the layout is not a room, and telling the two apart is what stops the
+        /// colony giving away the only bedroom it has built because it has drawn another. Run 197
+        /// had two Bedrooms planned and one standing, counted two, called the standing one spare,
+        /// and made it a Barn to save 120 units of material — with "Shelter everyone [0 beds for
+        /// 3 colonists]" holding the plan and a bedroom sited again an hour later.
+        ///
+        /// Same enclosure test `shelteredBeds` and `RoomCensus` use, for the same reason: a roof
+        /// is not a room, and neither is a plan.
+        /// </summary>
+        public int CountStandingRooms(Map map, RoomRole role)
+        {
+            if (map == null) return CountRooms(role);
+
+            int n = 0;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                if (rooms[i].role != role) continue;
+
+                var room = rooms[i].Center.GetRoom(map);
+                if (room != null && !room.TouchesMapEdge && !room.PsychologicallyOutdoors) n++;
+            }
+            return n;
+        }
+
         public void ExposeData()
         {
             Scribe_Values.Look(ref established, "established", false);
