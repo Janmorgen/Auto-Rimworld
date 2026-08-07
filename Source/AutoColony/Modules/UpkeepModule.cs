@@ -175,6 +175,31 @@ namespace AutoColony.Modules
                     unhandled.Count > 0 ? unhandled[0].mood : 0f);
             }
 
+            // Whether anything on this map can be burned at all, reported here rather than
+            // inside ColonyState.Capture.
+            //
+            // It lived in CaptureResources and never once fired, through eleven days of a colony
+            // printing "7 DRY, NO FUEL" in its own vitals — the very same predicate. The reason
+            // is an ordering question inside Capture that I guessed at twice and got wrong once,
+            // so it now sits where there is no question: a module pass, with ctx.state complete
+            // and already consulted three lines below to print the list.
+            //
+            // The condition is NoFuelToBeHad, which is exactly what the vitals line means by
+            // "NO FUEL": burners wanting fuel, nothing cut, nothing standing. Its own prose in
+            // FuelUpkeep calls it "not a shortage of hands and no work priority answers it",
+            // which is a capability gap in one sentence.
+            try
+            {
+                var st = ctx.state;
+                if (Furniture.FuelBudget.NoFuelToBeHad(st.buildingsWantingFuel, st.fuelOnHand,
+                                                       st.fuelStanding))
+                    CapabilityGaps.Report("anything that burns", "fuel on the map",
+                                          st.buildingsWantingFuel, 0f, st.tick);
+                else
+                    CapabilityGaps.Close("anything that burns");
+            }
+            catch (Exception) { }
+
             // The roadmap, beside the defects, because they are the same kind of statement made
             // at two levels: a defect is something the colony has not got round to, a capability
             // gap is something no amount of getting round to would fix. Printed with how long it

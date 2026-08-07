@@ -1184,22 +1184,6 @@ namespace AutoColony
                 s.fuelKinds = null;
             }
 
-            // Whether anything on this map can be burned at all.
-            //
-            // FuelUpkeep already says this in prose — "there is no fuel anywhere on this map to
-            // light them with; this is not a shortage of hands and no work priority answers it"
-            // — which is the definition of a capability gap: a want no amount of labour reaches.
-            // It was said and not held, so nothing could ask how long it had been true. Run 168
-            // carried six dry burners for days with the sentence printed once.
-            try
-            {
-                if (Furniture.FuelBudget.NoFuelToBeHad(s.buildingsWantingFuel, s.fuelOnHand, s.fuelStanding))
-                    CapabilityGaps.Report("anything that burns", "fuel on the map",
-                                          s.buildingsWantingFuel, 0f, s.tick);
-                else
-                    CapabilityGaps.Close("anything that burns");
-            }
-            catch (Exception) { }
 
             unreachableLastPass.Clear();
             foreach (var id in unreachableNow) unreachableLastPass.Add(id);
