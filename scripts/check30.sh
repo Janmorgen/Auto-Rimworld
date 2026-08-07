@@ -100,7 +100,14 @@ warns=$(grep -c "^Warning:" "$LOG" 2>/dev/null); warns=${warns:-0}
 # Also a cumulative count rather than a state — kept, but named honestly, so it
 # is not read as "rooms standing right now". The vitals line carries the live
 # figures; this is a tally of rooms that have ever come good.
-rooms=$(grep -c "room is working" "$CH" 2>/dev/null); rooms=${rooms:-0}
+# Rooms the live colony finished, and rooms finished inside replays, counted apart.
+#
+# This counted every "room is working" line ever printed, which was fine until training mode
+# replayed the same five days once per candidate — each trial rebuilds the same rooms and adds
+# its own lines, so three colonists showed 24 rooms by day 7. History read as state, in the
+# same script whose own fault table already carries that row for the pen counter.
+rooms=$(grep "room is working" "$CH" 2>/dev/null | grep -vc "\[trial"); rooms=${rooms:-0}
+trialrooms=$(grep "room is working" "$CH" 2>/dev/null | grep -c "\[trial"); trialrooms=${trialrooms:-0}
 # "pen is" also matches "the open is elective" in threat lines. Count what was
 # fenced and what the game agrees is closed, which are the two facts worth having.
 sited=$(grep -c "fencing a" "$CH" 2>/dev/null); sited=${sited:-0}
@@ -161,7 +168,7 @@ if [ -z "$vitals" ]; then
 reached its first vitals pass"
 fi
 
-echo "CHECK30| $running | $frame | died: $died (trial: $trialdied, left: $left) taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | roomsEver: $rooms pen: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
+echo "CHECK30| $running | $frame | died: $died (trial: $trialdied, left: $left) taken: $taken | repeats: $repeats | causes: $causes | excMOD: $excmod warns: $warns | roomsEver: $rooms (trial: $trialrooms) pen: $pens | lean: $lean $season | focus: $focus | $vitals | $death"
 
 # ---------------------------------------------------------------- goal.md
 # Recited every check, READ FROM THE FILE rather than copied here.
