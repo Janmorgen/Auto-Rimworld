@@ -690,9 +690,42 @@ namespace AutoColony.Modules
                     // Beds are a bedroom's only furniture, so furnishing it early leaves nothing
                     // to add later and needs no extra bookkeeping: the shell carries on being
                     // built around them.
+                    // It is a loan, and nothing was checking whether the last one was repaid.
+                    //
+                    // The argument above is sound and stays: a bed without walls beats the
+                    // ground tonight. What it assumes is the last line of it — "the shell
+                    // carries on being built around them" — and run 195 took this branch five
+                    // times over thirty-one days and closed none of them. `roomsEver: 5`, six
+                    // beds, **nought** sheltered, two of them standing alone in open grass with
+                    // a scrap of floor beside them and no wall within twenty cells.
+                    //
+                    // Every one of those was individually the right call by the reasoning above,
+                    // and the colony ended up with a bedroom's worth of furniture scattered over
+                    // the map and everybody still scoring SleptOutside every night. A trade that
+                    // is correct each time and ruinous repeated is a trade nothing is counting.
+                    //
+                    // So: one outstanding loan. Not a rule about beds and not a number — while
+                    // an earlier bedroom's beds are still standing under open sky, the answer to
+                    // "shall I put beds in this one too" is that finishing the last one shelters
+                    // the same colonists sooner and costs nothing extra. The mood argument is
+                    // unchanged for the first room, which is the one that was ever meant to
+                    // benefit from it.
                     if (room.role == RoomRole.Bedroom &&
                         ctx.state.colonistBeds < ctx.state.colonists)
                     {
+                        var owed = BedsAwaitingTheirShell(ctx, room);
+                        if (owed != null)
+                        {
+                            Chronicle.Record(ChronicleCategory.Build, string.Format(
+                                "not putting beds in this {0} yet — the {1} already has beds " +
+                                "standing under open sky and its walls are not closed, and a " +
+                                "second unsheltered bedroom shelters nobody sooner ({2} beds, " +
+                                "{3} of them sheltered, for {4} colonists)",
+                                room.role, owed.role, ctx.state.colonistBeds,
+                                ctx.state.shelteredBeds, ctx.state.colonists));
+                            continue;
+                        }
+
                         QueueFurniture(ctx, room);
                         room.furnitureQueued = true;
                         Chronicle.Record(ChronicleCategory.Build,
@@ -2551,6 +2584,29 @@ namespace AutoColony.Modules
         /// for. Deliberately indifferent to whether the room is finished or already furnished:
         /// the ordinary furnishing rules are about building a base tidily, and this is not that.
         /// </summary>
+        /// <summary>
+        /// A bedroom that was given beds before its walls and has not got them yet, or null.
+        ///
+        /// Both halves are read from the game rather than remembered: the beds are counted where
+        /// they stand and the shell is asked whether it closes. A flag saying "I promised this
+        /// one walls" would go stale exactly when it mattered — the room whose walls were queued,
+        /// deconstructed for material and never requeued is the case that produced the fault.
+        /// </summary>
+        PlannedRoom BedsAwaitingTheirShell(DirectorContext ctx, PlannedRoom except)
+        {
+            var layout = ctx.layout;
+            if (layout == null || AcDefs.Bed == null) return null;
+
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                var other = layout.rooms[i];
+                if (other == except || other.role != RoomRole.Bedroom) continue;
+                if (ShellComplete(ctx.map, other)) continue;
+                if (ExistingCount(ctx.map, other, AcDefs.Bed) > 0) return other;
+            }
+            return null;
+        }
+
         bool TryAddEmergencyBed(DirectorContext ctx)
         {
             var layout = ctx.layout;

@@ -189,8 +189,8 @@ namespace AutoColony.Connections
                     "ableColonists", "allColonists", "avgMood", "colonistBeds", "colonists",
                     "colonistsDowned", "colonistsInMentalState", "couples", "downedStrangers",
                     "fires", "firesNearBase", "freeBedsAwayFromFire", "hostilesNearBase",
-                    "raidsSurvived", "steel", "tamedAnimals", "usableMaterial", "wood",
-                    "workingGenerators"
+                    "raidsSurvived", "shelteredBeds", "steel", "tamedAnimals", "usableMaterial",
+                    "wood", "workingGenerators"
                 },
                 affects = new[] { "world.blueprints", "world.churn", "world.designations" }
             },
