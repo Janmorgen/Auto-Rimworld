@@ -116,6 +116,13 @@ namespace AutoColony.Modules
             int skill = BestGrowingSkill(ctx);
             if (skill < healroot.plant.sowMinSkill)
             {
+                // Into the list as well as into the log. The comment below used to end at "that
+                // list is the roadmap" and no list existed: the message was printed once, a bool
+                // stopped it repeating, and a gap thirteen days old read exactly like one found
+                // this minute. See CapabilityGaps and run 170.
+                CapabilityGaps.Report("herbal medicine", "Plants",
+                                      healroot.plant.sowMinSkill, skill, ctx.state.tick);
+
                 if (!medicineSkillReported)
                 {
                     medicineSkillReported = true;
@@ -125,6 +132,17 @@ namespace AutoColony.Modules
                         healroot.plant.sowMinSkill, skill));
                 }
                 return;
+            }
+
+            if (CapabilityGaps.IsOpen("herbal medicine"))
+            {
+                Chronicle.Record(ChronicleCategory.Economy, string.Format(
+                    "herbal medicine is in reach at last — Plants {0} against the {1} healroot " +
+                    "needs, after {2:0.0} days of doing without. Closing a gap is as much a fact " +
+                    "as opening one",
+                    skill, healroot.plant.sowMinSkill,
+                    CapabilityGaps.StandingFor("herbal medicine", ctx.state.tick) / 60000f));
+                CapabilityGaps.Close("herbal medicine");
             }
             medicineSkillReported = false;
 
