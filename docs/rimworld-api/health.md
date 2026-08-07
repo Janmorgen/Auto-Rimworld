@@ -52,6 +52,26 @@ So the leverage is upstream — not being overwhelmed in a single engagement —
 (a refuge before the first pack) and #55 (elective fights taken on thin margins) sit, rather than
 anywhere in this file.
 
+**And upstream of that is building throughput.** Run 187 carried every fix this session: a goal
+that names the missing refuge, a scarcity term that raises the bar for a small colony, a
+withdrawal that carries the fallen. Every decision it made was right. **[live, run 187]**
+
+```
+day 0 00h  ShortTerm: Somewhere to hold [1 room planned and not one of them closed]
+day 0 03h  planner standing down — 66 construction outstanding against a cap of 60
+day 4 07h  WITHDRAWING 2 — strength 70 vs threat 122 (0.57x), needed 2.19x
+day 4 09h  WITHDRAWING 1 — 4.15x against a needed 7.31x (3 already down)
+day 4 11h  Somewhere to hold [3 room(s) planned and not one of them closed]
+day 4 13h  three colonists dead of blood loss
+```
+
+Four days, three rooms planned, none closed, and the goal saying so continuously the whole time.
+The colony could see it needed a refuge, said so every pass, refused every fight it should have
+refused — and a withdrawal with nowhere enclosed to withdraw *to* is standing somewhere else.
+
+Perception is no longer the binding constraint here. Construction throughput is: #63 (rooms take
+days to start) and #42 (a flat cap of 60 regardless of how many hands exist).
+
 Worth stating plainly because it is easy to keep improving the wrong half: every fix to the
 bleeding response this session was correct and none of them would have saved these colonies.
 
