@@ -111,6 +111,29 @@ choosing woods to build in.
 Worth stating plainly because it is easy to keep improving the wrong half: every fix to the
 bleeding response this session was correct and none of them would have saved these colonies.
 
+## The state nothing covered: upright and bleeding
+
+Every part of the health chain keys on `Downed` — the rescue needs `victim.Downed`, the retreat
+carry needs `colonistsDowned`, the reserved medic only runs inside a fight. A colonist who walks
+away from a won fight bleeding is none of those things, and RimWorld's tending job wants a
+patient **in a bed**: an upright pawn keeps working until they fall over.
+
+Run 193 lost Ivanna to exactly that — eleven hours after the fight ended, with Doctor at 7.0 and
+twenty-six medicine of which twenty-five were stockpiled, and not one diagnostic line anywhere,
+because nothing was looking. **[live, run 193]**
+
+The fix is to send them to bed, gated on the blood-loss deadline rather than on bleeding at all.
+Verified one restart later: **[live, run 195]**
+
+```
+day 4 14h  Craggy is bleeding and still on their feet, 4.4 hours from dying of it — sent to bed
+           → health 0.87 (0 UNTENDED, 1 LOSING), PatientBedRest 5.0, Doctor 4.0
+```
+
+Four and a bit hours from death, in a bed, tended. The difference between the two colonists is
+not medicine, doctors or priorities — both colonies had all three — it is whether anybody told
+the wounded one to lie down.
+
 ## The bleeding clock
 
 ```csharp
