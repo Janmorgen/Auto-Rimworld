@@ -46,6 +46,15 @@ namespace AutoColony.UI
             DrawScore(listing, director);
             listing.GapLine(12f);
 
+            DrawWants(listing);
+            listing.GapLine(12f);
+
+            DrawArguments(listing);
+            listing.GapLine(12f);
+
+            DrawApproach(listing);
+            listing.GapLine(12f);
+
             DrawLearning(listing, director);
             listing.GapLine(12f);
 
@@ -100,6 +109,32 @@ namespace AutoColony.UI
                 listing.Label("Training: " + TrainingSession.StatusLine +
                               " — the game reloads between trials so every candidate faces the same world.");
                 GUI.color = Color.white;
+
+                // The scores as they come in, and which is winning.
+                //
+                // TrainingSession has kept these all along and nothing displayed them, so a round
+                // could be watched from start to finish without learning its result — the one
+                // thing a round exists to establish. The same gap was in the chronicle and is now
+                // fixed in both.
+                var scores = TrainingSession.Scores;
+                if (scores != null && scores.Count > 0)
+                {
+                    int bestAt = 0;
+                    for (int i = 1; i < scores.Count; i++)
+                        if (scores[i] > scores[bestAt]) bestAt = i;
+
+                    var sb = new System.Text.StringBuilder("Trials so far: ");
+                    for (int i = 0; i < scores.Count; i++)
+                    {
+                        if (i > 0) sb.Append(", ");
+                        sb.Append(scores[i].ToString("0.000"));
+                        if (i == bestAt) sb.Append(" (best)");
+                    }
+                    Text.Font = GameFont.Tiny;
+                    listing.Label(sb.ToString() + "  ·  incumbent " +
+                                  director.evolution.incumbentScore.ToString("0.000"));
+                    Text.Font = GameFont.Small;
+                }
             }
 
             var evo = director.evolution;
@@ -173,9 +208,18 @@ namespace AutoColony.UI
             var breakdown = director.LastBreakdown;
             if (breakdown == null) return;
 
-            for (int i = 0; i < breakdown.Count; i++)
+            // Weakest first, because the eye should land on the thing that is wrong.
+            //
+            // Declaration order put Survival and Food security at the top, which are usually
+            // 1.00 and tell nobody anything, while Research at 0.00 sat wherever it happened to
+            // fall. The chronicle has sorted this way since the scoring line was written; the
+            // panel did not, and the panel is what anybody actually looks at.
+            var sorted = new List<ScoreTerm>(breakdown);
+            sorted.Sort((a, b) => a.raw.CompareTo(b.raw));
+
+            for (int i = 0; i < sorted.Count; i++)
             {
-                var term = breakdown[i];
+                var term = sorted[i];
                 var row = listing.GetRect(22f);
 
                 var labelRect = new Rect(row.x, row.y, 130f, row.height);
@@ -189,6 +233,104 @@ namespace AutoColony.UI
                 Widgets.Label(valueRect, string.Format("{0:0.00} × {1:0.00} weight", term.raw, term.weight));
                 Text.Font = GameFont.Small;
             }
+        }
+
+        /// <summary>
+        /// What the colony wants and cannot have, oldest first.
+        ///
+        /// The roadmap. A gap that has stood for thirteen days is a different thing from one
+        /// found this morning, and until this panel existed the only place that distinction lived
+        /// was a chronicle line that scrolled past.
+        /// </summary>
+        static void DrawWants(Listing_Standard listing)
+        {
+            Text.Font = GameFont.Medium;
+            listing.Label("Out of reach");
+            Text.Font = GameFont.Small;
+
+            int now = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            var gaps = CapabilityGaps.All();
+
+            if (gaps.Count == 0)
+            {
+                listing.Label("Nothing the colony wants is out of reach.");
+                return;
+            }
+
+            for (int i = 0; i < gaps.Count; i++)
+            {
+                var g = gaps[i];
+                float days = (now - g.openedAt) / 60000f;
+                listing.Label(string.Format(
+                    "{0} — needs {1} {2:0.#}, best is {3:0.#}; standing {4:0.0} days",
+                    g.capability, g.gatedBy, g.needed, g.best, days));
+            }
+        }
+
+        /// <summary>
+        /// Things two parts of the director keep putting back and taking away.
+        ///
+        /// Worth its own panel because the failure is invisible in any single reading: a bed that
+        /// exists now and existed an hour ago looks fine, and the cost is the work spent putting
+        /// it there four times.
+        /// </summary>
+        static void DrawArguments(Listing_Standard listing)
+        {
+            Text.Font = GameFont.Medium;
+            listing.Label("Being argued over");
+            Text.Font = GameFont.Small;
+
+            int now = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            var fights = Churn.All(now, Churn.MemoryTicks(2f));
+
+            if (fights.Count == 0)
+            {
+                listing.Label("Nothing is being built and unbuilt.");
+                return;
+            }
+
+            for (int i = 0; i < fights.Count; i++)
+            {
+                var f = fights[i];
+                listing.Label(string.Format(
+                    "{0} has changed hands {1} times in {2:0.0} days",
+                    f.what, f.reversals, (now - f.openedAt) / 60000f));
+            }
+        }
+
+        /// <summary>
+        /// Where the map funnels anybody walking in.
+        ///
+        /// Counts rather than a verdict, so a survey that walked nothing reads as nothing rather
+        /// than as open ground — the two are different and the difference has already cost this
+        /// project a wrong conclusion once.
+        /// </summary>
+        static void DrawApproach(Listing_Standard listing)
+        {
+            Text.Font = GameFont.Medium;
+            listing.Label("How they get in");
+            Text.Font = GameFont.Small;
+
+            if (Defence.ApproachField.Sampled <= 0)
+            {
+                listing.Label("The map edge has not been surveyed yet.");
+                return;
+            }
+
+            listing.Label(string.Format(
+                "{0} edge cells sampled, {1} with a route to the base.",
+                Defence.ApproachField.Sampled, Defence.ApproachField.RoutesFound));
+
+            if (Defence.ApproachField.RoutesFound <= 0)
+            {
+                listing.Label("Nothing walks in — the mountain is the wall.");
+                return;
+            }
+
+            float share = Defence.ApproachField.Concentration(
+                Defence.ApproachField.PeakCrossings, Defence.ApproachField.RoutesFound);
+            listing.Label(string.Format(
+                "The busiest cell carries {0:P0} of them.", share));
         }
 
         static void DrawLearning(Listing_Standard listing, AutoColonyDirector director)
