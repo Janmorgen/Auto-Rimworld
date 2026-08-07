@@ -194,3 +194,26 @@ whatever the total says. The margin is a gene, since it prices grief against foo
 Note this is orthogonal to `HuntRisk`'s session aggregation. That fixed *many small fights add
 up*; this is *one fight nobody can take alone*, and a colony can pass the first and fail the
 second, which is exactly what run 197 did.
+
+### The same shape twice, and a silence I could not read
+
+Run 198 lost Prissy on day 3 to a grizzly, five hours after declining it: **[live, run 198]**
+
+```
+day 2 12h  passed over Grizzly bear (200, measured 134) [strength 511 vs threat 200, need 1.8x
+                                                         at desperation 0.34]
+day 2 17h  hunting     Grizzly bear (200, measured 134) [strength 511, need 1.4x at
+                                                         desperation 0.39]
+day 3 11h  INCIDENT answered 'Grizzly bear revenge' with 'close'
+day 3 14h  DEATH  Blood loss (extreme) — Prissy (health 0.33, downed)
+```
+
+Identical to run 197's megasloth: declined once, taken hours later on a slightly higher
+desperation and a slightly lower bar, at unchanged colony strength. The contact rule added after
+run 197 **never spoke** — and two explanations fit that equally: the best colonist genuinely
+cleared 200 x 1.3, or the read is inert the way the explosive-comp read was.
+
+There was no way to tell from the record, which is the same defect twice in one session. The hunt
+line now carries `best single fighter N against a contact bar of M x` on every pass, whether or
+not it refuses, so the next grizzly answers it. **Do not conclude either story from this file
+until a run has printed those numbers.**

@@ -519,6 +519,18 @@ namespace AutoColony.Modules
                     inFlight,
                     declined.Count > 0 ? "; passed over " + Describe(declined) : "",
                     CombatAssessment.Explain(strength, largestDeclined, desperation) +
+                    // Printed every time, not only when it bites.
+                    //
+                    // The contact rule went in after run 197 buried a colonist who met a
+                    // megasloth alone, and run 198 lost Prissy to a grizzly the same way five
+                    // hours after passing it over — with the rule's own message never appearing.
+                    // Two stories fit that silence equally well: the best colonist really did
+                    // clear the bar, or the read is inert the way the blast read was.
+                    //
+                    // Guessing between them is what shipped the inert read. So the number goes in
+                    // the line unconditionally, and the next grizzly says which.
+                    ", best single fighter " + bestSingleFighter.ToString("0") +
+                    " against a contact bar of " + contactMargin.ToString("0.0") + "x" +
                     (sessionBlast > 0f
                         ? ", and " + sessionBlast.ToString("0")
                           + " of what it took blows up when it dies"
