@@ -79,6 +79,37 @@ having the wrong brand of the right thing. Wants should carry a list of acceptab
 quantities denominated in the unit the shortfall is measured in — nutrition for food, not item
 count. **[live]**
 
+## What a purchase closed
+
+Buying something is reported. Buying *enough* is not, and the two look identical in the log.
+
+Run 195 measured, day 18–19: **[live, run 195]**
+
+```
+day 18 22h  food 2.7d                    (target 19.5d — 15d growing left, then 15d barren)
+day 18 23h  bought 284 pemmican, 63 donkey meat, 20 pork, 6 raccoon meat, 2 gazelle meat
+            from Camino — Craggy negotiating at Social 1, on 800 silver
+day 19 00h  food 5.5d, settling to ~5.0d
+day 19 00h  a trader is here and nothing was bought — too dear, 3 silver each against 1 in
+            the colony; and could not sell to cover it
+```
+
+The colony's entire silver bought about **2.3 settled days against a 16.8-day gap**, and an
+hour later it could not afford a single further unit. Both chronicle lines are accurate and the
+pair is misleading: the first reads as the shortfall being answered, the second as bad luck with
+prices, and nowhere does any number say the answer covered roughly a sixth of the want.
+
+This is the [CapabilityGaps](../../Source/AutoColony/Core/CapabilityGaps.cs) lesson arriving at
+trade — *"the fallback itself becoming measurable: bought or found produced nothing across
+thirteen days and no number anywhere said so"*. A trade that reports what it bought and what it
+paid, but not what it closed, cannot tell a purchase that solved the problem from one that spent
+everything on a sixth of it — so every trade reads as a success, and the decision to *keep*
+silver for a better-stocked trader can never be made.
+
+The shortfall is already denominated correctly (see **Naming a want** above); what is missing is
+the subtraction after the fact, and the comparison against what the same silver would have bought
+somewhere else.
+
 ## Diagnostics
 
 Four distinct reasons nothing was bought, and they must not share a sentence:
