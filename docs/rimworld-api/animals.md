@@ -242,3 +242,20 @@ carrying, and a bear on top of somebody does not care about their rifle. The hon
 for *contact* is a melee number on both sides, and `StatDefOf.MeleeDPS` works on colonists and
 animals alike — but putting the two on one scale needs deriving and verifying, not guessing, and
 guessing is what produced the 1.3.
+
+### The explosion was already priced
+
+The blast magnitude first scaled with `baseBodySize` squared. Run 200 caught that in one line —
+hunting a boomrat, `0 of what it took blows up when it dies`. A boomrat is `baseBodySize` 0.2, so
+squaring it prices its explosion at 0.12, and three boomrats set eighty-two fires in run 197.
+Fire spreads; the igniter's size is not what scales. **[live, run 200]**
+
+The honest number was in this file already and went unused for a session: **rated minus
+measured**. A boomalope is charged 80 and fights at 19 — *"It is rated eighty because it explodes
+when killed"* — so the 61 between them **is** the explosion, priced by the people who built the
+game, on the same scale as every other threat the director compares against. An animal rated no
+higher than it fights has nothing hidden and contributes nothing.
+
+Caught only because the figure is printed every pass whether or not it bites, which is the same
+instrumentation that caught the inert read. A check that speaks only when it fires cannot be
+distinguished from one that is broken.
