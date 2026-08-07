@@ -215,5 +215,30 @@ cleared 200 x 1.3, or the read is inert the way the explosive-comp read was.
 
 There was no way to tell from the record, which is the same defect twice in one session. The hunt
 line now carries `best single fighter N against a contact bar of M x` on every pass, whether or
-not it refuses, so the next grizzly answers it. **Do not conclude either story from this file
-until a run has printed those numbers.**
+not it refuses, so the next grizzly answers it.
+
+**Run 199 answered it: the rule is live and it passed.** **[live, run 199]**
+
+```
+day 3 18h  passed over Grizzly bear (200, measured 134) ... best single fighter 365 against a
+                       contact bar of 1.3x, and 24 of what it took blows up when it dies
+day 7 12h  hunting     Grizzly bear (200, measured 134) ... best single fighter 368 against a
+                       contact bar of 1.3x
+day 7 14h  INCIDENT answered 'Grizzly bear revenge' with 'close'
+day 7 19h  DEATH  Blood loss (extreme) — Dolly
+day 7 23h  DEATH  Blood loss (extreme) — Izolda
+```
+
+Neither read was inert — the same line also proves the corrected blast read works, since it
+priced a boomalope's death at 24. The contact rule evaluated and allowed the fight: 368 against
+200 x 1.3 = 260. Then the bear killed two colonists in eleven hours, and colony strength fell
+from 528 to 66 inside an hour as they went down one after another.
+
+So 1.84x was measured insufficient, and the default margin moves to 2.5x — above the ratio that
+killed them, which is the only thing the measurement actually establishes.
+
+**The defect underneath is not fixed.** `FightingValue` is inflated by whatever the colonist is
+carrying, and a bear on top of somebody does not care about their rifle. The honest denominator
+for *contact* is a melee number on both sides, and `StatDefOf.MeleeDPS` works on colonists and
+animals alike — but putting the two on one scale needs deriving and verifying, not guessing, and
+guessing is what produced the 1.3.

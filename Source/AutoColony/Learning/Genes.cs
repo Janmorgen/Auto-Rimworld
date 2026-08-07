@@ -317,9 +317,19 @@ namespace AutoColony.Learning
             Add(GrowingCellsPerColonist, 10f, 200f, 60f, "Zones", "Growing cells per colonist");
             Add(StockpileCellsPerColonist, 10f, 120f, 40f, "Zones", "Stockpile cells per colonist");
 
-            Add(HuntContactMargin, 1f, 3f, 1.3f, "Gathering",
+            Add(HuntContactMargin, 1f, 4f, 2.5f, "Gathering",
 
                 "How far ahead one colonist must be of an animal it will meet alone");
+            // 1.3 was a guess and run 199 measured it. Best single fighter 368 against a grizzly
+            // at 200 is 1.84x, it cleared the bar comfortably, and the bear killed Dolly and
+            // Izolda within eleven hours. So the floor is *above* 1.84, and 2.5 is the first
+            // round number past it — still a guess about where exactly, but no longer a guess
+            // about which side of the deaths it falls on.
+            //
+            // The real defect is underneath and is recorded rather than fixed here: FightingValue
+            // is inflated by whatever the colonist is carrying, and a bear on top of somebody
+            // does not care about their rifle. The honest denominator for contact is a melee
+            // number, and both sides of that comparison need deriving before it can be trusted.
 
 
             Add(HuntBlastWeight, 1f, 8f, 3f, "Gathering",
