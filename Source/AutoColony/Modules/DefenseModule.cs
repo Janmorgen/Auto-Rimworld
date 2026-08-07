@@ -205,6 +205,41 @@ namespace AutoColony.Modules
         /// </summary>
         bool HeldPastEating(DirectorContext ctx)
         {
+            // Whoever was let go to eat, until they have actually eaten.
+            //
+            // This counted hunger among the *currently drafted*, and standing them down empties
+            // that list — so the reason for standing down disappeared on the pass after it was
+            // acted on, the threat read as active again, and the same colonists were re-drafted
+            // before they could reach a meal. Run 206 spent from day 4 20h to day 5 00h doing
+            // nothing else: withdraw, stand down for hunger, withdraw, stand down, with the
+            // engagement counter ticking 144, 145, 146, 147 and `roomsEver: 0` at day 5 because
+            // no work happened in between. The user watching it described the colonists as stuck
+            // in drafted mode, which is what four flips an hour looks like from outside.
+            //
+            // So the decision has to outlive the act that carries it out. The people who were
+            // released are remembered and asked directly whether they are still hungry, rather
+            // than inferred from a list that standing down clears by construction.
+            for (int i = releasedToEat.Count - 1; i >= 0; i--)
+            {
+                var fed = releasedToEat[i];
+                if (fed == null || fed.Dead || fed.needs == null || fed.needs.food == null)
+                {
+                    releasedToEat.RemoveAt(i);
+                    continue;
+                }
+
+                try
+                {
+                    if (fed.needs.food.CurCategory < HungerCategory.Hungry)
+                        releasedToEat.RemoveAt(i);
+                }
+                catch (Exception) { releasedToEat.RemoveAt(i); }
+            }
+
+            // Still eating. Whatever is on the map can wait for the length of a meal — every
+            // case this fires on is a standoff, and a standoff is by definition not urgent.
+            if (releasedToEat.Count > 0) return true;
+
             int hungry = 0;
             for (int i = 0; i < drafted.Count; i++)
             {
@@ -222,6 +257,21 @@ namespace AutoColony.Modules
 
             if (hungry == 0) { heldPastEatingNoted = false; return false; }
 
+            // Remember who is being let go, so the next pass does not undo this one.
+            releasedToEat.Clear();
+            for (int i = 0; i < drafted.Count; i++)
+            {
+                var pawn = drafted[i];
+                if (pawn == null || pawn.Dead) continue;
+                try
+                {
+                    if (pawn.needs != null && pawn.needs.food != null &&
+                        pawn.needs.food.CurCategory >= HungerCategory.Hungry)
+                        releasedToEat.Add(pawn);
+                }
+                catch (Exception) { }
+            }
+
             if (!heldPastEatingNoted)
             {
                 heldPastEatingNoted = true;
@@ -237,6 +287,15 @@ namespace AutoColony.Modules
         }
 
         bool heldPastEatingNoted;
+
+        /// <summary>
+        /// Colonists stood down to eat, held until the game says they are no longer hungry.
+        ///
+        /// The list is the memory that stops the stand-down being re-decided every pass. Emptied
+        /// by feeding rather than by a clock, so a colonist who cannot reach food does not get
+        /// re-drafted on a timer while still starving.
+        /// </summary>
+        readonly List<Pawn> releasedToEat = new List<Pawn>();
 
         /// <summary>
         /// Whether the hostiles on the map are besieging rather than assaulting.
