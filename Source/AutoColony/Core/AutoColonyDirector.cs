@@ -856,20 +856,22 @@ namespace AutoColony
         /// </summary>
         void CloseTrainingTrial(float score, int tick)
         {
+            // Said before the index advances, or it names the wrong candidate.
+            //
+            // This line sat after RecordTrialAndAdvance, which increments TrialIndex — so every
+            // score was tagged with the number of the trial about to start rather than the one
+            // that produced it, and a reader would credit each result to the wrong strategy. The
+            // same increment is why the round-ends line reads "[trial 5/4]".
+            //
+            // The scores are directly comparable because every candidate faced an identical
+            // world, which is exactly why mislabelling them is worse here than it would be
+            // somewhere noisier.
+            Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                "trial scored {0:0.000}", score));
+
             StrategyGenome winner;
             float winnerScore;
             bool roundComplete = TrainingSession.RecordTrialAndAdvance(score, out winner, out winnerScore);
-
-            // What this candidate actually scored, in the record.
-            //
-            // A trial announced itself and named how it differed from the incumbent, and then
-            // said nothing about how it did — so a round showed four candidates running and no
-            // way to tell which won, which is the one thing a round exists to establish. The
-            // scores are directly comparable because every candidate faced an identical world,
-            // so the number is meaningful on its own and worth printing next to the differences
-            // that produced it.
-            Chronicle.Record(ChronicleCategory.Learning, string.Format(
-                "trial scored {0:0.000}", score));
 
             if (!roundComplete)
             {
