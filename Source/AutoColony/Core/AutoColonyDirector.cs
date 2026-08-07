@@ -432,8 +432,20 @@ namespace AutoColony
             // Start a fresh one instead and let it actually run.
             if (!accumulator.Scorable)
             {
+                // Said in the record, not only in a log nobody turns on.
+                //
+                // Every part of training's lifecycle went to AcLog.Verbose, which is off, while
+                // the one branch that writes to the chronicle is the deferral. So a training
+                // round that runs is silent and only failing to train speaks — and an epoch that
+                // never gathers enough samples restarts here for ever without a trace. "Is
+                // training working" was not an answerable question, which is the same fault this
+                // project has now corrected in nine instruments: silence and success look alike.
                 AcLog.Verbose("Epoch closed with only " + accumulator.samples +
                               " samples — restarting it rather than scoring nothing.");
+                Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                    "epoch {0} closed with only {1} samples and was restarted rather than scored " +
+                    "— nothing was learned from it",
+                    evolution.epochIndex, accumulator.samples));
                 BeginEpoch(tick);
                 return;
             }
@@ -464,6 +476,12 @@ namespace AutoColony
             AcLog.Message(string.Format(
                 "Epoch {0} closed: score {1:0.000} ({2}). Incumbent {3:0.000}, sigma {4:0.000}, gen {5}.",
                 evolution.epochIndex - 1, score, phaseBefore,
+                evolution.incumbentScore, evolution.sigma, evolution.Incumbent.generation));
+
+            Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                "epoch {0} scored {1:0.000} ({2}) over {3} samples — incumbent {4:0.000}, " +
+                "sigma {5:0.000}, generation {6}",
+                evolution.epochIndex - 1, score, phaseBefore, accumulator.samples,
                 evolution.incumbentScore, evolution.sigma, evolution.Incumbent.generation));
 
             // How much epoch there was, alongside what it scored. The degenerate-epoch bug —
@@ -519,7 +537,12 @@ namespace AutoColony
 
                 if (fit)
                 {
-                    TrainingSession.BeginRound(evolution, AutoColonyMod.Settings.trialCandidates);
+                    int candidates = AutoColonyMod.Settings.trialCandidates;
+                    TrainingSession.BeginRound(evolution, candidates);
+                    Chronicle.Record(ChronicleCategory.Learning, string.Format(
+                        "training round begun — snapshotting and replaying the next {0} days once " +
+                        "per candidate, {1} of them against the incumbent",
+                        AutoColonyMod.Settings.epochDays, candidates));
                 }
                 else
                 {
