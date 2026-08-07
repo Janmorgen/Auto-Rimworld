@@ -117,16 +117,40 @@ namespace AutoColony.Tests
             //   The two modules still both write this, and that is correct: one supplies
             //   labour and one spends it. What was wrong was measuring the supply with a
             //   number that meant something else.
-            var known = new HashSet<string> { "world.bills", "world.blueprints",
-                                              "world.designations", "world.labourAvailable" };
+            // Keyed on the WRITERS, not the effect name.
+            //
+            // It was keyed on the name, and that made it blind in exactly the way it exists to
+            // catch: world.blueprints was marked known for the Defense/Upkeep pair, and when
+            // BasePlannerModule was declared as a third writer of the same effect the test went
+            // on passing without a word. A detector that stops looking once an effect has been
+            // explained once is a detector that only ever finds the first instance.
+            var known = new HashSet<string>
+            {
+                "world.bills: WorkPriorityModule, ProductionModule",
+                "world.designations: ResourceModule, BasePlannerModule, UpkeepModule",
+                "world.labourAvailable: DefenseModule, WorkPriorityModule",
+
+                // Three writers, and the third changes the answer. The note above used to read
+                // "Defense places sandbags, Upkeep places furniture, disjoint kinds" and that was
+                // true of two of them. BasePlannerModule also places furniture, and #64 is
+                // UpkeepModule removing beds that the planner puts back — a bed built and pulled
+                // out twice a day, which is this pair and not the sandbag one.
+                // FOUR writers, and the list is derived rather than remembered — this entry
+                // was written by hand as three and the test named PowerModule within seconds,
+                // which is the argument for keying on the set instead of the name.
+                //
+                // Defense places sandbags and walls. Power places conduits. Those two are
+                // disjoint from everything and from each other. BasePlanner and Upkeep BOTH
+                // place furniture, and that pair is #64: a bed the planner puts in and upkeep
+                // pulls out as surplus, twice a day, an oscillation whose own code comment
+                // records two previous repairs.
+                "world.blueprints: DefenseModule, BasePlannerModule, PowerModule, UpkeepModule",
+            };
 
             foreach (var contested in Touches.ContestedEffects())
-            {
-                var effect = contested.Substring(0, contested.IndexOf(':'));
-                Assert.True(known.Contains(effect),
-                    "a new contested effect appeared and nobody has said whether it is safe: " +
-                    contested);
-            }
+                Assert.True(known.Contains(contested),
+                    "the writers of a contested effect changed and nobody has said whether it " +
+                    "is still safe: " + contested);
         }
 
         [Fact]

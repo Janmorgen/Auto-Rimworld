@@ -51,7 +51,7 @@ namespace AutoColony.Connections
     ///
     /// Incomplete by construction, and honestly so: a module is listed once its reads and
     /// affects have been derived from its source, never from memory of what it probably does.
-    /// Nine of sixteen are done. The rest are absent rather than guessed.
+    /// Ten of sixteen are done. The rest are absent rather than guessed.
     ///
     /// It has already paid for itself. <see cref="ContestedEffects"/> over the first six turned
     /// up four things written by more than one module, and the fourth was a live fault nobody
@@ -171,6 +171,20 @@ namespace AutoColony.Connections
             // rather than by today's weather is defensible. Power being blind to coldShortfall
             // while UpkeepModule places heaters against it is harder to defend, and it is the
             // sort of gap this manifest exists to make visible rather than to settle here.
+
+            new Touch
+            {
+                module = "BasePlannerModule",
+                reads = new[]
+                {
+                    "ableColonists", "allColonists", "avgMood", "colonistBeds", "colonists",
+                    "colonistsDowned", "colonistsInMentalState", "couples", "downedStrangers",
+                    "fires", "firesNearBase", "freeBedsAwayFromFire", "hostilesNearBase",
+                    "raidsSurvived", "steel", "tamedAnimals", "usableMaterial", "wood",
+                    "workingGenerators"
+                },
+                affects = new[] { "world.blueprints", "world.designations" }
+            },
 
             new Touch
             {
