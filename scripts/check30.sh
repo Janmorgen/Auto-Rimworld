@@ -140,7 +140,11 @@ death=$(grep "COLONY LOST\|final score" "$CH" 2>/dev/null | tail -1)
 # anything, and sent me to check whether the game had died. It had not. Fifth time today
 # an instrument has produced output that was true and looked like something else.
 if [ -z "$vitals" ]; then
-  lines=$(wc -l < "$CH" 2>/dev/null || echo 0)
+  # The redirection is what fails, and it fails in the shell before wc ever runs — so the
+  # 2>/dev/null on the command suppressed nothing and the error escaped to the monitor,
+  # which is the sixth time today an instrument has reported a normal condition as a fault.
+  # A check that races a restart finds no chronicle, and that is not news.
+  lines=$([ -f "$CH" ] && wc -l < "$CH" 2>/dev/null || echo 0)
   vitals="no vitals yet — chronicle has $lines lines, so the colony has started and has not
 reached its first vitals pass"
 fi
