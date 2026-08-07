@@ -461,6 +461,21 @@ namespace AutoColony.Connections
 
             new Consequence
             {
+                from = "danger",
+                to = "world.drafted",
+                confidence = Confidence.Observed,
+                evidence = "run 173 — the hold that keeps a draft alive resets whenever a " +
+                           "hostile is within sixty cells, so hostiles camped at range held it " +
+                           "with no upper bound at all, for two days, at danger None. Besieged() " +
+                           "already detects exactly this shape and its own comment says they " +
+                           "'sit at range, build mortars, and be resupplied for days' — and it " +
+                           "was wired only to label the fight for ThreatMemory, never to the " +
+                           "hold. The colony could tell a siege from an assault and the part " +
+                           "that needed to know could not hear it"
+            },
+
+            new Consequence
+            {
                 from = "plan.goals",
                 to = "world.workPriorities",
                 confidence = Confidence.Observed,

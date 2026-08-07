@@ -148,6 +148,31 @@ namespace AutoColony.Modules
             // to have been lost for a while, not merely at this instant.
             if (engaged)
             {
+                // A hold cannot outlast the people holding it.
+                //
+                // Confirmed from the game's own think tree (Humanlike.xml): the drafted branch
+                // offers JobGiver_MoveToStandable and JobGiver_Orders and nothing else, and it
+                // sits above JobGiver_GetFood — above the starving branch too. A drafted
+                // colonist does not eat. So every hour of holding is an hour of not eating, and
+                // the hold above had no upper bound at all: contact within sixty cells reset the
+                // clock, so hostiles camped at range held the draft indefinitely.
+                //
+                // Run 173 held for two days against eight hostiles the game rated danger None,
+                // and died with NeedFood at -32 and 23 days of food in store. Run 174 died the
+                // same way at 30.7 days. Both withdrawals were correct — 0.08x is not a fight —
+                // and being correct is what starved them.
+                //
+                // The bound is read rather than chosen: hunger is the game's own category, and
+                // this self-limits to the only case it should touch. An assault is over long
+                // before anyone is hungry, so this never fires on one. It fires on the standoff,
+                // which is exactly the shape that has killed two colonies.
+                if (HeldPastEating(ctx))
+                {
+                    engaged = false;
+                    passesSinceContact = 0;
+                    return false;
+                }
+
                 if (HostilesWithin(ctx, 60, 45))
                 {
                     passesSinceContact = 0;
@@ -167,6 +192,48 @@ namespace AutoColony.Modules
             }
             return false;
         }
+
+        /// <summary>
+        /// Whether the colonists being held have gone hungry holding.
+        ///
+        /// Said once per spell rather than every pass, and said in full, because "standing down
+        /// because they are hungry" beside hostiles still on the map looks like a mistake until
+        /// you know a drafted colonist cannot eat.
+        /// </summary>
+        bool HeldPastEating(DirectorContext ctx)
+        {
+            int hungry = 0;
+            for (int i = 0; i < drafted.Count; i++)
+            {
+                var pawn = drafted[i];
+                if (pawn == null || pawn.Dead) continue;
+
+                try
+                {
+                    if (pawn.needs != null && pawn.needs.food != null &&
+                        pawn.needs.food.CurCategory >= HungerCategory.Hungry)
+                        hungry++;
+                }
+                catch (Exception) { }
+            }
+
+            if (hungry == 0) { heldPastEatingNoted = false; return false; }
+
+            if (!heldPastEatingNoted)
+            {
+                heldPastEatingNoted = true;
+                Chronicle.Record(ChronicleCategory.Threat, string.Format(
+                    "standing down with {0} hostiles still about — {1} of the {2} being held are " +
+                    "hungry, and a drafted colonist does not eat. The game's think tree offers a " +
+                    "drafted pawn a move and an order and nothing else, above the branch that " +
+                    "would feed them. Two colonies have starved at a rally point with a full " +
+                    "larder; holding longer costs more than the ground is worth",
+                    ctx.state.hostilePawns, hungry, drafted.Count));
+            }
+            return true;
+        }
+
+        bool heldPastEatingNoted;
 
         /// <summary>
         /// Whether the hostiles on the map are besieging rather than assaulting.
