@@ -4,6 +4,7 @@ using AutoColony.Learning;
 using AutoColony.Upkeep;
 using RimWorld;
 using Verse;
+using Verse.AI;
 
 namespace AutoColony.Modules
 {
@@ -1223,6 +1224,98 @@ namespace AutoColony.Modules
         /// The same walk <see cref="GoalPlanner"/> uses to estimate how long a room has left,
         /// asked as a yes-or-no: is any of this room actually under construction.
         /// </summary>
+        /// <summary>
+        /// Put the door on the side a colonist can reach, preferring the shortest walk home.
+        ///
+        /// All four wall midpoints are candidates. A side is usable when the cell just outside it
+        /// is walkable and can be reached from the base — rock and water fail that outright, so a
+        /// room backed onto a mountain simply stops choosing the mountain. Among the usable ones
+        /// the shortest path home wins, because a door on the far side is a walk every colonist
+        /// makes several times a day for the life of the colony.
+        ///
+        /// Falls back to the old north/south midpoint when nothing is reachable. That case is a
+        /// room sited somewhere genuinely sealed, and the honest answer is to build it and let
+        /// the walled-in remedy find it rather than to refuse to site anything.
+        /// </summary>
+        void PickReachableDoor(DirectorContext ctx, PlannedRoom room, CellRect rect,
+                               int width, int height, bool bestNorth)
+        {
+            room.doorX = rect.minX + width / 2;
+            room.doorZ = bestNorth ? rect.minZ : rect.minZ + height - 1;
+
+            var map = ctx.map;
+            if (map == null) return;
+
+            var walker = FirstColonist(ctx);
+            if (walker == null) return;
+
+            int midX = rect.minX + width / 2;
+            int midZ = rect.minZ + height / 2;
+
+            // door cell, and the cell immediately beyond it
+            var sides = new[]
+            {
+                new[] { midX, rect.minZ,              midX, rect.minZ - 1 },
+                new[] { midX, rect.minZ + height - 1, midX, rect.minZ + height },
+                new[] { rect.minX, midZ,              rect.minX - 1, midZ },
+                new[] { rect.minX + width - 1, midZ,  rect.minX + width, midZ }
+            };
+
+            float best = float.MaxValue;
+            for (int i = 0; i < sides.Length; i++)
+            {
+                var outside = new IntVec3(sides[i][2], 0, sides[i][3]);
+                if (!outside.InBounds(map) || !outside.Walkable(map)) continue;
+
+                float home = CellsHome(ctx, walker, outside);
+                if (home < 0f || home >= best) continue;
+
+                best = home;
+                room.doorX = sides[i][0];
+                room.doorZ = sides[i][1];
+            }
+
+            if (best < float.MaxValue)
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "the {0} room's door goes at {1} — {2:0} cells home from outside it, the " +
+                    "shortest of the sides anybody can walk to",
+                    room.role, room.Door, best));
+            else
+                Chronicle.Record(ChronicleCategory.Build, string.Format(
+                    "the {0} room at {1} has no side anybody can walk to — building it anyway " +
+                    "with the door at {2}, because a room nobody can enter is still better " +
+                    "evidence than no room at all",
+                    room.role, room.Center, room.Door));
+        }
+
+        static Pawn FirstColonist(DirectorContext ctx)
+        {
+            var all = ctx.state.ableColonists;
+            for (int i = 0; i < all.Count; i++)
+                if (all[i] != null && all[i].Spawned) return all[i];
+            return null;
+        }
+
+        /// <summary>Path cells from a cell back to the base, or -1 if there is no route.</summary>
+        static float CellsHome(DirectorContext ctx, Pawn walker, IntVec3 from)
+        {
+            var map = ctx.map;
+            var origin = ctx.Origin;
+            PawnPath path = null;
+            try
+            {
+                var parms = TraverseParms.For(walker, Danger.Deadly, TraverseMode.ByPawn, false);
+                if (!map.reachability.CanReach(from, origin, PathEndMode.OnCell, parms))
+                    return -1f;
+
+                path = map.pathFinder.FindPathNow(from, origin, walker, null);
+                if (path == null || !path.Found) return -1f;
+                return path.NodesLeftCount;
+            }
+            catch (Exception) { return -1f; }
+            finally { if (path != null) path.ReleaseToPool(); }
+        }
+
         static bool NothingQueuedIn(Map map, PlannedRoom room)
         {
             try
@@ -2381,8 +2474,19 @@ namespace AutoColony.Modules
             room.width = width;
             room.height = height;
             room.role = role;
-            room.doorX = bestRect.minX + width / 2;
-            room.doorZ = bestNorth ? bestRect.minZ : bestRect.minZ + height - 1;
+            // The door goes where somebody can actually walk up to it.
+            //
+            // It went to the middle of the north or south wall and nothing looked at what was on
+            // the other side. Site a room against a mountain, let the north/south choice fall on
+            // the mountain, and the door opens into solid rock: the shell closes, the room is
+            // sealed, and nobody can get in to build the bed inside it. Watched on screen in run
+            // 208 — a finished wooden bedroom with its one door facing a rock face, `beds 0` and
+            // `roomsEver: 0` at day 1 with "Need colonist beds" standing.
+            //
+            // Nothing reported it because nothing was wrong by any measure the planner had. The
+            // walls were up, the room was the right size, the door existed. "Can a colonist reach
+            // it" was not a question anybody asked.
+            PickReachableDoor(ctx, room, bestRect, width, height, bestNorth);
 
             layout.rooms.Add(room);
 
