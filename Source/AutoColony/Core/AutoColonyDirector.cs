@@ -478,11 +478,6 @@ namespace AutoColony
                 evolution.epochIndex - 1, score, phaseBefore,
                 evolution.incumbentScore, evolution.sigma, evolution.Incumbent.generation));
 
-            Chronicle.Record(ChronicleCategory.Learning, string.Format(
-                "epoch {0} scored {1:0.000} ({2}) over {3} samples — incumbent {4:0.000}, " +
-                "sigma {5:0.000}, generation {6}",
-                evolution.epochIndex - 1, score, phaseBefore, accumulator.samples,
-                evolution.incumbentScore, evolution.sigma, evolution.Incumbent.generation));
 
             // How much epoch there was, alongside what it scored. The degenerate-epoch bug —
             // 58 of 62 scores identical, because every trial re-scored an epoch that had already
@@ -537,12 +532,11 @@ namespace AutoColony
 
                 if (fit)
                 {
-                    int candidates = AutoColonyMod.Settings.trialCandidates;
-                    TrainingSession.BeginRound(evolution, candidates);
-                    Chronicle.Record(ChronicleCategory.Learning, string.Format(
-                        "training round begun — snapshotting and replaying the next {0} days once " +
-                        "per candidate, {1} of them against the incumbent",
-                        AutoColonyMod.Settings.epochDays, candidates));
+                    // TrainingSession already announces the round with its seed and candidate
+                    // count. A second line here said the same thing in different words, which is
+                    // how a log stops being readable — added because no colony had reached an
+                    // epoch boundary while I was looking, so the existing line was invisible.
+                    TrainingSession.BeginRound(evolution, AutoColonyMod.Settings.trialCandidates);
                 }
                 else
                 {
