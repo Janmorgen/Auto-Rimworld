@@ -55,6 +55,7 @@
     <Compile Include="../../Source/AutoColony/Core/Rooms/FurniturePlacement.cs" Link="Production/FurniturePlacement.cs" />
     <Compile Include="../../Source/AutoColony/Core/Rooms/RoomSiting.cs" Link="Production/RoomSiting.cs" />
     <Compile Include="../../Source/AutoColony/Core/Rooms/RoomProfiles.cs" Link="Production/RoomProfiles.cs" />
+    <Compile Include="../../Source/AutoColony/Core/Rooms/RoomLattice.cs" Link="Production/RoomLattice.cs" />
     <Compile Include="../../Source/AutoColony/Core/Rooms/RoomQuality.cs" Link="Production/RoomQuality.cs" />
     <Compile Include="../../Source/AutoColony/Core/Conditions/ConditionResponse.cs" Link="Production/ConditionResponse.cs" />
     <Compile Include="../../Source/AutoColony/Core/Goals/ResearchChain.cs" Link="Production/ResearchChain.cs" />

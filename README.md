@@ -12,7 +12,7 @@ The director is a perceive–decide–act loop wrapped in a learning loop.
 | Subsystem | What it handles |
 | --- | --- |
 | Work priorities | Per-colonist work assignment from skill, passion, and current colony need |
-| Base planner | Picks a site, reserves rooms along a corridor, queues walls, doors and furniture |
+| Base planner | Picks a site, scores room positions on the grid around it, queues walls, doors and furniture |
 | Zones | Growing zones on fertile soil, stockpiles in the storage room |
 | Item claiming | Unforbids what the colony may use; locks items down under threat |
 | Production | Standing bills on every work table, sized to stock targets |

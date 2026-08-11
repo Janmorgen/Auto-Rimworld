@@ -211,7 +211,18 @@ namespace AutoColony
             return false;
         }
 
-        /// <summary>Next unused slot index along the corridor, used when reserving a new room.</summary>
+        /// <summary>
+        /// Dead. Sites were once slots along a corridor and this was the cursor into them; they
+        /// are now scored fresh from the origin outward on every reservation, so there is no
+        /// cursor to keep and nothing to carry across a save.
+        ///
+        /// Kept written so a save made by this version still loads in the previous one, and
+        /// because the field is the one piece of evidence left of a bug worth not repeating: a
+        /// cursor advanced per site *examined* rather than per site *spent* ran to its ceiling on
+        /// the first room and left the planner returning nothing, in silence, for the rest of
+        /// the colony's life. Three colonists slept outside for five days beside a plan that
+        /// kept asking for beds. A search with no cursor cannot fail that way.
+        /// </summary>
         public int nextSlot;
 
         public bool HasRoom(RoomRole role)

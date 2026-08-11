@@ -49,6 +49,26 @@ namespace AutoColony
         }
 
         /// <summary>
+        /// The same walk read the other way round: how many cells fit inside a length of time.
+        ///
+        /// The planner needs this because a tolerance for distance is not really a tolerance for
+        /// distance. Nobody has an opinion about forty cells; they have an opinion about how long
+        /// they are willing to spend walking between two rooms, which is a duration, and which
+        /// turns into a different number of cells for a colony of amputees than for one on
+        /// go-juice. Stating the tolerance as time and converting it here keeps the strategy in
+        /// the units it was actually formed in.
+        ///
+        /// Returns <see cref="Unreachable"/> where <see cref="Hours"/> would, for the same
+        /// reason: a speed of zero is the absence of a measurement, not a distance of zero.
+        /// </summary>
+        public static float Cells(float hours, float cellsPerSecond)
+        {
+            if (hours < 0f) return Unreachable;
+            if (cellsPerSecond <= 0f) return Unreachable;
+            return hours * cellsPerSecond * SecondsPerHour;
+        }
+
+        /// <summary>
         /// Whether a candidate this far away in a straight line could still beat the best path
         /// found so far.
         ///

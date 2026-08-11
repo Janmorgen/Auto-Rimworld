@@ -118,6 +118,17 @@ namespace AutoColony.Learning
         public const string PlannerPatienceCeiling = "planner.patienceCeiling";
         public const string PlannerPendingPerColonist = "planner.pendingPerColonist";
         public const string PlannerSprawlCeiling = "planner.sprawlCeiling";
+
+        /// <summary>
+        /// How long a walk between a room and its nearest neighbour the colony will put up with,
+        /// in in-game hours.
+        ///
+        /// In hours rather than cells on purpose. A tolerance for distance is really a tolerance
+        /// for time — the cost of a gap is paid by somebody walking across it, on every trip —
+        /// and the same gap is a different cost to a colony of amputees than to one on go-juice.
+        /// Reach.Cells turns it back into a distance against the colony's own measured speed.
+        /// </summary>
+        public const string PlannerGapPatienceHours = "planner.gapPatienceHours";
         public const string WorkNeedWeight = "work.needWeight";
         public const string WorkSpread = "work.spread";
         public const string WorkBands = "work.bands";
@@ -327,6 +338,14 @@ namespace AutoColony.Learning
             Add(PlannerSprawlCeiling, 1f, 6f, 3f, "Planner",
                 "How far a room may sit from the base before distance dominates siting");
 
+            // 0.1 hours is about nineteen cells at an unencumbered colonist's 4.6 c/s — roughly
+            // two rooms' width, so a room against its neighbour's wall pays almost nothing and
+            // one across a courtyard pays most of the term. The range runs from "rooms must
+            // touch" to "half an hour's walk is fine", which is wide enough for the search to
+            // discover that a sprawling base is survivable if it ever is.
+            Add(PlannerGapPatienceHours, 0.03f, 0.6f, 0.1f, "Planner",
+                "Walk between neighbouring rooms the colony will tolerate, hours");
+
             Add(BaseRoomSize, 4f, 11f, 7f, "Base", "Planned room interior size");
             Add(BaseSpareBeds, 0f, 5f, 1f, "Base", "Spare beds kept ready");
             Add(BaseStonePreference, 0f, 1f, 0.4f, "Base", "Stone vs wood for walls");
@@ -509,6 +528,16 @@ namespace AutoColony.Learning
             // for.
             Register(new GeneSpec("site." + role + ".openGround", 0f, 3f, 1f,
                                   "Room siting", role + " preference for ground already clear"));
+
+            // How much a role minds standing on its own.
+            //
+            // Registered flat for the same reason as openGround — and unlike it, deliberately
+            // non-zero by default, because this is the term that keeps a free-ground search from
+            // scattering. A Prison or a Tomb wanting to be away from the rest is expressed by
+            // its low compactness, not by tolerating a hole in the base; but if the search finds
+            // that a prison really does want both, this is the gene that lets it say so.
+            Register(new GeneSpec("site." + role + ".isolation", 0f, 3f, 1f,
+                                  "Room siting", role + " dislike of standing apart"));
             Register(new GeneSpec("site." + role + ".width", 5f, 13f, width,
                                   "Room siting", role + " width"));
             Register(new GeneSpec("site." + role + ".height", 5f, 13f, height,

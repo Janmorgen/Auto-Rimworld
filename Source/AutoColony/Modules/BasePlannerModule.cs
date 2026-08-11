@@ -11,11 +11,16 @@ namespace AutoColony.Modules
     /// <summary>
     /// Lays out and builds the colony.
     ///
-    /// The plan is a corridor with rooms budding off both sides, which is deliberately dull:
-    /// it tiles indefinitely, shares walls between neighbours so it stays cheap, and every
-    /// room is reachable and roofable without pathing tricks. Room dimensions, wall material
-    /// and beds per room come from the genome, and which room to build next is a bandit
-    /// choice, so the interesting decisions stay learnable while the geometry stays reliable.
+    /// The plan is a block of room-sized ground around a two-cell corridor, filled in wherever
+    /// the siting model likes best. It tiles indefinitely, shares walls between neighbours so
+    /// it stays cheap, and keeps the corridor clear so every room has somewhere to open onto.
+    /// Room dimensions, wall material and beds per room come from the genome, and which room to
+    /// build next is a bandit choice, so the interesting decisions stay learnable while the
+    /// geometry stays reliable.
+    ///
+    /// It was a single line of rooms either side of that corridor until the ground was opened
+    /// up in both directions — see <c>ReserveRoom</c> for what a line cost and what had to be
+    /// added underneath it before free ground was safe to offer.
     ///
     /// Construction is queued as blueprints and left to the colonists' own job system — the
     /// director never spawns anything directly, so the colony still has to earn what it builds.
@@ -83,8 +88,24 @@ namespace AutoColony.Modules
         /// <summary>How far from the starting position the base may be sited.</summary>
         const int OriginSearchRadius = 45;
 
-        /// <summary>Total room slots along the corridor before the base is considered full.</summary>
-        const int MaxSlots = 40;
+        /// <summary>
+        /// How many rings of room-sized ground out from the origin the planner will look.
+        ///
+        /// Four rings is a nine-by-nine block of lattice positions — about ninety sites, against
+        /// the forty a corridor could ever offer — and it is a bound on where the base may
+        /// spread, not on how many rooms it may have. A hemmed-in base stops searching here
+        /// rather than marching rooms off across the map.
+        /// </summary>
+        const int MaxLatticeRadius = 4;
+
+        /// <summary>
+        /// How many usable sites are scored before the survey stops.
+        ///
+        /// Every candidate costs a footprint's worth of terrain reads, so this is a cost bound.
+        /// It is honoured at the end of a ring rather than the moment it is reached, so the
+        /// choice is never half of one ring and half of another.
+        /// </summary>
+        const int SiteSurveyBudget = 24;
 
         int placedThisPass;
 
@@ -1273,6 +1294,13 @@ namespace AutoColony.Modules
                 var outside = new IntVec3(sides[i][2], 0, sides[i][3]);
                 if (!outside.InBounds(map) || !outside.Walkable(map)) continue;
 
+                // Walkable now is not walkable later. A cell inside a room that is planned but
+                // not yet built reads as open ground, so the door would be pointed at it and
+                // then walled over by the neighbour's own shell — the same sealed room
+                // SealsADoor refuses in the other direction. Both directions have to be covered
+                // or the protection only works for whichever room happened to be sited first.
+                if (InAnyPlannedRoom(ctx.layout, outside)) continue;
+
                 float home = CellsHome(ctx, walker, outside);
                 if (home < 0f || home >= best) continue;
 
@@ -2358,8 +2386,20 @@ namespace AutoColony.Modules
         }
 
         /// <summary>
-        /// Claims the next free slot along the corridor. Slots alternate north and south and
-        /// march outward from the origin, and neighbouring rooms share a wall.
+        /// Sites a room anywhere on the block of ground around the origin, on a lattice pitched
+        /// so that neighbouring rooms share a wall.
+        ///
+        /// Sites used to be a line. Slots alternated north and south of the corridor and fanned
+        /// left and right, so every room in every colony ended up in one of exactly two rows —
+        /// and the per-role scoring added underneath it could only ever choose *where along the
+        /// line*. A workshop that wanted to be beside the store could get no closer than however
+        /// many slots separated them; a base of a dozen rooms was a hundred cells wide and two
+        /// rooms tall, which is the worst shape there is for walking and for defending.
+        ///
+        /// The lattice is the same pitch the line used — width-1 and height-1, so walls are
+        /// still shared — offered in both directions instead of one. The corridor rows either
+        /// side of the origin are never candidates, so the base keeps a spine that cannot be
+        /// built over however it grows.
         /// </summary>
         PlannedRoom ReserveRoom(DirectorContext ctx, RoomRole role)
         {
@@ -2379,82 +2419,91 @@ namespace AutoColony.Modules
             weights.partnerAffinity = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Partner));
             weights.resourceAffinity = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Resource));
             weights.openGround = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.OpenGround));
+            weights.isolation = ctx.Gene(Rooms.RoomSiting.GeneKey(role.ToString(), Rooms.RoomSiting.Isolation));
+
+            float sprawlCeiling = ctx.Gene(Genes.PlannerSprawlCeiling);
+            float gapReach = TolerableGap(ctx);
 
             float bestScore = float.NegativeInfinity;
             var bestRect = CellRect.Empty;
             bool bestNorth = true;
-            System.Func<bool> bestFound = delegate { return bestScore > float.NegativeInfinity; };
+            int considered = 0;
 
-            // Surveying a slot is not the same as spending it.
+            // Rings outward from the origin, whole rings at a time.
             //
-            // While this loop took the first slot that fitted, advancing the cursor per slot
-            // examined was right: everything it stepped over had just been rejected. Scoring
-            // changed that — the loop now runs all the way to the end on every call, so the
-            // cursor ran to its ceiling on the *first* room and `ReserveRoom` returned null in
-            // silence for the rest of the colony's life. Watched live: one kitchen, nextSlot
-            // pinned at 40 in the save, three colonists sleeping outside for five days beside a
-            // plan that kept asking for beds, and no line anywhere saying why.
-            //
-            // The cursor is only allowed past slots that can never come good — off the map, or
-            // already under a room. The winner does not advance it, because the room about to
-            // be added there makes it overlap on the next call anyway.
-            int firstUsable = -1;
-
-            // Slots are capped so a hemmed-in base stops searching instead of marching rooms
-            // off across the map.
-            for (int attempt = 0; attempt < 24; attempt++)
+            // Whole rings because stopping part-way through one biases the answer towards
+            // whichever corner the enumeration happens to start in, and this loop is the only
+            // thing standing between the scorer and a base shaped like its iteration order. The
+            // budget is a cost bound, not a preference: every candidate costs a footprint's
+            // worth of terrain checks, so the search stops once it has enough real choices
+            // rather than surveying all ninety sites for a room that will obviously go next to
+            // the store.
+            for (int radius = 0; radius <= MaxLatticeRadius; radius++)
             {
-                int slot = layout.nextSlot + attempt;
-                if (slot >= MaxSlots) break;
-                bool north = (slot % 2) == 0;
-                int index = slot / 2;
+                for (int row = Rooms.RoomLattice.LowestRow(radius);
+                     row <= Rooms.RoomLattice.HighestRow(radius); row++)
+                {
+                    for (int col = -radius; col <= radius; col++)
+                    {
+                        if (Rooms.RoomLattice.Ring(col, row) != radius) continue;
 
-                // Fan out alternately left and right of the origin.
-                int lateral = ((index % 2) == 0 ? 1 : -1) * ((index + 1) / 2);
-                int xMin = layout.origin.x + lateral * (width - 1);
-                int zMin = north
-                    ? layout.origin.z + 2
-                    : layout.origin.z - 1 - (height - 1);
+                        var rect = LatticeRect(layout.origin, col, row, width, height);
+                        if (!rect.InBounds(map)) continue;
+                        if (OverlapsExisting(layout, rect)) continue;
 
-                var rect = new CellRect(xMin, zMin, width, height);
-                if (!rect.InBounds(map)) continue;
-                if (OverlapsExisting(layout, rect)) continue;
+                        // Nor anywhere that would wall in a door somebody has already been
+                        // promised. A line could not do this — the corridor was the only way in
+                        // and out and nothing was ever sited on it — but ground offered in both
+                        // directions means one room's footprint can land squarely on the cell
+                        // another room's door opens onto, and a sealed room is the failure this
+                        // module has already paid for twice.
+                        if (SealsADoor(layout, rect)) continue;
 
-                // Nor anywhere a wall could never stand: on somebody else's building, or on
-                // terrain that will not carry one.
-                //
-                // Overlap was only ever checked against the planner's own rooms, so the map
-                // itself never got a vote — and a map has ruins, abandoned settlements and water
-                // on it. One colony sited its kitchen squarely inside another faction's building:
-                // 20 of the 24 perimeter cells already held that faction's walls, and a cell with
-                // a wall in it will not take a wall blueprint.
-                //
-                // What made it fatal rather than untidy is that the shell could then never be
-                // finished, and an unfinished room holds the whole planner. Four free cells took
-                // blueprints, the other twenty never could, so the room stayed unfinished for
-                // ever; the concurrency limit counts it as the one room in progress and refuses
-                // to open another. That colony built nothing at all for five days, never had a
-                // bed, and lost two colonists on open ground with 1,422 units of wood in store.
-                if (PerimeterUnbuildable(map, rect)) continue;
+                        // Nor anywhere a wall could never stand: on somebody else's building, or
+                        // on terrain that will not carry one.
+                        //
+                        // Overlap was only ever checked against the planner's own rooms, so the
+                        // map itself never got a vote — and a map has ruins, abandoned settlements
+                        // and water on it. One colony sited its kitchen squarely inside another
+                        // faction's building: 20 of the 24 perimeter cells already held that
+                        // faction's walls, and a cell with a wall in it will not take a wall
+                        // blueprint.
+                        //
+                        // What made it fatal rather than untidy is that the shell could then never
+                        // be finished, and an unfinished room holds the whole planner. Four free
+                        // cells took blueprints, the other twenty never could, so the room stayed
+                        // unfinished for ever; the concurrency limit counts it as the one room in
+                        // progress and refuses to open another. That colony built nothing at all
+                        // for five days, never had a bed, and lost two colonists on open ground
+                        // with 1,422 units of wood in store.
+                        if (PerimeterUnbuildable(map, rect)) continue;
 
-                if (firstUsable < 0) firstUsable = slot;
+                        // Scored rather than taken. Every site used to give the same answer to a
+                        // question that differs completely by role — a store wants the middle of
+                        // the base, a workshop wants to be beside that store, a prison wants to be
+                        // nowhere near either.
+                        float score = Rooms.RoomSiting.Score(
+                            SiteFeaturesFor(ctx, rect, profile), weights, sprawlCeiling, gapReach);
 
-                // Scored rather than taken. Every slot used to give the same answer to a
-                // question that differs completely by role — a store wants the middle of the
-                // base, a workshop wants to be beside that store, a prison wants to be nowhere
-                // near either — so the first slot that fitted was as good as the planner could
-                // ever say.
-                float score = Rooms.RoomSiting.Score(
-                    SiteFeaturesFor(ctx, rect, profile), weights,
-                    ctx.Gene(Genes.PlannerSprawlCeiling));
-                if (score <= bestScore) continue;
+                        // Ground the scorer refuses outright is not a choice, and must not spend
+                        // the survey budget as though it were. Counting rejections would let a
+                        // stretch of marsh in the first two rings stop the search and report a
+                        // base out of ground with eighty sites never looked at.
+                        if (score == float.NegativeInfinity) continue;
 
-                bestScore = score;
-                bestRect = rect;
-                bestNorth = north;
+                        considered++;
+                        if (score <= bestScore) continue;
+
+                        bestScore = score;
+                        bestRect = rect;
+                        bestNorth = row >= 0;
+                    }
+                }
+
+                if (considered >= SiteSurveyBudget) break;
             }
 
-            if (!bestFound())
+            if (bestScore <= float.NegativeInfinity)
             {
                 // Running out of ground is a legitimate answer; being unable to tell it apart
                 // from the planner having quietly broken is not. This is the line whose absence
@@ -2464,15 +2513,18 @@ namespace AutoColony.Modules
                 {
                     reportedNoSite = true;
                     Chronicle.Record(ChronicleCategory.Build, string.Format(
-                        "nowhere to put a {0} room {1}x{2} — 24 slots from {3} of {4} are all off " +
-                        "the map or already built on; the base has run out of ground",
-                        role, width, height, layout.nextSlot, MaxSlots));
+                        "nowhere to put a {0} room {1}x{2} — every site within {3} rings of {4} is " +
+                        "off the map, already built on, or would seal a door; the base has run out " +
+                        "of ground",
+                        role, width, height, MaxLatticeRadius, layout.origin));
                 }
                 return null;
             }
 
-            layout.nextSlot = firstUsable;
             reportedNoSite = false;
+
+            // Measured before the room joins the list, or the nearest room to it is itself.
+            float gapToNeighbour = NearestRoomDistance(layout, bestRect.CenterCell);
 
             var room = new PlannedRoom();
             room.minX = bestRect.minX;
@@ -2496,11 +2548,101 @@ namespace AutoColony.Modules
 
             layout.rooms.Add(room);
 
+            // The gap is reported because it is the term with no other evidence behind it. Every
+            // other preference shows up in the map eventually — a workshop is either next to the
+            // store or it is not — but "how far the nearest room is, against how far this colony
+            // will walk" is a judgement made once and then invisible, and a base that has quietly
+            // started scattering should be readable from the log before it is visible on screen.
             Chronicle.Record(ChronicleCategory.Build, string.Format(
-                "sited the {0} room {1}x{2} at {3} — {4}",
-                role, width, height, room.Center, DescribeSiting(profile)));
+                "sited the {0} room {1}x{2} at {3} — {4}; {5}",
+                role, width, height, room.Center, DescribeSiting(profile),
+                gapToNeighbour < 0f
+                    ? "the first room, so nothing to sit beside"
+                    : string.Format("{0:0} cells to the nearest room, against the {1:0} this " +
+                                    "colony will walk", gapToNeighbour, gapReach)));
 
             return room;
+        }
+
+        /// <summary>The footprint at one lattice position — see <see cref="Rooms.RoomLattice"/>.</summary>
+        static CellRect LatticeRect(IntVec3 origin, int col, int row, int width, int height)
+        {
+            return new CellRect(
+                Rooms.RoomLattice.MinX(origin.x, col, width),
+                Rooms.RoomLattice.MinZ(origin.z, row, height),
+                width, height);
+        }
+
+        /// <summary>
+        /// Whether this footprint would land on the cell an existing room's door opens onto.
+        ///
+        /// Checked against the whole rectangle rather than its interior, because the wall line
+        /// blocks the cell just as thoroughly as the floor inside does — and a door with a wall
+        /// against it is a room nobody can enter, which this module has twice watched cost a
+        /// colony its beds.
+        /// </summary>
+        /// <summary>Whether a cell falls inside any room the layout has reserved.</summary>
+        static bool InAnyPlannedRoom(BaseLayout layout, IntVec3 cell)
+        {
+            if (layout == null) return false;
+            for (int i = 0; i < layout.rooms.Count; i++)
+                if (layout.rooms[i].Rect.Contains(cell)) return true;
+            return false;
+        }
+
+        static bool SealsADoor(BaseLayout layout, CellRect rect)
+        {
+            for (int i = 0; i < layout.rooms.Count; i++)
+                if (rect.Contains(OutsideOfDoor(layout.rooms[i]))) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Cells to the nearest planned room, or -1 when there is no other room. The sentinel is
+        /// negative rather than large for the reason given on <see cref="Rooms.SiteFeatures"/>.
+        /// </summary>
+        static float NearestRoomDistance(BaseLayout layout, IntVec3 from)
+        {
+            float nearest = -1f;
+            for (int i = 0; i < layout.rooms.Count; i++)
+            {
+                float d = (from - layout.rooms[i].Center).LengthHorizontal;
+                if (nearest < 0f || d < nearest) nearest = d;
+            }
+            return nearest;
+        }
+
+        /// <summary>The cell immediately outside a room's door.</summary>
+        static IntVec3 OutsideOfDoor(PlannedRoom room)
+        {
+            var r = room.Rect;
+            if (room.doorZ == r.minZ) return new IntVec3(room.doorX, 0, r.minZ - 1);
+            if (room.doorZ == r.maxZ) return new IntVec3(room.doorX, 0, r.maxZ + 1);
+            if (room.doorX == r.minX) return new IntVec3(r.minX - 1, 0, room.doorZ);
+            return new IntVec3(r.maxX + 1, 0, room.doorZ);
+        }
+
+        /// <summary>
+        /// How big a gap between neighbouring rooms this colony will put up with, in cells.
+        ///
+        /// The strategy is held as a walking time, not a distance, because that is the form the
+        /// cost is actually paid in — somebody crosses the gap, on every trip between the two
+        /// rooms, for the life of the colony. Converting it here against a colonist the colony
+        /// actually has means a base of amputees tightens up on its own and a fast one is allowed
+        /// to spread, without either being told to.
+        ///
+        /// Falls back to an unencumbered colonist's 4.6 c/s when there is nobody to measure,
+        /// which is the same fallback the casualty arithmetic uses.
+        /// </summary>
+        static float TolerableGap(DirectorContext ctx)
+        {
+            var walker = FirstColonist(ctx);
+            float speed = walker != null
+                ? CombatAssessment.SafeStat(walker, StatDefOf.MoveSpeed, 4.6f)
+                : 4.6f;
+
+            float cells = Reach.Cells(ctx.Gene(Genes.PlannerGapPatienceHours), speed);
+            return cells > 0f ? cells : Rooms.RoomSiting.DefaultGapReach;
         }
 
         /// <summary>What the siting model needs to know about a candidate footprint.</summary>
@@ -2516,7 +2658,10 @@ namespace AutoColony.Modules
             f.fromOrigin = (centre - ctx.layout.origin).LengthHorizontal;
 
             var rooms = ctx.layout.rooms;
-            float nearest = 999f;
+
+            // Negative rather than large, because the first room of a colony has nothing to be
+            // far from and the scorer must be able to tell that from "far from everything".
+            float nearest = -1f;
             float partner = 999f;
 
             if (siteDistances == null || siteDistances.Length < rooms.Count)
@@ -2526,7 +2671,7 @@ namespace AutoColony.Modules
             {
                 float d = (centre - rooms[i].Center).LengthHorizontal;
                 siteDistances[i] = d;
-                if (d < nearest) nearest = d;
+                if (nearest < 0f || d < nearest) nearest = d;
                 if (profile.partner != null && rooms[i].role.ToString() == profile.partner && d < partner)
                     partner = d;
             }

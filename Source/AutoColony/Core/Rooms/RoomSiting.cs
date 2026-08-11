@@ -6,7 +6,15 @@ namespace AutoColony.Rooms
         /// <summary>Cells from the base origin.</summary>
         public float fromOrigin;
 
-        /// <summary>Cells to the nearest room already placed.</summary>
+        /// <summary>
+        /// Cells to the nearest room already placed, or negative when there is no room to be
+        /// near yet.
+        ///
+        /// The distinction matters now that this is scored rather than merely gathered. The
+        /// first room of a colony has nothing to be far from, and a large number standing in for
+        /// "nothing there" would make every first room look like an outpost and push it back
+        /// towards an origin it is already sitting on.
+        /// </summary>
         public float toNearestRoom;
 
         /// <summary>
@@ -45,6 +53,16 @@ namespace AutoColony.Rooms
 
         /// <summary>How much a site's clearing work counts against it.</summary>
         public float openGround;
+
+        /// <summary>
+        /// How much a gap between this room and its nearest neighbour counts against it.
+        ///
+        /// Distinct from compactness, which measures the base's centre and cannot see holes.
+        /// A room thirty cells from the origin beside three other rooms and a room thirty cells
+        /// from the origin with nothing within twenty of it score identically on compactness,
+        /// and they are not the same base.
+        /// </summary>
+        public float isolation;
     }
 
     /// <summary>
@@ -81,6 +99,20 @@ namespace AutoColony.Rooms
         /// </summary>
         public static float Score(SiteFeatures f, SiteWeights w, float sprawlCeiling)
         {
+            return Score(f, w, sprawlCeiling, DefaultGapReach);
+        }
+
+        /// <summary>
+        /// The full scorer, told as well how big a gap between neighbouring rooms the colony
+        /// will put up with.
+        ///
+        /// <paramref name="gapReach"/> is in cells, but it is not chosen in cells — the caller
+        /// derives it from a walking time and the colony's own measured speed, via
+        /// <c>Reach.Cells</c>. Nobody has an opinion about forty cells; they have an opinion
+        /// about how much of a walk is worth putting between two rooms.
+        /// </summary>
+        public static float Score(SiteFeatures f, SiteWeights w, float sprawlCeiling, float gapReach)
+        {
             if (f.buildable < 0.8f) return float.NegativeInfinity;
 
             float score = 0f;
@@ -112,8 +144,33 @@ namespace AutoColony.Rooms
             // as its next need, waiting on nobody having noticed the trees.
             score -= f.toClear * w.openGround;
 
+            // Beside *something*. A room dropped where nothing else stands is an outpost,
+            // whatever the other terms say about it.
+            //
+            // This is the term that has to exist once sites stop being a line. A corridor could
+            // not produce a hole: every slot was adjacent to the one before it, so "near the
+            // origin" and "near the other rooms" were the same fact and one weight covered both.
+            // Scoring free ground makes them different facts, and a site can now be forty cells
+            // out in a direction the base has never gone while a perfectly good one sits against
+            // an existing wall.
+            //
+            // Capped by the same sprawl ceiling as compactness and for the same reason: a gap is
+            // paid on every trip between the two rooms, so it must keep costing past its knee,
+            // but it must not be free to swamp every other term on its own.
+            if (f.toNearestRoom >= 0f)
+                score -= Cost(f.toNearestRoom, gapReach, sprawlCeiling) * w.isolation;
+
             return score;
         }
+
+        /// <summary>
+        /// The gap a colony tolerates when nobody has said, in cells.
+        ///
+        /// Only for the overloads that predate the tolerance being derived; the planner passes a
+        /// measured one. Forty matches the other knees so a caller that does not care keeps the
+        /// shape the rest of the scorer has.
+        /// </summary>
+        public const float DefaultGapReach = 40f;
 
         /// <summary>
         /// Distance as a cost in 0..1, flattening beyond the point where further distance stops
@@ -194,9 +251,10 @@ namespace AutoColony.Rooms
         public const string Partner = "partner";
         public const string Resource = "resource";
         public const string OpenGround = "openGround";
+        public const string Isolation = "isolation";
 
         public static readonly string[] Aspects =
-            { Compactness, Evenness, Partner, Resource, OpenGround };
+            { Compactness, Evenness, Partner, Resource, OpenGround, Isolation };
 
         /// <summary>Gene names for a role's dimensions, which differ hugely by purpose.</summary>
         public static string WidthKey(string role) { return "site." + role + ".width"; }
